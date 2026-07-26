@@ -1,0 +1,35 @@
+{
+  "stage": 2,
+  "mission_name": "two_uav_namespace_baseline",
+  "uavs": {
+    "uav1": {
+      "namespace": "/uav1",
+      "px4_sysid": 1,
+      "mavros_fcu_url": "udp://:14541@127.0.0.1:14581",
+      "gcs_url": "udp://@127.0.0.1:14551",
+      "takeoff_position_enu": [0.0, -0.6, 0.0],
+      "hover_altitude_m": 1.2
+    },
+    "uav2": {
+      "namespace": "/uav2",
+      "px4_sysid": 2,
+      "mavros_fcu_url": "udp://:14542@127.0.0.1:14582",
+      "gcs_url": "udp://@127.0.0.1:14552",
+      "takeoff_position_enu": [0.0, 0.6, 0.0],
+      "hover_altitude_m": 1.2
+    }
+  },
+  "launch": {
+    "windows_sitl_script": "scripts/start_rflysim_sitl_two.bat",
+    "windows_mavros_script": "scripts/start_wsl_mavros_two.bat"
+  },
+  "validation": {
+    "dry_run_only": false,
+    "expected_topics": [
+      "/uav1/mavros/state",
+      "/uav2/mavros/state",
+      "/uav1/mavros/local_position/odom",
+      "/uav2/mavros/local_position/odom"
+    ]
+  }
+}

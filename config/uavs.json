@@ -1,0 +1,36 @@
+{
+  "uavs": {
+    "uav1": {
+      "namespace": "/uav1",
+      "px4_sysid": 1,
+      "mavros_fcu_url": "udp://:14541@127.0.0.1:14581",
+      "gcs_url": "udp://@127.0.0.1:14551",
+      "takeoff_position_enu": [0.0, -0.6, 0.0],
+      "hover_altitude_m": 1.2,
+      "min_peer_distance_m": 0.6,
+      "setpoint_rate_hz": 20
+    },
+    "uav2": {
+      "namespace": "/uav2",
+      "px4_sysid": 2,
+      "mavros_fcu_url": "udp://:14542@127.0.0.1:14582",
+      "gcs_url": "udp://@127.0.0.1:14552",
+      "takeoff_position_enu": [0.0, 0.6, 0.0],
+      "hover_altitude_m": 1.2,
+      "min_peer_distance_m": 0.6,
+      "setpoint_rate_hz": 20
+    }
+  },
+  "mission": {
+    "default_frame": "map",
+    "coordinate_convention": "ROS ENU",
+    "simulation_auto_arm": true,
+    "real_aircraft_auto_arm": false,
+    "log_required_topics": [
+      "/uavX/mavros/state",
+      "/uavX/mavros/local_position/odom",
+      "/uavX/mavros/setpoint_raw/local",
+      "/mission/events"
+    ]
+  }
+}

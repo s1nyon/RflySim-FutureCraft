@@ -1,0 +1,26 @@
+{
+  "stage": 1,
+  "mission_name": "single_uav_baseline",
+  "uav": {
+    "namespace": "/mavros",
+    "px4_sysid": 1,
+    "hover_altitude_m": 1.2,
+    "takeoff_position_enu": [0.0, 0.0, 0.0],
+    "setpoint_rate_hz": 20
+  },
+  "launch": {
+    "windows_sitl_script": "28com_sim/28com_SITL/UAVSITL.bat",
+    "windows_vcxsrv_script": "VcXsrv/config1.xlaunch",
+    "wsl_ros_script": "future_aircraft_sim/scripts/wsl/stage1_single_uav.sh",
+    "mission_launch": "mission_pkg basic_test.launch enable_logging:=true"
+  },
+  "validation": {
+    "dry_run_only": false,
+    "expected_outputs": [
+      "QGroundControl.exe",
+      "RflySim3D.exe",
+      "CopterSim.exe",
+      "mission_pkg basic_test.launch"
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+logs/
+external/
+config/env_local.bat
+*.pyc
+__pycache__/
+devel/
+build/
+install/

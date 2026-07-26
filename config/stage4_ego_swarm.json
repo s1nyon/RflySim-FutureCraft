@@ -1,0 +1,23 @@
+{
+  "planner": "ego-swarm",
+  "upstream_repo": "https://github.com/ZJU-FAST-Lab/ego-planner-swarm.git",
+  "source_dir": "external/ego-planner-swarm",
+  "fallback_mode": "fixed_waypoint",
+  "default_frame_id": "map",
+  "uavs": [
+    {
+      "uav_id": "uav1",
+      "namespace": "/uav1",
+      "odom_topic": "/uav1/mavros/local_position/odom",
+      "goal_topic": "/uav1/planner/goal",
+      "trajectory_topic": "/uav1/planner/trajectory"
+    },
+    {
+      "uav_id": "uav2",
+      "namespace": "/uav2",
+      "odom_topic": "/uav2/mavros/local_position/odom",
+      "goal_topic": "/uav2/planner/goal",
+      "trajectory_topic": "/uav2/planner/trajectory"
+    }
+  ]
+}

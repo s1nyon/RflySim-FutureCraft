@@ -1,0 +1,9 @@
+{"time": 0.0, "event": "mission_start"}
+{"time": 1.0, "event": "takeoff", "uav": "uav1"}
+{"time": 1.2, "event": "takeoff", "uav": "uav2"}
+{"time": 3.0, "event": "uav_distance", "distance_m": 1.2}
+{"time": 5.0, "event": "target_detected", "target_id": "tag_red", "target_type": "color", "uav": "uav1"}
+{"time": 8.5, "event": "uav_distance", "distance_m": 0.75}
+{"time": 12.0, "event": "landing", "uav": "uav1"}
+{"time": 12.5, "event": "landing", "uav": "uav2"}
+{"time": 13.0, "event": "mission_end"}
