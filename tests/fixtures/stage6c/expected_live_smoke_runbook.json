@@ -1,0 +1,116 @@
+{
+  "environment": {
+    "windows_paths": [
+      {
+        "exists": true,
+        "key": "RFLYSIM_ROOT",
+        "value": "D:\\PX4PSP"
+      },
+      {
+        "exists": true,
+        "key": "PSP_PATH",
+        "value": "D:\\PX4PSP"
+      },
+      {
+        "exists": true,
+        "key": "RFLYSIM_VCXSRV_DIR",
+        "value": "D:\\PX4PSP\\VcXsrv"
+      },
+      {
+        "exists": true,
+        "key": "REF_28COM_UAV_DIR",
+        "value": "D:\\PX4PSP\\RflySimAPIs\\8.RflySimVision\\3.CustExps\\e13.RobotCom26Adv\\28com_sim\\UAV_demo\\28com_uav"
+      },
+      {
+        "exists": true,
+        "key": "FUTURE_AIRCRAFT_WS",
+        "value": "D:\\PX4PSP\\RflySimAPIs\\8.RflySimVision\\3.CustExps\\e13.RobotCom26Adv\\future_aircraft_sim\\future_aircraft_ws"
+      },
+      {
+        "exists": true,
+        "key": "PYTHON_EXE",
+        "value": "D:\\PX4PSP\\Python38\\python.exe"
+      }
+    ],
+    "wsl": {
+      "distro": "RflySim-20.04",
+      "future_aircraft_sim_dir": "/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/future_aircraft_sim",
+      "psp_path": "/mnt/d/PX4PSP",
+      "ref_28com_uav_dir": "/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/28com_sim/UAV_demo/28com_uav",
+      "ros_setup": "/opt/ros/noetic/setup.bash"
+    }
+  },
+  "generated_from": {
+    "env_template": "config\\env_template.bat",
+    "live_config": "config\\stage5_live_mission.json",
+    "plan": "live_mission_plan.json"
+  },
+  "purpose": "Operator-facing live smoke sequence for dual-MAVROS readiness before simulation arming.",
+  "safety_gates": {
+    "real_hardware_auto_arm_allowed": false,
+    "run_no_arm_executor_before_simulation_arm": true,
+    "run_read_only_smoke_before_executor": true,
+    "simulation_arm_requires_operator_confirmation": true
+  },
+  "sequence": [
+    {
+      "arms_vehicle": false,
+      "command": "scripts\\start_two_uav.bat",
+      "expected_result": "RflySim, PX4 SITL, WSL, and /uav1 + /uav2 MAVROS instances are running",
+      "id": "start_dual_uav_stack",
+      "launches_gui": true,
+      "read_only": false,
+      "requires_operator_confirmation": true,
+      "step": 1
+    },
+    {
+      "arms_vehicle": false,
+      "command": "D:\\PX4PSP\\Python38\\python.exe future_aircraft_ws\\src\\multi_uav_mission\\scripts\\mavros_smoke_check.py --live-config config\\stage5_live_mission.json --backend ros --timeout-s 10 --report logs\\stage6c_live\\mavros_smoke_report.json",
+      "expected_result": "state and odom topics plus set_mode and arming services are available for both UAVs",
+      "id": "mavros_read_only_smoke",
+      "launches_gui": false,
+      "read_only": true,
+      "requires_operator_confirmation": false,
+      "step": 2
+    },
+    {
+      "arms_vehicle": false,
+      "command": "D:\\PX4PSP\\Python38\\python.exe future_aircraft_ws\\src\\multi_uav_mission\\scripts\\mission_executor.py --plan logs\\stage6c_live\\live_mission_plan.json --live-config config\\stage5_live_mission.json --backend ros --events logs\\stage6c_live\\mission_events_no_arm.jsonl --trace logs\\stage6c_live\\executor_trace_no_arm.json --score logs\\stage6c_live\\score_summary_no_arm.json",
+      "expected_result": "arming requests are blocked because --allow-arm is omitted; mission events record arming_blocked",
+      "id": "mission_executor_no_arm_smoke",
+      "launches_gui": false,
+      "read_only": false,
+      "requires_operator_confirmation": false,
+      "step": 3
+    },
+    {
+      "arms_vehicle": true,
+      "command": "scripts\\start_mission_executor_sim_arm.bat",
+      "expected_result": "simulation-only arm gate is used after read-only and no-arm smoke checks pass",
+      "id": "simulation_arm_executor",
+      "launches_gui": true,
+      "read_only": false,
+      "requires_operator_confirmation": true,
+      "step": 4
+    }
+  ],
+  "stage": "stage6c_live_dual_mavros_smoke",
+  "uavs": [
+    {
+      "arming_service": "/uav1/mavros/cmd/arming",
+      "namespace": "/uav1",
+      "odom_topic": "/uav1/mavros/local_position/odom",
+      "set_mode_service": "/uav1/mavros/set_mode",
+      "state_topic": "/uav1/mavros/state",
+      "uav_id": "uav1"
+    },
+    {
+      "arming_service": "/uav2/mavros/cmd/arming",
+      "namespace": "/uav2",
+      "odom_topic": "/uav2/mavros/local_position/odom",
+      "set_mode_service": "/uav2/mavros/set_mode",
+      "state_topic": "/uav2/mavros/state",
+      "uav_id": "uav2"
+    }
+  ]
+}

@@ -64,6 +64,9 @@ foreach ($relativePath in $dryRunScripts) {
     if (Test-Path -LiteralPath $fullPath) {
         $content = Get-Content -Raw -LiteralPath $fullPath
         if ($content -notmatch '--dry-run') { $contractErrors += "$relativePath missing --dry-run support" }
+        if ($content -match 'cmd /k "call \\"') {
+            $contractErrors += "$relativePath uses invalid cmd nested call quoting"
+        }
         $output = & cmd /c "`"$fullPath`" --dry-run" 2>&1
         if ($LASTEXITCODE -ne 0) {
             $contractErrors += "$relativePath --dry-run failed with exit code ${LASTEXITCODE}: $($output -join ' ')"

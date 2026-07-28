@@ -4,6 +4,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'python_contract_runner.ps1')
 
 $requiredPaths = @(
     'future_aircraft_ws/src/multi_uav_mission/package.xml',
@@ -22,32 +23,18 @@ foreach ($relativePath in $requiredPaths) {
 }
 
 $contractErrors = @()
-$pythonCandidates = @(
-    'D:\PX4PSP\Python38\python.exe',
-    'python'
-)
-$pythonCmd = $null
-foreach ($candidate in $pythonCandidates) {
-    try {
-        $versionOutput = & $candidate --version 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            $pythonCmd = $candidate
-            break
-        }
-    }
-    catch {}
-}
-if (-not $pythonCmd) {
-    $contractErrors += 'No usable Python interpreter found; checked D:\PX4PSP\Python38\python.exe and python'
+$pythonRunner = Get-ContractPythonRunner
+if (-not $pythonRunner) {
+    $contractErrors += 'No usable Python interpreter found; checked D:\PX4PSP\Python38\python.exe, python, and WSL python3'
 }
 
-if ($missing.Count -eq 0 -and $pythonCmd) {
-    $outputPath = Join-Path $env:TEMP 'future_aircraft_stage3_score_summary.json'
+if ($missing.Count -eq 0 -and $pythonRunner) {
+    $outputPath = Join-Path $env:TEMP ("future_aircraft_stage3_score_summary_{0}.json" -f $PID)
     if (Test-Path -LiteralPath $outputPath) { Remove-Item -LiteralPath $outputPath -Force }
     $scoreScript = Join-Path $ProjectRoot 'future_aircraft_ws/src/multi_uav_mission/scripts/score_summary.py'
     $fixturePath = Join-Path $ProjectRoot 'tests/fixtures/stage3/mission_events.jsonl'
     $expectedPath = Join-Path $ProjectRoot 'tests/fixtures/stage3/expected_score_summary.json'
-    $output = & $pythonCmd $scoreScript --events $fixturePath --output $outputPath 2>&1
+    $output = Invoke-ContractPythonScript -Runner $pythonRunner -ScriptPath $scoreScript -Arguments @('--events', $fixturePath, '--output', $outputPath)
     if ($LASTEXITCODE -ne 0) {
         $contractErrors += "score_summary.py failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
     }
@@ -86,3 +73,4 @@ if (-not $Quiet) {
     Write-Host '[PASS] Stage 3 logging/scoring validation passed.' -ForegroundColor Green
 }
 exit 0
+

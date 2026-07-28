@@ -16,9 +16,9 @@ if /I "%~1"=="--dry-run" (
   exit /b 0
 )
 call "%SCRIPT_DIR%start_vcxsrv.bat"
-start "futureAircraftSim SITL" cmd /k "call \"%SCRIPT_DIR%start_rflysim_sitl_single.bat\""
+start "futureAircraftSim SITL" cmd /k "call ""%SCRIPT_DIR%start_rflysim_sitl_single.bat"""
 timeout /t %STAGE1_BOOT_WAIT_SECONDS% /nobreak >nul
-start "futureAircraftSim ROS" cmd /k "call \"%SCRIPT_DIR%start_wsl_ros_single.bat\""
+start "futureAircraftSim ROS" cmd /k "call ""%SCRIPT_DIR%start_wsl_ros_single.bat"""
 exit /b 0
 
 

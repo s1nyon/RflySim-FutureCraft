@@ -1,0 +1,197 @@
+[
+  {
+    "action": "wait_for_topics",
+    "backend": "dry-run",
+    "detail": "validated wait_for_topics",
+    "sequence": 1,
+    "stage": "preflight",
+    "status": "dry_run_success",
+    "uav": "uav1"
+  },
+  {
+    "action": "wait_for_topics",
+    "backend": "dry-run",
+    "detail": "validated wait_for_topics",
+    "sequence": 2,
+    "stage": "preflight",
+    "status": "dry_run_success",
+    "uav": "uav2"
+  },
+  {
+    "action": "publish_warmup_setpoints",
+    "backend": "dry-run",
+    "detail": "validated publish_warmup_setpoints",
+    "sequence": 3,
+    "stage": "multi_takeoff",
+    "status": "dry_run_success",
+    "topic": "/uav1/mavros/setpoint_raw/local",
+    "uav": "uav1"
+  },
+  {
+    "action": "call_service",
+    "backend": "dry-run",
+    "detail": "validated call_service",
+    "sequence": 4,
+    "service": "/uav1/mavros/set_mode",
+    "stage": "multi_takeoff",
+    "status": "dry_run_success",
+    "uav": "uav1"
+  },
+  {
+    "action": "call_service",
+    "backend": "dry-run",
+    "detail": "validated call_service",
+    "sequence": 5,
+    "service": "/uav1/mavros/cmd/arming",
+    "stage": "multi_takeoff",
+    "status": "dry_run_success",
+    "uav": "uav1"
+  },
+  {
+    "action": "publish_position_setpoint",
+    "backend": "dry-run",
+    "detail": "validated publish_position_setpoint",
+    "sequence": 6,
+    "stage": "multi_takeoff",
+    "status": "dry_run_success",
+    "topic": "/uav1/mavros/setpoint_raw/local",
+    "uav": "uav1"
+  },
+  {
+    "action": "publish_warmup_setpoints",
+    "backend": "dry-run",
+    "detail": "validated publish_warmup_setpoints",
+    "sequence": 7,
+    "stage": "multi_takeoff",
+    "status": "dry_run_success",
+    "topic": "/uav2/mavros/setpoint_raw/local",
+    "uav": "uav2"
+  },
+  {
+    "action": "call_service",
+    "backend": "dry-run",
+    "detail": "validated call_service",
+    "sequence": 8,
+    "service": "/uav2/mavros/set_mode",
+    "stage": "multi_takeoff",
+    "status": "dry_run_success",
+    "uav": "uav2"
+  },
+  {
+    "action": "call_service",
+    "backend": "dry-run",
+    "detail": "validated call_service",
+    "sequence": 9,
+    "service": "/uav2/mavros/cmd/arming",
+    "stage": "multi_takeoff",
+    "status": "dry_run_success",
+    "uav": "uav2"
+  },
+  {
+    "action": "publish_position_setpoint",
+    "backend": "dry-run",
+    "detail": "validated publish_position_setpoint",
+    "sequence": 10,
+    "stage": "multi_takeoff",
+    "status": "dry_run_success",
+    "topic": "/uav2/mavros/setpoint_raw/local",
+    "uav": "uav2"
+  },
+  {
+    "action": "publish_position_setpoint",
+    "backend": "dry-run",
+    "detail": "validated publish_position_setpoint",
+    "sequence": 11,
+    "stage": "enter_corridor",
+    "status": "dry_run_success",
+    "topic": "/uav1/mavros/setpoint_raw/local",
+    "uav": "uav1"
+  },
+  {
+    "action": "publish_position_setpoint",
+    "backend": "dry-run",
+    "detail": "validated publish_position_setpoint",
+    "sequence": 12,
+    "stage": "enter_corridor",
+    "status": "dry_run_success",
+    "topic": "/uav2/mavros/setpoint_raw/local",
+    "uav": "uav2"
+  },
+  {
+    "action": "publish_planner_goal",
+    "backend": "dry-run",
+    "detail": "validated publish_planner_goal",
+    "sequence": 13,
+    "stage": "collaborative_navigate",
+    "status": "dry_run_success",
+    "topic": "/uav1/planner/goal",
+    "uav": "uav1"
+  },
+  {
+    "action": "publish_planner_goal",
+    "backend": "dry-run",
+    "detail": "validated publish_planner_goal",
+    "sequence": 14,
+    "stage": "collaborative_navigate",
+    "status": "dry_run_success",
+    "topic": "/uav2/planner/goal",
+    "uav": "uav2"
+  },
+  {
+    "action": "call_service",
+    "backend": "dry-run",
+    "detail": "validated call_service",
+    "sequence": 15,
+    "service": "/mission/target_provider/query",
+    "stage": "collaborative_target_work",
+    "status": "dry_run_success"
+  },
+  {
+    "action": "publish_position_setpoint",
+    "backend": "dry-run",
+    "detail": "validated publish_position_setpoint",
+    "sequence": 16,
+    "stage": "exit_corridor",
+    "status": "dry_run_success",
+    "topic": "/uav1/mavros/setpoint_raw/local",
+    "uav": "uav1"
+  },
+  {
+    "action": "publish_position_setpoint",
+    "backend": "dry-run",
+    "detail": "validated publish_position_setpoint",
+    "sequence": 17,
+    "stage": "exit_corridor",
+    "status": "dry_run_success",
+    "topic": "/uav2/mavros/setpoint_raw/local",
+    "uav": "uav2"
+  },
+  {
+    "action": "call_service",
+    "backend": "dry-run",
+    "detail": "validated call_service",
+    "sequence": 18,
+    "service": "/uav1/mavros/set_mode",
+    "stage": "aruco_landing",
+    "status": "dry_run_success",
+    "uav": "uav1"
+  },
+  {
+    "action": "call_service",
+    "backend": "dry-run",
+    "detail": "validated call_service",
+    "sequence": 19,
+    "service": "/uav2/mavros/set_mode",
+    "stage": "aruco_landing",
+    "status": "dry_run_success",
+    "uav": "uav2"
+  },
+  {
+    "action": "write_score_report",
+    "backend": "dry-run",
+    "detail": "validated write_score_report",
+    "sequence": 20,
+    "stage": "mission_report",
+    "status": "dry_run_success"
+  }
+]

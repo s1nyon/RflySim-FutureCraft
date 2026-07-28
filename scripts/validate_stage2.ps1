@@ -74,6 +74,12 @@ foreach ($relativePath in $dryRunScripts) {
     if (Test-Path -LiteralPath $fullPath) {
         $content = Get-Content -Raw -LiteralPath $fullPath
         if ($content -notmatch '--dry-run') { $contractErrors += "$relativePath missing --dry-run support" }
+        if ($content -match 'cmd /k "call \\"') {
+            $contractErrors += "$relativePath uses invalid cmd nested call quoting"
+        }
+        if ($relativePath -eq 'scripts/start_two_uav.bat' -and $content -match 'start_vcxsrv\.bat') {
+            $contractErrors += 'scripts/start_two_uav.bat should not require VcXsrv for the headless MAVROS flow'
+        }
         $output = & cmd /c "`"$fullPath`" --dry-run" 2>&1
         if ($LASTEXITCODE -ne 0) {
             $contractErrors += "$relativePath --dry-run failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
@@ -100,13 +106,21 @@ if (Test-Path -LiteralPath $generateScript) {
                     $contractErrors += "generated two-UAV SITL script missing marker: $marker"
                 }
             }
+            foreach ($forbidden in @('wsl --shutdown', 'taskkill /f /im "cmd.exe"', 'taskkill /f /im "wsl.exe"', 'taskkill /f /im "bash.exe"', 'taskkill /f /IM "vcxsrv.exe"')) {
+                if ($generated -match [regex]::Escape($forbidden)) {
+                    $contractErrors += "generated two-UAV SITL script keeps original cleanup command: $forbidden"
+                }
+            }
+            if ($generated -notmatch [regex]::Escape('tail -f /dev/null')) {
+                $contractErrors += 'generated two-UAV SITL script missing noninteractive WSL keepalive'
+            }
         }
     }
 }
 $wslScript = Join-Path $ProjectRoot 'scripts/wsl/stage2_two_mavros.sh'
 if (Test-Path -LiteralPath $wslScript) {
     $wslText = Get-Content -Raw -LiteralPath $wslScript
-    foreach ($needle in @('ROS_NAMESPACE=uav1', 'ROS_NAMESPACE=uav2', 'fcu_url:=udp://:14541@127.0.0.1:14581', 'fcu_url:=udp://:14542@127.0.0.1:14582', 'tgt_system:=1', 'tgt_system:=2')) {
+    foreach ($needle in @('ROS_NAMESPACE=uav1', 'ROS_NAMESPACE=uav2', 'fcu_url:=udp://:20101@127.0.0.1:20100', 'fcu_url:=udp://:20103@127.0.0.1:20102', 'tgt_system:=1', 'tgt_system:=2')) {
         if ($wslText -notmatch [regex]::Escape($needle)) {
             $contractErrors += "scripts/wsl/stage2_two_mavros.sh missing $needle"
         }
@@ -126,4 +140,6 @@ if (-not $Quiet) {
     Write-Host '[PASS] Stage 2 two-UAV namespace validation passed.' -ForegroundColor Green
 }
 exit 0
+
+
 

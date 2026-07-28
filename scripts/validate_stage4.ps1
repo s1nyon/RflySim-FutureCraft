@@ -4,6 +4,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'python_contract_runner.ps1')
 
 $requiredPaths = @(
     'config/stage4_ego_swarm.json',
@@ -21,32 +22,18 @@ foreach ($relativePath in $requiredPaths) {
 }
 
 $contractErrors = @()
-$pythonCandidates = @(
-    'D:\PX4PSP\Python38\python.exe',
-    'python'
-)
-$pythonCmd = $null
-foreach ($candidate in $pythonCandidates) {
-    try {
-        $versionOutput = & $candidate --version 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            $pythonCmd = $candidate
-            break
-        }
-    }
-    catch {}
-}
-if (-not $pythonCmd) {
-    $contractErrors += 'No usable Python interpreter found; checked D:\PX4PSP\Python38\python.exe and python'
+$pythonRunner = Get-ContractPythonRunner
+if (-not $pythonRunner) {
+    $contractErrors += 'No usable Python interpreter found; checked D:\PX4PSP\Python38\python.exe, python, and WSL python3'
 }
 
-if ($missing.Count -eq 0 -and $pythonCmd) {
-    $outputPath = Join-Path $env:TEMP 'future_aircraft_stage4_ego_swarm_commands.json'
+if ($missing.Count -eq 0 -and $pythonRunner) {
+    $outputPath = Join-Path $env:TEMP ("future_aircraft_stage4_ego_swarm_commands_{0}.json" -f $PID)
     if (Test-Path -LiteralPath $outputPath) { Remove-Item -LiteralPath $outputPath -Force }
     $adapterScript = Join-Path $ProjectRoot 'future_aircraft_ws/src/multi_uav_mission/scripts/ego_swarm_adapter.py'
     $configPath = Join-Path $ProjectRoot 'config/stage4_ego_swarm.json'
     $expectedPath = Join-Path $ProjectRoot 'tests/fixtures/stage4/expected_ego_swarm_commands.json'
-    $output = & $pythonCmd $adapterScript --config $configPath --output $outputPath 2>&1
+    $output = Invoke-ContractPythonScript -Runner $pythonRunner -ScriptPath $adapterScript -Arguments @('--config', $configPath, '--output', $outputPath)
     if ($LASTEXITCODE -ne 0) {
         $contractErrors += "ego_swarm_adapter.py failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
     }
@@ -97,3 +84,4 @@ if (-not $Quiet) {
     Write-Host '[PASS] Stage 4 ego-swarm validation passed.' -ForegroundColor Green
 }
 exit 0
+

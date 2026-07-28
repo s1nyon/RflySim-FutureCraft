@@ -1,0 +1,39 @@
+{
+  "frame_id": "map",
+  "source_mode": "ideal",
+  "targets": [
+    {
+      "confidence": 1.0,
+      "position": {
+        "x": 3.2,
+        "y": -0.45,
+        "z": 1.0
+      },
+      "target_id": "color_label_red",
+      "target_type": "color_label",
+      "uav": "uav1"
+    },
+    {
+      "confidence": 1.0,
+      "position": {
+        "x": 4.6,
+        "y": 0.35,
+        "z": 1.1
+      },
+      "target_id": "qr_code_gate",
+      "target_type": "qr_code",
+      "uav": "uav2"
+    },
+    {
+      "confidence": 1.0,
+      "position": {
+        "x": 5.4,
+        "y": -0.2,
+        "z": 1.0
+      },
+      "target_id": "thermal_source_1",
+      "target_type": "thermal_source",
+      "uav": "uav1"
+    }
+  ]
+}

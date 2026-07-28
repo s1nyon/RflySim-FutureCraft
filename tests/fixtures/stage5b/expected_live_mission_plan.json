@@ -1,0 +1,280 @@
+{
+  "actions": [
+    {
+      "action": "wait_for_topics",
+      "sequence": 1,
+      "stage": "preflight",
+      "topics": [
+        "/uav1/mavros/state",
+        "/uav1/mavros/local_position/odom"
+      ],
+      "uav": "uav1"
+    },
+    {
+      "action": "wait_for_topics",
+      "sequence": 2,
+      "stage": "preflight",
+      "topics": [
+        "/uav2/mavros/state",
+        "/uav2/mavros/local_position/odom"
+      ],
+      "uav": "uav2"
+    },
+    {
+      "action": "publish_warmup_setpoints",
+      "count": 40,
+      "goal": {
+        "x": 0.0,
+        "y": -0.8,
+        "z": 1.2
+      },
+      "rate_hz": 20,
+      "sequence": 3,
+      "stage": "multi_takeoff",
+      "topic": "/uav1/mavros/setpoint_raw/local",
+      "uav": "uav1"
+    },
+    {
+      "action": "call_service",
+      "request": {
+        "custom_mode": "OFFBOARD"
+      },
+      "sequence": 4,
+      "service": "/uav1/mavros/set_mode",
+      "stage": "multi_takeoff",
+      "uav": "uav1"
+    },
+    {
+      "action": "call_service",
+      "request": {
+        "value": true
+      },
+      "sequence": 5,
+      "service": "/uav1/mavros/cmd/arming",
+      "stage": "multi_takeoff",
+      "uav": "uav1"
+    },
+    {
+      "action": "publish_position_setpoint",
+      "goal": {
+        "x": 0.0,
+        "y": -0.8,
+        "z": 1.2
+      },
+      "rate_hz": 20,
+      "sequence": 6,
+      "stage": "multi_takeoff",
+      "timeout_s": 20,
+      "topic": "/uav1/mavros/setpoint_raw/local",
+      "uav": "uav1"
+    },
+    {
+      "action": "publish_warmup_setpoints",
+      "count": 40,
+      "goal": {
+        "x": 0.0,
+        "y": 0.8,
+        "z": 1.2
+      },
+      "rate_hz": 20,
+      "sequence": 7,
+      "stage": "multi_takeoff",
+      "topic": "/uav2/mavros/setpoint_raw/local",
+      "uav": "uav2"
+    },
+    {
+      "action": "call_service",
+      "request": {
+        "custom_mode": "OFFBOARD"
+      },
+      "sequence": 8,
+      "service": "/uav2/mavros/set_mode",
+      "stage": "multi_takeoff",
+      "uav": "uav2"
+    },
+    {
+      "action": "call_service",
+      "request": {
+        "value": true
+      },
+      "sequence": 9,
+      "service": "/uav2/mavros/cmd/arming",
+      "stage": "multi_takeoff",
+      "uav": "uav2"
+    },
+    {
+      "action": "publish_position_setpoint",
+      "goal": {
+        "x": 0.0,
+        "y": 0.8,
+        "z": 1.2
+      },
+      "rate_hz": 20,
+      "sequence": 10,
+      "stage": "multi_takeoff",
+      "timeout_s": 20,
+      "topic": "/uav2/mavros/setpoint_raw/local",
+      "uav": "uav2"
+    },
+    {
+      "action": "publish_position_setpoint",
+      "goal": {
+        "x": 2.0,
+        "y": 0.0,
+        "z": 1.2
+      },
+      "rate_hz": 20,
+      "sequence": 11,
+      "stage": "enter_corridor",
+      "timeout_s": 15,
+      "topic": "/uav1/mavros/setpoint_raw/local",
+      "uav": "uav1"
+    },
+    {
+      "action": "publish_position_setpoint",
+      "goal": {
+        "x": 2.0,
+        "y": 0.0,
+        "z": 1.2
+      },
+      "rate_hz": 20,
+      "sequence": 12,
+      "stage": "enter_corridor",
+      "timeout_s": 15,
+      "topic": "/uav2/mavros/setpoint_raw/local",
+      "uav": "uav2"
+    },
+    {
+      "action": "publish_planner_goal",
+      "fallback": "fixed_waypoint_setpoint",
+      "goal": {
+        "x": 5.0,
+        "y": 0.0,
+        "z": 1.2
+      },
+      "sequence": 13,
+      "stage": "collaborative_navigate",
+      "timeout_s": 60,
+      "topic": "/uav1/planner/goal",
+      "uav": "uav1"
+    },
+    {
+      "action": "publish_planner_goal",
+      "fallback": "fixed_waypoint_setpoint",
+      "goal": {
+        "x": 5.0,
+        "y": 0.0,
+        "z": 1.2
+      },
+      "sequence": 14,
+      "stage": "collaborative_navigate",
+      "timeout_s": 60,
+      "topic": "/uav2/planner/goal",
+      "uav": "uav2"
+    },
+    {
+      "action": "call_service",
+      "request": {
+        "target_types": [
+          "color_label",
+          "qr_code",
+          "thermal_source"
+        ],
+        "timeout_s": 40
+      },
+      "sequence": 15,
+      "service": "/mission/target_provider/query",
+      "stage": "collaborative_target_work"
+    },
+    {
+      "action": "publish_position_setpoint",
+      "goal": {
+        "x": 7.0,
+        "y": 0.0,
+        "z": 1.2
+      },
+      "rate_hz": 20,
+      "sequence": 16,
+      "stage": "exit_corridor",
+      "timeout_s": 20,
+      "topic": "/uav1/mavros/setpoint_raw/local",
+      "uav": "uav1"
+    },
+    {
+      "action": "publish_position_setpoint",
+      "goal": {
+        "x": 7.0,
+        "y": 0.0,
+        "z": 1.2
+      },
+      "rate_hz": 20,
+      "sequence": 17,
+      "stage": "exit_corridor",
+      "timeout_s": 20,
+      "topic": "/uav2/mavros/setpoint_raw/local",
+      "uav": "uav2"
+    },
+    {
+      "action": "call_service",
+      "fallback_goal": {
+        "x": 8.0,
+        "y": -0.8,
+        "z": 0.0
+      },
+      "request": {
+        "custom_mode": "AUTO.LAND"
+      },
+      "sequence": 18,
+      "service": "/uav1/mavros/set_mode",
+      "stage": "aruco_landing",
+      "timeout_s": 30,
+      "uav": "uav1"
+    },
+    {
+      "action": "call_service",
+      "fallback_goal": {
+        "x": 8.0,
+        "y": 0.8,
+        "z": 0.0
+      },
+      "request": {
+        "custom_mode": "AUTO.LAND"
+      },
+      "sequence": 19,
+      "service": "/uav2/mavros/set_mode",
+      "stage": "aruco_landing",
+      "timeout_s": 30,
+      "uav": "uav2"
+    },
+    {
+      "action": "write_score_report",
+      "events_topic": "/mission/events",
+      "score_output": "score_summary.json",
+      "sequence": 20,
+      "stage": "mission_report",
+      "timeout_s": 5
+    }
+  ],
+  "event_topic": "/mission/events",
+  "mission_mode": "live_ros_boundary",
+  "mission_name": "futureAircraftSim_stage5_offline_contract",
+  "setpoint_rate_hz": 20,
+  "uavs": [
+    {
+      "namespace": "/uav1",
+      "odom_topic": "/uav1/mavros/local_position/odom",
+      "planner_goal_topic": "/uav1/planner/goal",
+      "setpoint_topic": "/uav1/mavros/setpoint_raw/local",
+      "state_topic": "/uav1/mavros/state",
+      "uav_id": "uav1"
+    },
+    {
+      "namespace": "/uav2",
+      "odom_topic": "/uav2/mavros/local_position/odom",
+      "planner_goal_topic": "/uav2/planner/goal",
+      "setpoint_topic": "/uav2/mavros/setpoint_raw/local",
+      "state_topic": "/uav2/mavros/state",
+      "uav_id": "uav2"
+    }
+  ]
+}

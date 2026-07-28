@@ -1,0 +1,112 @@
+{
+  "mission_name": "futureAircraftSim_stage5_offline_contract",
+  "mode": "fixed_waypoint_fallback",
+  "uavs": [
+    {
+      "uav_id": "uav1",
+      "namespace": "/uav1",
+      "takeoff_goal": {
+        "x": 0.0,
+        "y": -0.8,
+        "z": 1.2
+      },
+      "landing_goal": {
+        "x": 8.0,
+        "y": -0.8,
+        "z": 0.0
+      }
+    },
+    {
+      "uav_id": "uav2",
+      "namespace": "/uav2",
+      "takeoff_goal": {
+        "x": 0.0,
+        "y": 0.8,
+        "z": 1.2
+      },
+      "landing_goal": {
+        "x": 8.0,
+        "y": 0.8,
+        "z": 0.0
+      }
+    }
+  ],
+  "stages": [
+    {
+      "name": "MultiTakeoff",
+      "timeout_s": 20,
+      "success_event": "multi_takeoff_success"
+    },
+    {
+      "name": "EnterCorridor",
+      "timeout_s": 15,
+      "success_event": "enter_corridor_success",
+      "goal": {
+        "x": 2.0,
+        "y": 0.0,
+        "z": 1.2
+      }
+    },
+    {
+      "name": "CollaborativeNavigate",
+      "timeout_s": 60,
+      "success_event": "collaborative_navigate_success",
+      "goal": {
+        "x": 5.0,
+        "y": 0.0,
+        "z": 1.2
+      }
+    },
+    {
+      "name": "CollaborativeTargetWork",
+      "timeout_s": 40,
+      "success_event": "collaborative_target_work_success",
+      "targets": [
+        {
+          "target_id": "color_label_red",
+          "target_type": "color_label",
+          "uav": "uav1"
+        },
+        {
+          "target_id": "qr_code_gate",
+          "target_type": "qr_code",
+          "uav": "uav2"
+        },
+        {
+          "target_id": "thermal_source_1",
+          "target_type": "thermal_source",
+          "uav": "uav1"
+        }
+      ]
+    },
+    {
+      "name": "ExitCorridor",
+      "timeout_s": 20,
+      "success_event": "exit_corridor_success",
+      "goal": {
+        "x": 7.0,
+        "y": 0.0,
+        "z": 1.2
+      }
+    },
+    {
+      "name": "ArucoLanding",
+      "timeout_s": 30,
+      "success_event": "aruco_landing_success"
+    },
+    {
+      "name": "MissionReport",
+      "timeout_s": 5,
+      "success_event": "mission_report_success"
+    }
+  ],
+  "failure_policy": "abort_and_land",
+  "event_output_contract": {
+    "required_fields": [
+      "time",
+      "event"
+    ],
+    "stage_field": "stage",
+    "uav_field": "uav"
+  }
+}

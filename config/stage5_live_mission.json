@@ -1,0 +1,59 @@
+{
+  "mission_mode": "live_ros_boundary",
+  "setpoint_rate_hz": 20,
+  "event_topic": "/mission/events",
+  "target_provider_service": "/mission/target_provider/query",
+  "score_output": "score_summary.json",
+  "simulation_arm_policy": {
+    "allow_arm": true,
+    "mode": "simulation_only",
+    "operator_ack": "simulation_stage5e"
+  },
+  "uavs": [
+    {
+      "uav_id": "uav1",
+      "namespace": "/uav1",
+      "state_topic": "/uav1/mavros/state",
+      "odom_topic": "/uav1/mavros/local_position/odom",
+      "setpoint_topic": "/uav1/mavros/setpoint_raw/local",
+      "set_mode_service": "/uav1/mavros/set_mode",
+      "arming_service": "/uav1/mavros/cmd/arming",
+      "planner_goal_topic": "/uav1/planner/goal"
+    },
+    {
+      "uav_id": "uav2",
+      "namespace": "/uav2",
+      "state_topic": "/uav2/mavros/state",
+      "odom_topic": "/uav2/mavros/local_position/odom",
+      "setpoint_topic": "/uav2/mavros/setpoint_raw/local",
+      "set_mode_service": "/uav2/mavros/set_mode",
+      "arming_service": "/uav2/mavros/cmd/arming",
+      "planner_goal_topic": "/uav2/planner/goal"
+    }
+  ],
+  "stage_bindings": {
+    "MultiTakeoff": {
+      "type": "mavros_offboard_takeoff",
+      "pre_setpoint_count": 40
+    },
+    "EnterCorridor": {
+      "type": "fixed_waypoint_setpoint"
+    },
+    "CollaborativeNavigate": {
+      "type": "planner_goal_dispatch",
+      "fallback": "fixed_waypoint_setpoint"
+    },
+    "CollaborativeTargetWork": {
+      "type": "target_provider_query"
+    },
+    "ExitCorridor": {
+      "type": "fixed_waypoint_setpoint"
+    },
+    "ArucoLanding": {
+      "type": "mavros_auto_land"
+    },
+    "MissionReport": {
+      "type": "score_report"
+    }
+  }
+}
