@@ -1,6 +1,7 @@
 INFO  [mavlink] mode: Normal, data rate: 4000000 B/s on udp port 18570 remote port 14550
 INFO  [mavlink] mode: Onboard, data rate: 4000000 B/s on udp port 14580 remote port 14540
 INFO  [mavlink] mode: Gimbal, data rate: 400000 B/s on udp port 13030 remote port 13280
+INFO  [mavlink] mavlink chan: #0
 INFO  [mavlink] mode: Normal, data rate: 4000000 B/s on UDP (17540, remote port: 16540)
 INFO  [mavlink] partner IP: 127.0.0.1
 INFO  [mavlink] GCS heartbeat valid
