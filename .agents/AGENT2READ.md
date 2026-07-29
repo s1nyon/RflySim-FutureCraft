@@ -53,6 +53,7 @@ Validated offline stages:
 
 Current limits:
 
+- Stage 2.1 is a hard gate before Stage 6D/6E: run `scripts\run_stage2_1_mavlink_check.bat` after the selected single-UAV simulation path is started, inspect `logs/stage2_1_live/mavlink_link_report.json`, and proceed only when `status` is `ready`. `px4_to_mavros_return_path_blocked` means PX4 received MAVROS traffic while MAVROS did not receive a usable PX4 return stream. This does not mean Stage 6D or Stage 6E has passed.
 - Offline validation passes for the staged contracts, but live ROS/PX4/MAVROS/RflySim runtime integration still needs end-to-end confirmation.
 - Stage 6D dry-run validates the no-arm live runner contract without launching anything.
 - Stage 6E dry-run validates the simulation-arm runner contract; real execution may call `/uav1/mavros/cmd/arming` and `/uav2/mavros/cmd/arming` in simulation.

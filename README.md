@@ -24,6 +24,8 @@ AI 工作说明请见 [.agents/AGENT2READ.md](.agents/AGENT2READ.md)。
 - Stage 6C：live dual-MAVROS smoke runbook
 - Stage 6D / 6E：no-arm live smoke runner 与 simulation-arm live runner
 
+Stage 2.1 是进入后续 live 阶段的强制单机回程链路门：先启动选定的单机仿真路径，运行 `scripts\run_stage2_1_mavlink_check.bat` 并检查 `logs/stage2_1_live/mavlink_link_report.json`；只有 `status` 为 `ready` 才能继续排查双机扩展，否则应修复报告所分类的边界。双机扩展通过后，才运行 Stage 6D no-arm smoke。
+
 Stage 6D / 6E 提供了更直接的 live 入口。dry-run 验证不会启动 RflySim、PX4、MAVROS 或 GUI；真实运行时，6D 不会 arm，6E 会在 `--allow-arm --simulation-only` 和配置门禁同时满足后调用仿真 MAVROS arming service。
 
 ## 目录说明
