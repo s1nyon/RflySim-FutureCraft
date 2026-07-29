@@ -1,0 +1,5 @@
+[DRY-RUN] Stage 2.1 single-UAV MAVLink return-path verifier
+[DRY-RUN] 1. inspect PX4 instance 1 MAVLink status
+[DRY-RUN] 2. sample /uav1 MAVROS state, odom, and service availability
+[DRY-RUN] 3. write logs/stage2_1_live/mavlink_link_report.json
+[DRY-RUN] 4. never publish setpoints or call flight-control services
