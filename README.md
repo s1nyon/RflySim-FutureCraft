@@ -24,7 +24,19 @@ AI 工作说明请见 [.agents/AGENT2READ.md](.agents/AGENT2READ.md)。
 - Stage 6C：live dual-MAVROS smoke runbook
 - Stage 6D / 6E：no-arm live smoke runner 与 simulation-arm live runner
 
-Stage 6D / 6E 提供了更直接的 live 入口。dry-run 验证不会启动 RflySim、PX4、MAVROS 或 GUI；真实运行时，6D 不会 arm，6E 会在 `--allow-arm --simulation-only` 和配置门禁同时满足后调用仿真 MAVROS arming service。
+Stage 2.1 是进入后续 live 阶段的强制单机回程链路门：先启动选定的单机仿真路径，运行 `scripts\run_stage2_1_mavlink_check.bat` 并检查 `logs/stage2_1_live/mavlink_link_report.json`；只有 `status` 为 `ready` 才能继续排查双机扩展，否则应修复报告所分类的边界。双机扩展通过后，才运行 Stage 6D no-arm smoke。
+
+Stage 6D / 6E 提供了更直接的 live 入口。dry-run 验证不会启动 RflySim、PX4、MAVROS 或 GUI；真实运行时，6D 不会 arm，6E 会先执行双 MAVROS 连通性检查，只有检查通过且 `--allow-arm --simulation-only` 与配置门禁同时满足时，才调用仿真 MAVROS arming service。
+
+### 进度估算
+
+当前项目总体进度约为 **75%**。该数字按完成真实双机任务闭环所需的关键路径估算，不是按 Stage 数量简单平均：
+
+- 离线工程与接口契约约 **90%**：启动编排、namespace、日志评分、行为树、mission executor、arm 安全门禁和 target provider 均已有确定性验证。
+- 真实仿真闭环约 **60%**：live runner 和 smoke runbook 已就绪，但双 MAVROS、OFFBOARD、仿真解锁、起飞、任务执行和降落仍需端到端实跑确认。
+- 核心能力替换约 **45%**：ego-swarm 目前完成 adapter 契约，官方 planner 尚未克隆、编译和 live 接入；视觉 provider 仍使用确定性仿真检测数据，没有接入真实相机 topic 和检测模型。
+
+因此，当前状态可以概括为“离线任务框架基本完成，正在进入真实仿真联调”。下一次显著的进度提升应来自 Stage 6D/6E live 路径成功运行，而不是继续增加离线契约。
 
 ## 目录说明
 
@@ -70,7 +82,9 @@ scripts\run_live_sim_arm.bat
 
 1. 启动 `scripts\start_two_uav.bat`，拉起双机仿真、PX4 SITL、WSL 与双 MAVROS。
 2. 执行 `scripts\run_live_no_arm_smoke.bat`，生成 live plan，运行 ROS smoke check，并确认 mission executor 中 arming 被阻断。
-3. 若 no-arm smoke 通过，执行 `scripts\run_live_sim_arm.bat`，进入仿真 arm 路径。
+3. 若 no-arm smoke 通过，执行 `scripts\run_live_sim_arm.bat`；该入口会再次执行 MAVROS smoke check，通过后才进入仿真 arm 路径。
+
+当前 PX4 SITL wrapper 的 Rfly MAVLink 端口为 `/uav1` 的 `udp://:16540@127.0.0.1:17540` 与 `/uav2` 的 `udp://:16541@127.0.0.1:17541`；MAVROS 端口不匹配时 `/mavros/state` 会保持 `connected: False`，并且不会发布 local odom。
 
 ## 开发约定
 
