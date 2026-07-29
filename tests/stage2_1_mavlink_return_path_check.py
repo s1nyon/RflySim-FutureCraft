@@ -58,9 +58,14 @@ def main():
     expected_report = json.loads(
         (fixture_dir / "expected_dry_run_report.json").read_text(encoding="utf-8")
     )
+    assert expected_report["backend"] == "dry-run"
+    assert expected_report["status"] == "inconclusive"
+    assert expected_report["live_actions"] == []
     assert module.classify_report(
-        expected_report["px4"], expected_report["mavros"]
-    ) == expected_report["classification"]
+        {"started": True, "received_mavros_traffic": True},
+        {"state_topic_present": True, "connected": True, "odom_received": True,
+         "set_mode_service": True, "arming_service": True},
+    ) == "ready"
     assert module.classify_report(
         {"started": False, "received_mavros_traffic": False},
         {"state_topic_present": True, "connected": True, "odom_received": True,
@@ -72,19 +77,19 @@ def main():
          "set_mode_service": False, "arming_service": False},
     ) == "mavros_not_started"
     assert module.classify_report(
-        {"received_mavros_traffic": False},
+        {"started": True, "received_mavros_traffic": False},
         {"state_topic_present": True, "connected": False, "odom_received": False,
          "set_mode_service": True, "arming_service": True},
     ) == "mavros_to_px4_path_blocked"
     assert module.classify_report(
-        {"received_mavros_traffic": True},
+        {"started": True, "received_mavros_traffic": True},
         {"state_topic_present": True, "connected": False, "odom_received": False,
          "set_mode_service": True, "arming_service": True},
     ) == "px4_to_mavros_return_path_blocked"
     assert module.classify_report(
         {"started": True, "received_mavros_traffic": True},
-        {"state_topic_present": True, "connected": True, "odom_received": False,
-         "set_mode_service": True, "arming_service": True},
+        {"state_topic_present": True, "connected": True, "odom_received": True,
+         "set_mode_service": False, "arming_service": True},
     ) == "inconclusive"
 
 if __name__ == "__main__":
