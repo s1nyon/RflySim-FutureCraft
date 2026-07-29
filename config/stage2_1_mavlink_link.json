@@ -1,0 +1,13 @@
+{
+  "stage": "2.1",
+  "uav_id": "uav1",
+  "namespace": "/uav1",
+  "fcu_url": "udp://:16540@127.0.0.1:17540",
+  "px4_instance": 1,
+  "px4_out_log": "/mnt/d/PX4PSP/Firmware/build/px4_sitl_default/instance_1/out.log",
+  "timeout_s": 10,
+  "state_topic": "/uav1/mavros/state",
+  "odom_topic": "/uav1/mavros/local_position/odom",
+  "set_mode_service": "/uav1/mavros/set_mode",
+  "arming_service": "/uav1/mavros/cmd/arming"
+}
