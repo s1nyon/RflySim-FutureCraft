@@ -1,0 +1,17 @@
+{
+  "px4": {
+    "started": true,
+    "mavlink_local_port": 17540,
+    "mavlink_remote_port": 16540,
+    "partner_ip": "127.0.0.1",
+    "received_mavros_traffic": true
+  },
+  "mavros": {
+    "state_topic_present": true,
+    "connected": true,
+    "odom_received": true,
+    "set_mode_service": true,
+    "arming_service": true
+  },
+  "classification": "ready"
+}
