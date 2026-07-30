@@ -12,7 +12,8 @@ $requiredPaths = @(
     'scripts/start_vcxsrv.bat',
     'scripts/start_rflysim_sitl_single.bat',
     'scripts/start_wsl_ros_single.bat',
-    'scripts/wsl/stage1_single_uav.sh'
+    'scripts/wsl/stage1_single_uav.sh',
+    'future_aircraft_ws/src/multi_uav_mission/launch/rflysim_ego_swarm_single.launch'
 )
 
 $missing = @()
@@ -64,7 +65,7 @@ foreach ($relativePath in $dryRunScripts) {
     if (Test-Path -LiteralPath $fullPath) {
         $content = Get-Content -Raw -LiteralPath $fullPath
         if ($content -notmatch '--dry-run') { $contractErrors += "$relativePath missing --dry-run support" }
-        if ($content -match 'cmd /k "call \\"') {
+        if ($content -match 'cmd /k "call ""') {
             $contractErrors += "$relativePath uses invalid cmd nested call quoting"
         }
         $output = & cmd /c "`"$fullPath`" --dry-run" 2>&1
@@ -77,9 +78,59 @@ foreach ($relativePath in $dryRunScripts) {
 $wslScript = Join-Path $ProjectRoot 'scripts/wsl/stage1_single_uav.sh'
 if (Test-Path -LiteralPath $wslScript) {
     $wslText = Get-Content -Raw -LiteralPath $wslScript
-    foreach ($needle in @('sensor_pkg/main.py', 'mission_pkg basic_test.launch', 'REF_28COM_UAV_WSL_DIR')) {
+    foreach ($needle in @(
+        'sensor_pkg/main.py',
+        'faster_lio mapping_mid360.launch',
+        'rflysim_ego_swarm_single.launch',
+        'object_det detection.launch',
+        'mission_pkg basic_test.launch',
+        'REF_28COM_UAV_WSL_DIR'
+    )) {
         if ($wslText -notmatch [regex]::Escape($needle)) {
             $contractErrors += "scripts/wsl/stage1_single_uav.sh missing $needle"
+        }
+    }
+    foreach ($forbidden in @(
+        'ego_planner swarm.launch',
+        'random_forest',
+        'poscmd_2_odom',
+        'simulator.xml'
+    )) {
+        if ($wslText -match [regex]::Escape($forbidden)) {
+            $contractErrors += "scripts/wsl/stage1_single_uav.sh must not use ego-swarm demo component $forbidden"
+        }
+    }
+}
+
+$egoWrapper = Join-Path $ProjectRoot 'future_aircraft_ws/src/multi_uav_mission/launch/rflysim_ego_swarm_single.launch'
+if (Test-Path -LiteralPath $egoWrapper) {
+    $egoWrapperText = Get-Content -Raw -LiteralPath $egoWrapper
+    foreach ($needle in @(
+        'pkg="ego_planner"',
+        'type="ego_planner_node"',
+        'type="traj_server"',
+        'name="odom_topic" default="/mavros/local_position/odom"',
+        'name="cloud_topic" default="/cloud_registered"',
+        'name="pos_cmd_topic" default="/planning/pos_cmd"',
+        'from="~odom_world" to="$(arg odom_topic)"',
+        'from="~grid_map/cloud" to="$(arg cloud_topic)"',
+        'from="/position_cmd" to="$(arg pos_cmd_topic)"'
+    )) {
+        if ($egoWrapperText -notmatch [regex]::Escape($needle)) {
+            $contractErrors += "rflysim_ego_swarm_single.launch missing $needle"
+        }
+    }
+    foreach ($forbidden in @(
+        'swarm.launch',
+        'run_in_sim.launch',
+        'single_run_in_sim.launch',
+        'simulator.xml',
+        'random_forest',
+        'poscmd_2_odom',
+        'pcl_render_node'
+    )) {
+        if ($egoWrapperText -match [regex]::Escape($forbidden)) {
+            $contractErrors += "rflysim_ego_swarm_single.launch must not use ego-swarm demo component $forbidden"
         }
     }
 }
