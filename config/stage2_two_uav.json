@@ -5,7 +5,7 @@
     "uav1": {
       "namespace": "/uav1",
       "px4_sysid": 1,
-      "mavros_fcu_url": "udp://:14541@127.0.0.1:14581",
+      "mavros_fcu_url": "udp://:14601@127.0.0.1:14600",
       "gcs_url": "udp://@127.0.0.1:14551",
       "takeoff_position_enu": [0.0, -0.6, 0.0],
       "hover_altitude_m": 1.2
@@ -13,7 +13,7 @@
     "uav2": {
       "namespace": "/uav2",
       "px4_sysid": 2,
-      "mavros_fcu_url": "udp://:14542@127.0.0.1:14582",
+      "mavros_fcu_url": "udp://:14611@127.0.0.1:14610",
       "gcs_url": "udp://@127.0.0.1:14552",
       "takeoff_position_enu": [0.0, 0.6, 0.0],
       "hover_altitude_m": 1.2
@@ -28,8 +28,8 @@
     "expected_topics": [
       "/uav1/mavros/state",
       "/uav2/mavros/state",
-      "/uav1/mavros/local_position/odom",
-      "/uav2/mavros/local_position/odom"
+      "/uav1/mavros/odometry/in",
+      "/uav2/mavros/odometry/in"
     ]
   }
 }

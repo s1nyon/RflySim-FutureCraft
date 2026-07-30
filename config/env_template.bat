@@ -18,8 +18,9 @@ set SIM_AUTO_ARM=1
 set STAGE1_BOOT_WAIT_SECONDS=20
 
 
-set STAGE2_POS_X_STR=-0.1,0.1
-set STAGE2_POS_Y_STR=-0.8,-0.8
+rem Keep both UAVs inside the ChallengeMap origin area while avoiding overlap.
+set STAGE2_POS_X_STR=0.5,1.5
+set STAGE2_POS_Y_STR=1.5,1.5
 set STAGE2_YAW_STR=0,0
 set STAGE2_BOOT_WAIT_SECONDS=30
 

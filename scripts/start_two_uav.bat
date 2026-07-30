@@ -9,12 +9,14 @@ if not exist "%FUTURE_AIRCRAFT_WS%" (
 )
 if /I "%~1"=="--dry-run" (
   echo [DRY-RUN] Stage 2 two-UAV launch orchestration
+  echo [DRY-RUN] 0. start_vcxsrv.bat
   echo [DRY-RUN] 1. start_rflysim_sitl_two.bat
   echo [DRY-RUN] 2. wait %STAGE2_BOOT_WAIT_SECONDS% seconds
   echo [DRY-RUN] 3. start_wsl_mavros_two.bat
   exit /b 0
 )
-start "futureAircraftSim SITL two" cmd /k "call ""%SCRIPT_DIR%start_rflysim_sitl_two.bat"""
-timeout /t %STAGE2_BOOT_WAIT_SECONDS% /nobreak >nul
-start "futureAircraftSim MAVROS two" cmd /k "call ""%SCRIPT_DIR%start_wsl_mavros_two.bat"""
+call "%SCRIPT_DIR%start_vcxsrv.bat"
+start "futureAircraftSim SITL two" cmd /k call "%SCRIPT_DIR%start_rflysim_sitl_two.bat"
+powershell -NoLogo -NoProfile -Command "Start-Sleep -Seconds ([int]$env:STAGE2_BOOT_WAIT_SECONDS)"
+start "futureAircraftSim MAVROS two" cmd /k call "%SCRIPT_DIR%start_wsl_mavros_two.bat"
 exit /b 0

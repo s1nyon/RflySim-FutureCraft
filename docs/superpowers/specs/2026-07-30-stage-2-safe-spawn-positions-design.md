@@ -2,10 +2,10 @@
 
 ## Problem
 
-The dual-UAV launcher currently supplies `(-0.1, -0.8)` and `(0.1, -0.8)`
-to the RflySim/CopterSim launch path.  The 0.2 m lateral spacing resulted in
-the two simulated vehicles overlapping in ChallengeMap.  The current y value
-also places the visible spawn near the lower map boundary.
+The dual-UAV launcher previously supplied overlapping candidate points to the
+RflySim/CopterSim launch path.  The small lateral spacing resulted in the two
+simulated vehicles overlapping in ChallengeMap, and the older y value placed
+the visible spawn near the lower map boundary.
 
 ## Decision
 
@@ -14,8 +14,8 @@ visible interior:
 
 | Vehicle | x (m) | y (m) | yaw (degrees) |
 | --- | ---: | ---: | ---: |
-| uav1 | -0.8 | -0.3 | 0 |
-| uav2 | 0.8 | -0.3 | 0 |
+| uav1 | 0.5 | 1.5 | 0 |
+| uav2 | 1.5 | 1.5 | 0 |
 
 Keep the existing `ChallengeMap`, vehicle numbering, namespaces, ports, and
 all flight-control settings unchanged.  The project launcher remains the
