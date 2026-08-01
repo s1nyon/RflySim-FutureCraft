@@ -16,6 +16,9 @@ catkin_install_python(PROGRAMS
   scripts/mavros_smoke_check.py
   scripts/mavros_setpoint_keepalive.py
   scripts/mission_executor.py
+  scripts/narrow_course_artifacts.py
+  scripts/narrow_course_geometry.py
+  scripts/narrow_course_ue_loader.py
   scripts/odom_frame_relay.py
   scripts/rflysim_cloud_contract.py
   scripts/rflysim_pointcloud_adapter.py
