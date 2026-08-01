@@ -19,6 +19,8 @@ fi
 PROJECT_DIR="${FUTURE_AIRCRAFT_SIM_WSL_DIR:-/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/future_aircraft_sim}"
 REF_28COM_UAV_WSL_DIR="${REF_28COM_UAV_WSL_DIR:-/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/28com_sim/UAV_demo/28com_uav}"
 OUTPUT_DIR="$PROJECT_DIR/logs/stage7_live"
+CURRENT_RUN_FILE="$OUTPUT_DIR/current_run.env"
+READINESS_MAX_AGE_SEC="${STAGE7_READINESS_MAX_AGE_SEC:-120}"
 PLAN="$OUTPUT_DIR/live_slam_ego_swarm_plan.json"
 SMOKE_REPORT="$OUTPUT_DIR/slam_ego_swarm_smoke_report.json"
 FLIGHT_REPORT="$OUTPUT_DIR/flight_report.json"
@@ -27,7 +29,14 @@ TRACE="$OUTPUT_DIR/executor_trace.json"
 SCORE="$OUTPUT_DIR/score_summary.json"
 EXECUTOR_LOG="$OUTPUT_DIR/executor.log"
 RUNNER_LOG="$OUTPUT_DIR/runner.log"
-RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+
+if [ ! -f "$CURRENT_RUN_FILE" ]; then
+  echo "[ERROR] Stage 7 current run metadata is missing: $CURRENT_RUN_FILE" >&2
+  exit 1
+fi
+source "$PROJECT_DIR/scripts/wsl/stage7_run_context.sh"
+stage7_load_run_context "$PROJECT_DIR"
+RUN_ID="$STAGE7_RUN_ID"
 
 mkdir -p "$OUTPUT_DIR"
 python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/stage7_run_artifacts.py" \
@@ -64,6 +73,13 @@ else
 fi
 export ROS_MASTER_URI="${ROS_MASTER_URI:-http://127.0.0.1:11311}"
 export ROS_IP="${ROS_IP:-127.0.0.1}"
+
+RUN_PHASE="sensor_readiness"
+python3 $PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/stage7_sensor_readiness.py --validate \
+  --report "$STAGE7_READINESS_REPORT" \
+  --run-id "$STAGE7_RUN_ID" \
+  --simulation-instance-id "$STAGE7_CURRENT_SIMULATION_INSTANCE_ID" \
+  --max-age-sec "$READINESS_MAX_AGE_SEC"
 
 KEEPALIVE_PIDS=()
 cleanup_keepalive() {

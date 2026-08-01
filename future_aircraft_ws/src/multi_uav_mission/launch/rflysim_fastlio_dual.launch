@@ -1,17 +1,49 @@
 <launch>
   <arg name="rviz" default="false"/>
 
-  <arg name="uav1_lidar_topic" default="/rflysim/sensor0/mid360_lidar"/>
-  <arg name="uav1_imu_topic" default="/rflysim/imu"/>
+  <arg name="uav1_raw_lidar_topic" default="/rflysim/sensor0/mid360_lidar"/>
+  <arg name="uav1_raw_imu_topic" default="/uav1/rflysim/imu_raw"/>
+  <arg name="uav1_lidar_topic" default="/uav1/rflysim/lidar"/>
+  <arg name="uav1_imu_topic" default="/uav1/rflysim/imu"/>
+  <arg name="uav1_diagnostics_topic" default="/uav1/rflysim/adapter_diagnostics"/>
   <arg name="uav1_odom_topic" default="/uav1/mavros/odometry/out"/>
   <arg name="uav1_raw_odom_topic" default="/uav1/slam/odometry_raw"/>
   <arg name="uav1_cloud_topic" default="/uav1/slam/cloud_registered"/>
 
-  <arg name="uav2_lidar_topic" default="/rflysim/sensor0/mid360_lidar"/>
-  <arg name="uav2_imu_topic" default="/rflysim/imu"/>
+  <arg name="uav2_raw_lidar_topic" default="/rflysim/sensor10/mid360_lidar"/>
+  <arg name="uav2_raw_imu_topic" default="/uav2/rflysim/imu_raw"/>
+  <arg name="uav2_lidar_topic" default="/uav2/rflysim/lidar"/>
+  <arg name="uav2_imu_topic" default="/uav2/rflysim/imu"/>
+  <arg name="uav2_diagnostics_topic" default="/uav2/rflysim/adapter_diagnostics"/>
   <arg name="uav2_odom_topic" default="/uav2/mavros/odometry/out"/>
   <arg name="uav2_raw_odom_topic" default="/uav2/slam/odometry_raw"/>
   <arg name="uav2_cloud_topic" default="/uav2/slam/cloud_registered"/>
+
+  <group ns="uav1">
+    <node pkg="multi_uav_mission" type="rflysim_pointcloud_adapter.py" name="rflysim_pointcloud_adapter" output="screen">
+      <param name="input_topic" value="$(arg uav1_raw_lidar_topic)" type="str"/>
+      <param name="output_topic" value="$(arg uav1_lidar_topic)" type="str"/>
+      <param name="diagnostics_topic" value="$(arg uav1_diagnostics_topic)" type="str"/>
+      <param name="frame_id" value="uav1_lidar" type="str"/>
+      <param name="layout_width" value="64" type="int"/>
+      <param name="layout_height" value="272" type="int"/>
+      <param name="scan_period_sec" value="0.1" type="double"/>
+    </node>
+    <node pkg="topic_tools" type="relay" name="rflysim_imu_relay" args="$(arg uav1_raw_imu_topic) $(arg uav1_imu_topic)" output="screen"/>
+  </group>
+
+  <group ns="uav2">
+    <node pkg="multi_uav_mission" type="rflysim_pointcloud_adapter.py" name="rflysim_pointcloud_adapter" output="screen">
+      <param name="input_topic" value="$(arg uav2_raw_lidar_topic)" type="str"/>
+      <param name="output_topic" value="$(arg uav2_lidar_topic)" type="str"/>
+      <param name="diagnostics_topic" value="$(arg uav2_diagnostics_topic)" type="str"/>
+      <param name="frame_id" value="uav2_lidar" type="str"/>
+      <param name="layout_width" value="64" type="int"/>
+      <param name="layout_height" value="272" type="int"/>
+      <param name="scan_period_sec" value="0.1" type="double"/>
+    </node>
+    <node pkg="topic_tools" type="relay" name="rflysim_imu_relay" args="$(arg uav2_raw_imu_topic) $(arg uav2_imu_topic)" output="screen"/>
+  </group>
 
   <group ns="uav1/slam">
     <rosparam command="load" file="$(find faster_lio)/config/mid360.yaml"/>

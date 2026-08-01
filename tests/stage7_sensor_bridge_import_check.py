@@ -51,12 +51,14 @@ def main() -> int:
         raw_lidar_topic="/rflysim/sensor10/mid360_lidar",
         raw_imu_topic="/uav2/rflysim/imu_raw",
         identity_topic="/uav2/rflysim/sensor_identity",
+        process_start_marker="run-1:uav2:bridge",
     )
     identity = bridge.build_identity(identity_args, sensor, "127.0.0.1")
     assert identity["copter_id"] == 2
     assert identity["sensor_seq_id"] == 10
     assert identity["udp_port"] == 10009
     assert identity["raw_lidar_topic"] == "/rflysim/sensor10/mid360_lidar"
+    assert identity["process_start_marker"] == "run-1:uav2:bridge"
 
     with expect_failure("TargetCopter"):
         bridge.validate_sensor_config(args.config, 1, 10, 10009)

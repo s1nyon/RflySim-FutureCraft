@@ -6,11 +6,12 @@ if exist "%SCRIPT_DIR%..\config\env_local.bat" call "%SCRIPT_DIR%..\config\env_l
 if /I "%~1"=="--dry-run" (
   echo [DRY-RUN] Stage 7 live SLAM ego-swarm simulation-arm flight runner
   echo [DRY-RUN] 1. require --allow-arm --simulation-only for live flight
-  echo [DRY-RUN] 2. run ego_swarm_flight_smoke_check.py --backend ros --timeout-s 10
-  echo [DRY-RUN] 3. generate logs/stage7_live/live_slam_ego_swarm_plan.json
-  echo [DRY-RUN] 4. run mission_executor.py --backend ros --allow-arm --simulation-only
-  echo [DRY-RUN] 5. verify OFFBOARD, arming, takeoff altitude, short flight segment, and landing
-  echo [DRY-RUN] 6. write flight_report.json, mission_events.jsonl, executor_trace.json, score_summary.json
+  echo [DRY-RUN] 2. validate the current run and simulation instance sensor readiness report
+  echo [DRY-RUN] 3. run ego_swarm_flight_smoke_check.py --backend ros --timeout-s 10
+  echo [DRY-RUN] 4. start setpoint bridges only after both no-arm checks pass
+  echo [DRY-RUN] 5. run mission_executor.py --backend ros --allow-arm --simulation-only
+  echo [DRY-RUN] 6. verify OFFBOARD, arming, takeoff altitude, short flight segment, and landing
+  echo [DRY-RUN] 7. write flight_report.json, mission_events.jsonl, executor_trace.json, score_summary.json
   exit /b 0
 )
 set ALLOW_ARM=0

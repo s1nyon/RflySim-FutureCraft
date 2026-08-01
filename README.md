@@ -23,21 +23,21 @@ AI 工作说明请见 [.agents/AGENT2READ.md](.agents/AGENT2READ.md)。
 - Stage 6B：仿真视觉 provider
 - Stage 6C：live dual-MAVROS smoke runbook
 - Stage 6D / 6E：no-arm live smoke runner 与 simulation-arm live runner
-- Stage 7：双机 FAST-LIO/faster_lio、ego-swarm wrapper 与 guarded live flight runner 的离线契约
+- Stage 7：双机独立 RflySim sensor bridge、FAST-LIO/Ouster 点云适配、run-scoped no-arm readiness、ego-swarm wrapper 与 guarded live flight runner 的离线契约
 
 Stage 2.1 是进入后续 live 阶段的强制单机回程链路门：先启动选定的单机仿真路径，运行 `scripts\run_stage2_1_mavlink_check.bat` 并检查 `logs/stage2_1_live/mavlink_link_report.json`；只有 `status` 为 `ready` 才能继续排查双机扩展，否则应修复报告所分类的边界。双机扩展通过后，才运行 Stage 6D no-arm smoke。
 
 Stage 6D / 6E 提供了更直接的 live 入口。dry-run 验证不会启动 RflySim、PX4、MAVROS 或 GUI；真实运行时，6D 不会 arm，6E 会先执行双 MAVROS 连通性检查，只有检查通过且 `--allow-arm --simulation-only` 与配置门禁同时满足时，才调用仿真 MAVROS arming service。
 
-Stage 7 是当前 live-first 路线：先启动 FAST-LIO/faster_lio，把 SLAM odometry 写入 `/uav*/mavros/odometry/out` 作为 MAVROS 外部定位输入，再启动项目本地 ego-swarm 双机 wrapper，最后通过 Stage 7 flight runner 执行 guarded simulation-arm 短航段。Stage 7 现在只有离线 contract 通过；不要把它记为 live 完成，除非 `logs/stage7_live/flight_report.json` 显示两机均完成 OFFBOARD、仿真解锁、起飞、短航段和降落。
+Stage 7 是当前 live-first 路线：两个项目本地 sensor bridge 分别绑定 CopterSim 1/2、SeqID 0/10 和 UDP 9999/10009；点云 adapter 生成 faster_lio 所需的 32-byte Ouster schema，IMU 也隔离到 `/uav1`、`/uav2`。`run_live_fastlio_dual` 会先生成 `logs/stage7_live/<run-id>/sensor_readiness.json`，只有 identity、schema、freshness、isolation、stationary_stability 五个 no-arm gate 全部通过，ego-swarm 和 flight runner 才能继续。Stage 7 现在只有离线 contract 通过；不要把它记为 live 完成。
 
 ### 进度估算
 
-当前项目总体进度约为 **75%**。该数字按完成真实双机任务闭环所需的关键路径估算，不是按 Stage 数量简单平均：
+当前项目总体进度约为 **78%**。该数字按完成真实双机任务闭环所需的关键路径估算，不是按 Stage 数量简单平均：
 
-- 离线工程与接口契约约 **90%**：启动编排、namespace、日志评分、行为树、mission executor、arm 安全门禁和 target provider 均已有确定性验证。
+- 离线工程与接口契约约 **95%**：启动编排、namespace、双传感器隔离、点云 schema、run-scoped readiness、日志评分、mission executor 和 arm 安全门禁均已有确定性验证。
 - 真实仿真闭环约 **65%**：双 MAVROS 已在 GUI 仿真中实测 `connected: true`；Stage 6D 使用 PX4 `ODOMETRY` 经 MAVROS extras 发布的 `/uav*/mavros/odometry/in`，其现场数据、OFFBOARD、仿真解锁、起飞、任务执行和降落仍需端到端确认。
-- 核心能力替换约 **45%**：ego-swarm 目前完成 adapter 契约，官方 planner 尚未克隆、编译和 live 接入；视觉 provider 仍使用确定性仿真检测数据，没有接入真实相机 topic 和检测模型。
+- 核心能力替换约 **55%**：双机传感器适配与 FAST-LIO 输入契约已落地；ego-swarm 仍需 live 接入验证，视觉 provider 仍使用确定性仿真检测数据。
 
 因此，当前状态可以概括为“离线任务框架基本完成，正在进入真实仿真联调”。下一次显著的进度提升应来自 live 定位、规划和飞控闭环，而不是继续增加视觉或行为树离线契约。
 
@@ -105,11 +105,11 @@ Stage 7 live-first 顺序：
 4. `scripts\run_stage7_topic_probe.bat`
 5. `scripts\run_live_slam_ego_swarm_flight.bat --allow-arm --simulation-only`
 
-`run_live_fastlio_dual` 会启动 28com 的 sensor bridge 作为只读参考链路，并在本项目中启动双机 FAST-LIO wrapper；`run_live_ego_swarm_dual` 只 source 已构建的 `external/ego-planner-swarm`，不修改 upstream；最终 flight runner 先做 FAST-LIO/MAVROS/ego-swarm topic smoke check，再通过现有 simulation arm gate 执行最小飞行计划。
+`run_live_fastlio_dual` 会启动两个项目本地 sensor bridge，分别使用 `config/rflysim_sensor_uav1.json` 和 `config/rflysim_sensor_uav2.json`，再启动点云 adapter、IMU relay 与双机 FAST-LIO。它只采集 no-arm readiness，不启动 planner、不发布 setpoint、不请求模式或解锁。`run_live_ego_swarm_dual` 只 source 已构建的 `external/ego-planner-swarm`，且必须先验证同一 run/仿真实例的 readiness 报告。
 
-`run_stage7_topic_probe` 是只读诊断入口，不发布 setpoint、不发送 planner goal、不调用 arming。它把 live readiness 分成 `sensor_bridge`、`fast_lio`、`mavros`、`ego_swarm`、`flight_gate` 五层，并写入 `logs/stage7_live/topic_probe_report.json`。如果最终 flight runner 失败，优先看这个报告定位是哪一层没有 ready。
+`run_stage7_topic_probe` 是只读诊断入口，不发布 setpoint、不发送 planner goal、不调用 arming。它加载 `logs/stage7_live/current_run.env`，拒绝 stale、跨 run 或跨仿真实例的 readiness 报告，再把状态分成 `sensor_bridge`、`fast_lio`、`mavros`、`ego_swarm`、`flight_gate` 五层。
 
-Stage 7 flight runner 无论任务成功还是 executor 中途失败，都会写入 `logs/stage7_live/flight_report.json`。每次运行先生成独立 `run_id` 并使旧报告失效；失败时报告的 `ready` 为 `false`，`phase` 和 `executor.exit_code` 标出失败阶段，具体错误保存在 `logs/stage7_live/runner.log` 或 `executor.log`。两机 planner goal 始终分别发布到 `/uav1/planning/goal` 与 `/uav2/planning/goal`；`ego_swarm_setpoint_bridge.py` 将各自的 `planning/pos_cmd` 持续转换为 MAVROS `PositionTarget`。只有两机都产生 planner command 且里程计进入目标点 0.3 m 容差，报告才记录 `navigation_confirmed`。
+Stage 7 flight runner 复用当前 sensor readiness 的 `run_id` 和 `simulation_instance_id`；在启动 setpoint bridge、请求 OFFBOARD 或 arming 前再次 fail-closed 校验报告。失败时 `flight_report.json` 的 `ready` 为 `false`，`phase` 和 `executor.exit_code` 标出失败阶段。两机 planner goal 始终分别发布到 `/uav1/planning/goal` 与 `/uav2/planning/goal`。
 
 Rfly SIL 的 `16540/17540` 与 `16541/17541` 仅供 CopterSim/PX4 使用，不能复用为 MAVROS FCU URL。启动器会在 PX4 上额外创建专用 MAVLink 链路：`/uav1` 使用 `udp://:14601@127.0.0.1:14600`，`/uav2` 使用 `udp://:14611@127.0.0.1:14610`。这避免了 CopterSim 与 MAVROS 争用 Rfly SIL 端口；链路请求 `LOCAL_POSITION_NED` 供 local pose/velocity，并请求 `ODOMETRY` 供 Stage 6D 的 `/uav*/mavros/odometry/in`。
 
@@ -124,12 +124,12 @@ Rfly SIL 的 `16540/17540` 与 `16541/17541` 仅供 CopterSim/PX4 使用，不�
 
 ## 下一步
 
-下一步是 live-first 联调：按 `start_two_uav -> run_live_fastlio_dual -> run_live_ego_swarm_dual -> run_stage7_topic_probe -> run_live_slam_ego_swarm_flight` 顺序采集真实日志，确认两机 FAST-LIO odometry、ego-swarm command、OFFBOARD、仿真解锁、起飞、短航段和降落。
+下一步是 **仅 no-arm** 的 Stage 7 live 验收：运行 `start_two_uav -> run_live_fastlio_dual`，确认 run-scoped `sensor_readiness.json` 的五个 gate 均为 `pass`、两机 `armed=false`。在这份现场证据通过前不要启动 ego-swarm 或 flight runner；后续仿真解锁飞行仍需要单独明确授权。
 
 当前 Stage 7 路线：
 
 1. `scripts\start_two_uav.bat` 启动双机 RflySim/PX4/MAVROS。
-2. `scripts\run_live_fastlio_dual.bat` 启动双机 FAST-LIO/faster_lio wrapper，并确认 `/uav*/mavros/odometry/out`。
+2. `scripts\run_live_fastlio_dual.bat` 启动独立双 bridge、adapter、FAST-LIO，并生成 `logs/stage7_live/<run-id>/sensor_readiness.json`；当前验收在此停止且保持两机未解锁。
 3. `scripts\run_live_ego_swarm_dual.bat` 启动本项目 ego-swarm 双机 wrapper，替换 28comsim 的 ego-planner 流程，但不修改 `28com_sim`。
 4. `scripts\run_stage7_topic_probe.bat` 生成分层只读诊断报告，确认 sensor bridge、FAST-LIO、MAVROS、ego-swarm 和 flight gate。
 5. `scripts\run_live_slam_ego_swarm_flight.bat --allow-arm --simulation-only` 执行最小 live flight runner：两机进入 OFFBOARD、仿真解锁、起飞、短航段飞行并降落。

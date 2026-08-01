@@ -5,16 +5,11 @@ set -eo pipefail
 PROJECT_DIR="${FUTURE_AIRCRAFT_SIM_WSL_DIR:-/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/future_aircraft_sim}"
 EGO_SWARM_WSL_DIR="${EGO_SWARM_WSL_DIR:-$PROJECT_DIR/external/ego-planner-swarm}"
 OUTPUT_DIR="$PROJECT_DIR/logs/stage7_live"
-EGO_LOG="$OUTPUT_DIR/ego_swarm_dual.log"
+CURRENT_RUN_FILE="$OUTPUT_DIR/current_run.env"
+READINESS_MAX_AGE_SEC="${STAGE7_READINESS_MAX_AGE_SEC:-120}"
 
-mkdir -p "$OUTPUT_DIR"
 source /opt/ros/noetic/setup.bash
-if [ ! -f "$EGO_SWARM_WSL_DIR/devel/setup.bash" ]; then
-  echo "[ERROR] ego-planner-swarm is not built: $EGO_SWARM_WSL_DIR/devel/setup.bash" >&2
-  echo "[ERROR] Run scripts/clone_ego_swarm.bat, build it in WSL, or set EGO_SWARM_WSL_DIR." >&2
-  exit 1
-fi
-source "$EGO_SWARM_WSL_DIR/devel/setup.bash"
+source "$PROJECT_DIR/scripts/wsl/stage7_run_context.sh"
 if [ -f "$PROJECT_DIR/future_aircraft_ws/devel/setup.bash" ]; then
   source "$PROJECT_DIR/future_aircraft_ws/devel/setup.bash"
 else
@@ -23,4 +18,20 @@ fi
 export ROS_MASTER_URI="${ROS_MASTER_URI:-http://127.0.0.1:11311}"
 export ROS_IP="${ROS_IP:-127.0.0.1}"
 
+stage7_load_run_context "$PROJECT_DIR"
+
+python3 $PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/stage7_sensor_readiness.py --validate \
+  --report "$STAGE7_READINESS_REPORT" \
+  --run-id "$STAGE7_RUN_ID" \
+  --simulation-instance-id "$STAGE7_CURRENT_SIMULATION_INSTANCE_ID" \
+  --max-age-sec "$READINESS_MAX_AGE_SEC"
+
+if [ ! -f "$EGO_SWARM_WSL_DIR/devel/setup.bash" ]; then
+  echo "[ERROR] ego-planner-swarm is not built: $EGO_SWARM_WSL_DIR/devel/setup.bash" >&2
+  echo "[ERROR] Run scripts/clone_ego_swarm.bat, build it in WSL, or set EGO_SWARM_WSL_DIR." >&2
+  exit 1
+fi
+source "$EGO_SWARM_WSL_DIR/devel/setup.bash"
+
+EGO_LOG="$STAGE7_RUN_DIR/ego_swarm_dual.log"
 exec roslaunch multi_uav_mission rflysim_ego_swarm_dual.launch 2>&1 | tee "$EGO_LOG"

@@ -50,7 +50,7 @@ Validated offline stages:
 - Stage 6B: simulation-vision target provider bridge
 - Stage 6C: live dual-MAVROS smoke runbook
 - Stage 6D / 6E: no-arm live smoke runner and simulation-arm live runner
-- Stage 7: offline live-first FAST-LIO/faster_lio, ego-swarm, and guarded simulation-arm flight runner contracts
+- Stage 7: offline dual-sensor isolation, RflySim-to-Ouster cloud adaptation, run-scoped no-arm readiness, ego-swarm, and guarded simulation-arm flight runner contracts
 
 Current limits:
 
@@ -58,7 +58,8 @@ Current limits:
 - Offline validation passes for the staged contracts. Live GUI validation has confirmed dual PX4, dual MAVROS and `state.connected: true`; the Stage 6D odometry input is `/uav*/mavros/odometry/in`, sourced from PX4 MAVLink `ODOMETRY` through MAVROS extras, and still requires fresh end-to-end confirmation.
 - Stage 6D dry-run validates the no-arm live runner contract without launching anything.
 - Stage 6E dry-run validates the simulation-arm runner contract; real execution first runs dual-MAVROS smoke checks, then may call `/uav1/mavros/cmd/arming` and `/uav2/mavros/cmd/arming` in simulation only when the checks and all arm gates pass.
-- Stage 7 dry-run/offline validation covers `config/stage7_live_slam_ego_swarm.json`, dual FAST-LIO launch, dual ego-swarm launch, and the guarded flight runner. It does not prove live flight. Live completion requires `logs/stage7_live/flight_report.json` showing both UAVs completed OFFBOARD, simulation arming, takeoff, short flight, and landing.
+- Stage 7 dry-run/offline validation covers two identified sensor bridges, exact Ouster point fields/timing, normalized per-UAV LiDAR/IMU, run-scoped readiness validation, dual FAST-LIO, dual ego-swarm, and the guarded flight runner. It does not prove live sensor readiness or live flight.
+- `run_live_fastlio_dual.bat` is now the no-arm acceptance entrypoint. It writes `logs/stage7_live/<run-id>/sensor_readiness.json` and `logs/stage7_live/current_run.env`; later planner/flight runners reject missing, stale, cross-run, cross-instance, shared-source, unstable, or armed evidence.
 - Vision integration is still staged through deterministic providers rather than real detector inference.
 - New live-first direction: Stage 7 should focus on two UAVs running FAST-LIO/faster_lio localization and mapping, then project-local ego-swarm integration, then a minimal simulation-arm takeoff/flight/landing loop. Do not prioritize vision, target detection, or behavior-tree work until this live localization/planning/control loop is proven.
 
@@ -90,12 +91,12 @@ Run the current smoke path only when checking MAVROS readiness:
 1. `scripts\start_two_uav.bat`
 2. `scripts\run_live_no_arm_smoke.bat`
 
-For continued development, switch to the Stage 7 live-first route documented in `docs/superpowers/specs/2026-07-31-stage-7-live-slam-ego-swarm-flight-design.md` and `docs/superpowers/plans/2026-07-31-stage-7-live-slam-ego-swarm-flight.md`:
+For continued development, execute Task 6 of `docs/superpowers/plans/2026-08-01-stage-7-dual-sensor-isolation.md` under the safety constraints in `docs/superpowers/specs/2026-08-01-stage-7-dual-sensor-isolation-design.md`:
 
 1. Bring up dual RflySim/PX4/MAVROS.
-2. Start two FAST-LIO/faster_lio instances and verify localization output.
-3. Start project-local ego-swarm wrappers for `/uav1` and `/uav2`.
-4. Run a minimal simulation-arm flight: OFFBOARD, arm, takeoff, short planned flight, landing.
+2. Run `scripts\run_live_fastlio_dual.bat` and wait for the full stationary no-arm observation window.
+3. Accept only a saved report with all five gates `pass` and both MAVROS states `armed: false`.
+4. Stop there. Do not start ego-swarm, setpoints, OFFBOARD, or arming during this acceptance.
 
 Current Stage 7 entrypoints:
 
@@ -106,9 +107,10 @@ Current Stage 7 entrypoints:
 5. `scripts\run_live_slam_ego_swarm_flight.bat --allow-arm --simulation-only`
 
 Stage 7 intentionally uses `/uav*/mavros/odometry/out` for FAST-LIO external odometry into MAVROS. Stage 6D still observes `/uav*/mavros/odometry/in` from PX4/MAVROS feedback. Keep those directions distinct.
+The raw Stage 7 sources are `/rflysim/sensor0/mid360_lidar` plus `/uav1/rflysim/imu_raw`, and `/rflysim/sensor10/mid360_lidar` plus `/uav2/rflysim/imu_raw`. FAST-LIO consumes only normalized `/uav1/rflysim/{lidar,imu}` and `/uav2/rflysim/{lidar,imu}`.
 `scripts\run_stage7_topic_probe.bat` is read-only and writes `logs/stage7_live/topic_probe_report.json` with `sensor_bridge`, `fast_lio`, `mavros`, `ego_swarm`, and `flight_gate` readiness layers. Run it before the Stage 7 simulation-arm flight runner and use it as the first failure triage artifact.
 
-The Stage 7 flight runner invalidates prior artifacts with a new `run_id` and writes `logs/stage7_live/flight_report.json` on executor success and failure. On failure, inspect `phase`, `executor.exit_code`, `logs/stage7_live/runner.log`, and `logs/stage7_live/executor.log`; do not infer the failure point from missing artifacts. Keep planner goals isolated on `/uav1/planning/goal` and `/uav2/planning/goal`. `ego_swarm_setpoint_bridge.py` continuously converts each UAV's `planning/pos_cmd` to its MAVROS `PositionTarget`; Stage 7 is not ready without `navigation_confirmed` for both UAVs from actual odometry goal tolerance.
+The Stage 7 planner, topic probe, and flight runner reuse the current readiness `run_id` and `simulation_instance_id`. The flight runner validates that evidence before creating setpoint bridges or requesting OFFBOARD/arming and writes `logs/stage7_live/flight_report.json` on executor success and failure. Keep planner goals isolated on `/uav1/planning/goal` and `/uav2/planning/goal`.
 
 This route intentionally skips object detection, target provider, and behavior-tree mission logic.
 

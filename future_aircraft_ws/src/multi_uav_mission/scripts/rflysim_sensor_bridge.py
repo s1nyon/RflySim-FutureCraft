@@ -54,6 +54,7 @@ def build_identity(args, sensor: dict, target_ip: str) -> dict:
     return {
         "copter_id": args.copter_id,
         "identity_topic": args.identity_topic,
+        "process_start_marker": args.process_start_marker,
         "raw_imu_topic": args.raw_imu_topic,
         "raw_imu_topic_verified": False,
         "raw_lidar_topic": args.raw_lidar_topic,
@@ -121,13 +122,23 @@ def main(argv=None):
         default="/rflysim/sensor_identity",
         help="Latched bridge identity topic",
     )
+    parser.add_argument(
+        "--process-start-marker",
+        default="",
+        help="Run-scoped marker proving this bridge was started for the current readiness run",
+    )
     parser.add_argument("--imu-rate-hz", type=int, default=200, help="IMU request frequency")
     parser.add_argument("--keepalive", action="store_true", help="Keep the bridge process alive")
-    args = parser.parse_args(argv)
+    args, unknown = parser.parse_known_args(argv)
+    invalid_unknown = [value for value in unknown if ":=" not in value]
+    if invalid_unknown:
+        parser.error(f"unrecognized arguments: {' '.join(invalid_unknown)}")
 
     try:
         if args.config is None:
             raise ValueError("--config is required to validate bridge identity")
+        if not args.process_start_marker:
+            raise ValueError("--process-start-marker is required for run-scoped bridge identity")
         sensor = validate_sensor_config(args.config, args.copter_id, args.sensor_seq_id, args.udp_port)
 
         import rospy

@@ -6,10 +6,12 @@ if exist "%SCRIPT_DIR%..\config\env_local.bat" call "%SCRIPT_DIR%..\config\env_l
 if /I "%~1"=="--dry-run" (
   echo [DRY-RUN] Stage 7 dual FAST-LIO live runner
   echo [DRY-RUN] 1. source ROS Noetic, 28com_uav, and future_aircraft_ws
-  echo [DRY-RUN] 2. start 28com sensor_pkg/main.py as the RflySim sensor bridge
-  echo [DRY-RUN] 3. roslaunch multi_uav_mission rflysim_fastlio_dual.launch rviz:=false
-  echo [DRY-RUN] 4. expect /uav1/mavros/odometry/out and /uav2/mavros/odometry/out
-  echo [DRY-RUN] 5. write logs under logs/stage7_live
+  echo [DRY-RUN] 2. start CopterSim 1 sensor 0 UDP 9999 as /uav1/rflysim_sensor_bridge
+  echo [DRY-RUN] 3. start CopterSim 2 sensor 10 UDP 10009 as /uav2/rflysim_sensor_bridge
+  echo [DRY-RUN] 4. adapt independent clouds to /uav1/rflysim/lidar and /uav2/rflysim/lidar
+  echo [DRY-RUN] 5. relay independent IMUs to /uav1/rflysim/imu and /uav2/rflysim/imu
+  echo [DRY-RUN] 6. start dual FAST-LIO and collect run-scoped no-arm readiness evidence
+  echo [DRY-RUN] 7. do not publish planner goals, setpoints, mode requests, or arming requests
   exit /b 0
 )
 if not exist "%FUTURE_AIRCRAFT_WS%" (

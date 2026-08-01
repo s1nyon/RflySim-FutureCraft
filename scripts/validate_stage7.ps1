@@ -8,6 +8,8 @@ $ProjectRoot = Split-Path -Parent $PSScriptRoot
 
 $requiredPaths = @(
     'config/stage7_live_slam_ego_swarm.json',
+    'config/rflysim_sensor_uav1.json',
+    'config/rflysim_sensor_uav2.json',
     'future_aircraft_ws/src/multi_uav_mission/launch/rflysim_mavros_px4.launch',
     'future_aircraft_ws/src/multi_uav_mission/launch/rflysim_fastlio_dual.launch',
     'future_aircraft_ws/src/multi_uav_mission/launch/rflysim_ego_swarm_dual.launch',
@@ -15,20 +17,27 @@ $requiredPaths = @(
     'future_aircraft_ws/src/multi_uav_mission/scripts/ego_swarm_setpoint_bridge.py',
     'future_aircraft_ws/src/multi_uav_mission/scripts/mavros_setpoint_keepalive.py',
     'future_aircraft_ws/src/multi_uav_mission/scripts/odom_frame_relay.py',
+    'future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_cloud_contract.py',
+    'future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_pointcloud_adapter.py',
     'future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_sensor_bridge.py',
     'future_aircraft_ws/src/multi_uav_mission/scripts/stage7_flight_plan.py',
     'future_aircraft_ws/src/multi_uav_mission/scripts/stage7_flight_report.py',
     'future_aircraft_ws/src/multi_uav_mission/scripts/stage7_run_artifacts.py',
+    'future_aircraft_ws/src/multi_uav_mission/scripts/stage7_sensor_readiness.py',
     'future_aircraft_ws/src/multi_uav_mission/scripts/stage7_topic_probe.py',
+    'tests/stage7_cloud_contract_check.py',
+    'tests/stage7_dual_sensor_config_check.py',
     'tests/stage7_flight_artifact_check.py',
     'tests/stage7_goal_delivery_check.py',
     'tests/stage7_planner_control_bridge_check.py',
+    'tests/stage7_sensor_readiness_check.py',
     'scripts/run_live_fastlio_dual.bat',
     'scripts/run_live_ego_swarm_dual.bat',
     'scripts/run_stage7_topic_probe.bat',
     'scripts/run_live_slam_ego_swarm_flight.bat',
     'scripts/wsl/stage7_live_fastlio_dual.sh',
     'scripts/wsl/stage7_live_ego_swarm_dual.sh',
+    'scripts/wsl/stage7_run_context.sh',
     'scripts/wsl/stage7_live_slam_ego_swarm_flight.sh'
 )
 
@@ -196,10 +205,29 @@ foreach ($relativePath in $runtimeScanPaths) {
     Assert-NoBannedText -RelativePath $relativePath -BannedPatterns $bannedPatterns
 }
 Assert-NoBannedText -RelativePath 'scripts/wsl/stage7_live_fastlio_dual.sh' -BannedPatterns @('sensor_pkg/main\.py')
+foreach ($relativePath in @(
+    'config/stage7_live_slam_ego_swarm.json',
+    'future_aircraft_ws/src/multi_uav_mission/launch/rflysim_fastlio_dual.launch',
+    'scripts/wsl/stage7_live_fastlio_dual.sh',
+    'scripts/wsl/stage7_live_ego_swarm_dual.sh',
+    'scripts/wsl/stage7_live_slam_ego_swarm_flight.sh'
+)) {
+    Assert-NoBannedText -RelativePath $relativePath -BannedPatterns @('shared_rflysim_bridge')
+}
 
 $fastLioLaunchPath = Join-Path $ProjectRoot 'future_aircraft_ws/src/multi_uav_mission/launch/rflysim_fastlio_dual.launch'
 if (Test-Path -LiteralPath $fastLioLaunchPath) {
     $fastLioLaunch = Get-Content -Raw -LiteralPath $fastLioLaunchPath
+    foreach ($topic in @('/uav1/rflysim/lidar', '/uav1/rflysim/imu', '/uav2/rflysim/lidar', '/uav2/rflysim/imu')) {
+        if ($fastLioLaunch -notmatch [regex]::Escape($topic)) {
+            $contractErrors += "missing isolated FAST-LIO input: $topic"
+        }
+    }
+    foreach ($nodeName in @('rflysim_pointcloud_adapter', 'rflysim_imu_relay')) {
+        if ($fastLioLaunch -notmatch $nodeName) {
+            $contractErrors += "rflysim_fastlio_dual.launch must start per-UAV $nodeName nodes"
+        }
+    }
     foreach ($uavId in @('uav1', 'uav2')) {
         if ($fastLioLaunch -notmatch "/${uavId}/slam/odometry_raw") {
             $contractErrors += "rflysim_fastlio_dual.launch must publish raw FAST-LIO odometry under /${uavId}/slam/odometry_raw before MAVROS frame relay"
@@ -252,6 +280,23 @@ if (Test-Path -LiteralPath $stage2MavrosPath) {
 $fastLioRunnerPath = Join-Path $ProjectRoot 'scripts/wsl/stage7_live_fastlio_dual.sh'
 if (Test-Path -LiteralPath $fastLioRunnerPath) {
     $fastLioRunner = Get-Content -Raw -LiteralPath $fastLioRunnerPath
+    if ($fastLioRunner -notmatch '--copter-id 1' -or $fastLioRunner -notmatch '--copter-id 2') {
+        $contractErrors += 'stage7 FAST-LIO runner must start two identified sensor bridges'
+    }
+    foreach ($pattern in @(
+        'rflysim_sensor_uav1\.json',
+        'rflysim_sensor_uav2\.json',
+        '--sensor-seq-id 0',
+        '--sensor-seq-id 10',
+        '--udp-port 9999',
+        '--udp-port 10009',
+        '--process-start-marker',
+        'stage7_sensor_readiness\.py'
+    )) {
+        if ($fastLioRunner -notmatch $pattern) {
+            $contractErrors += "stage7 FAST-LIO runner missing isolated readiness pattern: $pattern"
+        }
+    }
     if ($fastLioRunner -notmatch 'topic_has_publisher') {
         $contractErrors += 'stage7_live_fastlio_dual.sh must validate ROS sensor topic publishers, not only sensor bridge process existence'
     }
@@ -263,6 +308,12 @@ if (Test-Path -LiteralPath $fastLioRunnerPath) {
 $flightRunnerPath = Join-Path $ProjectRoot 'scripts/wsl/stage7_live_slam_ego_swarm_flight.sh'
 if (Test-Path -LiteralPath $flightRunnerPath) {
     $flightRunner = Get-Content -Raw -LiteralPath $flightRunnerPath
+    if ($flightRunner -notmatch 'stage7_sensor_readiness\.py[\s\\]+--validate') {
+        $contractErrors += 'arm-capable runner must validate the current Stage 7 readiness report'
+    }
+    if ($flightRunner -notmatch 'stage7_load_run_context' -or $flightRunner -notmatch 'STAGE7_CURRENT_SIMULATION_INSTANCE_ID') {
+        $contractErrors += 'arm-capable runner must recompute the current PX4 simulation instance before readiness validation'
+    }
     if ($flightRunner -notmatch 'ego_swarm_setpoint_bridge\.py') {
         $contractErrors += 'stage7_live_slam_ego_swarm_flight.sh must continuously bridge ego-swarm commands to MAVROS setpoints'
     }
@@ -277,9 +328,29 @@ if (Test-Path -LiteralPath $flightRunnerPath) {
     }
 }
 
+$egoRunnerPath = Join-Path $ProjectRoot 'scripts/wsl/stage7_live_ego_swarm_dual.sh'
+if (Test-Path -LiteralPath $egoRunnerPath) {
+    $egoRunner = Get-Content -Raw -LiteralPath $egoRunnerPath
+    if ($egoRunner -notmatch 'stage7_sensor_readiness\.py[\s\\]+--validate') {
+        $contractErrors += 'ego-swarm runner must validate the current Stage 7 readiness report'
+    }
+    if ($egoRunner -notmatch 'stage7_load_run_context' -or $egoRunner -notmatch 'STAGE7_CURRENT_SIMULATION_INSTANCE_ID') {
+        $contractErrors += 'ego-swarm runner must recompute the current PX4 simulation instance before readiness validation'
+    }
+}
+
+$topicProbeRunnerPath = Join-Path $ProjectRoot 'scripts/run_stage7_topic_probe.bat'
+if (Test-Path -LiteralPath $topicProbeRunnerPath) {
+    $topicProbeRunner = Get-Content -Raw -LiteralPath $topicProbeRunnerPath
+    if ($topicProbeRunner -notmatch 'stage7_load_run_context' -or $topicProbeRunner -notmatch 'STAGE7_CURRENT_SIMULATION_INSTANCE_ID') {
+        $contractErrors += 'topic probe runner must recompute the current PX4 simulation instance before readiness validation'
+    }
+}
+
 foreach ($relativePath in @(
     'scripts/wsl/stage7_live_fastlio_dual.sh',
     'scripts/wsl/stage7_live_ego_swarm_dual.sh',
+    'scripts/wsl/stage7_run_context.sh',
     'scripts/wsl/stage7_live_slam_ego_swarm_flight.sh'
 )) {
     Assert-LfOnly -RelativePath $relativePath
@@ -360,6 +431,26 @@ if ($missing.Count -eq 0) {
         )
         if ($LASTEXITCODE -ne 0) {
             $contractErrors += "stage7_sensor_bridge_import_check.py failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
+        }
+
+        $cloudContractScript = Join-Path $ProjectRoot 'tests/stage7_cloud_contract_check.py'
+        $cloudContractModule = Join-Path $ProjectRoot 'future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_cloud_contract.py'
+        $output = Invoke-ContractPythonScript -Runner $pythonRunner -ScriptPath $cloudContractScript -Arguments @(
+            '--module', $cloudContractModule
+        )
+        if ($LASTEXITCODE -ne 0) {
+            $contractErrors += "stage7_cloud_contract_check.py failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
+        }
+
+        $readinessCheckScript = Join-Path $ProjectRoot 'tests/stage7_sensor_readiness_check.py'
+        $readinessModule = Join-Path $ProjectRoot 'future_aircraft_ws/src/multi_uav_mission/scripts/stage7_sensor_readiness.py'
+        $topicProbeModule = Join-Path $ProjectRoot 'future_aircraft_ws/src/multi_uav_mission/scripts/stage7_topic_probe.py'
+        $output = Invoke-ContractPythonScript -Runner $pythonRunner -ScriptPath $readinessCheckScript -Arguments @(
+            '--module', $readinessModule,
+            '--probe-module', $topicProbeModule
+        )
+        if ($LASTEXITCODE -ne 0) {
+            $contractErrors += "stage7_sensor_readiness_check.py failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
         }
 
         $flightArtifactCheckScript = Join-Path $ProjectRoot 'tests/stage7_flight_artifact_check.py'
