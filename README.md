@@ -113,7 +113,9 @@ scripts\start_predicted_course_two_uav.bat --dry-run
 scripts\start_predicted_course_two_uav.bat
 ```
 
-该入口生成地图产物、启动普通双机仿真并加载动态墙体和平台，但不会请求 OFFBOARD 或解锁。每次实际启动后，仍应先执行 `scripts\run_live_fastlio_dual.bat` 和 `scripts\run_stage7_topic_probe.bat` 完成 no-arm 传感器/定位检查；任何仿真飞行仍需另行显式使用 simulation-only arm 门禁。
+该入口生成地图产物，由双机启动脚本选择 `VisionRingBlank` 基础地图，再以默认的“仅加载物体”模式添加动态墙体和平台；加载阶段不会重复切换 UE 关卡，也不会请求 OFFBOARD 或解锁。每次实际启动后，仍应先执行 `scripts\run_live_fastlio_dual.bat` 和 `scripts\run_stage7_topic_probe.bat` 完成 no-arm 传感器/定位检查；任何仿真飞行仍需另行显式使用 simulation-only arm 门禁。
+
+`narrow_course_ue_loader.py --change-map` 仅供传感器启动前的独立调试。不要在 FAST-LIO 或其他 RflySim 视觉传感器运行时使用该参数：`RflyChangeMapbyName` 会重建 UE 关卡并中断现有激光雷达捕获状态。
 
 动态墙体不是 CopterSim 高度地形。地图验收以 RflySim LiDAR 可见性和项目几何净空评估为准，不能把 CopterSim 地形高度查询当作墙体碰撞证明。生成的 `VisionRingBlank.png/.txt` 位于 `generated/predicted_narrow_course_v1/`，不会自动覆盖安装目录。
 
