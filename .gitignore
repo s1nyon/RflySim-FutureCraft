@@ -7,3 +7,4 @@ __pycache__/
 devel/
 build/
 install/
+generated/

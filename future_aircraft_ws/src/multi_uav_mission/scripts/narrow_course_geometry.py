@@ -392,7 +392,7 @@ def course_report(model: CourseModel) -> Dict[str, Any]:
         "centreline_length_m": round(length, 6),
         "minimum_clear_width_m": min(float(item["width"]) for item in elements),
         "maximum_turn_radius_m": max(turn_radii),
-        "takeoff_separation_m": takeoff_separation,
-        "platform_spacing_m": platform_spacing,
+        "takeoff_separation_m": round(takeoff_separation, 6),
+        "platform_spacing_m": round(platform_spacing, 6),
         "object_count": len(model.scene_objects),
     }
