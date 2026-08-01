@@ -51,6 +51,7 @@ Validated offline stages:
 - Stage 6C: live dual-MAVROS smoke runbook
 - Stage 6D / 6E: no-arm live smoke runner and simulation-arm live runner
 - Stage 7: offline dual-sensor isolation, RflySim-to-Ouster cloud adaptation, run-scoped no-arm readiness, ego-swarm, and guarded simulation-arm flight runner contracts
+- Stage 8: project-local predicted narrow-course specification, deterministic Python artifacts, safe RflySim dynamic-object loading, ROS reference cloud, and course-specific dual-UAV launch contracts
 
 Current limits:
 
@@ -127,7 +128,14 @@ Offline validation baseline:
 powershell -ExecutionPolicy Bypass -File scripts\validate_stage6d.ps1
 powershell -ExecutionPolicy Bypass -File scripts\validate_stage6c.ps1
 powershell -ExecutionPolicy Bypass -File scripts\validate_stage7.ps1
+powershell -ExecutionPolicy Bypass -File scripts\validate_stage8.ps1
 ```
+
+## Stage 8 Predicted Narrow Course
+
+`config/maps/predicted_narrow_course_v1.json` is the only authoritative course geometry. `scripts\generate_predicted_narrow_course.bat` creates the preview, reference points, validation report, and flat `VisionRingBlank` terrain pair under ignored `generated/` output. `scripts\start_predicted_course_two_uav.bat --dry-run` is the side-effect-free launch contract; without `--dry-run` it starts the existing two-UAV chain on `VisionRingBlank` and loads course-owned dynamic IDs `12000..12999`.
+
+The course launcher does not request OFFBOARD or arm. A live map check must proceed through `scripts\run_live_fastlio_dual.bat` and `scripts\run_stage7_topic_probe.bat` before any separately authorized simulation-only flight. Dynamic walls are not CopterSim terrain: accept them through RflySim LiDAR visibility and geometric-clearance evidence, not through terrain-height queries. Never deploy generated terrain files over `CopterSim\external\map` without an explicit user request and an exact-target backup/check.
 
 ## File Map
 

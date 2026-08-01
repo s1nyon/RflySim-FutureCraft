@@ -26,6 +26,7 @@ AI 工作说明请见 [.agents/AGENT2READ.md](.agents/AGENT2READ.md)。
 - Stage 6C：live dual-MAVROS smoke runbook
 - Stage 6D / 6E：no-arm live smoke runner 与 simulation-arm live runner
 - Stage 7：双机独立 RflySim sensor bridge、FAST-LIO/Ouster 点云适配、run-scoped no-arm readiness、ego-swarm wrapper，以及已通过现场验收的 guarded 双机飞行闭环
+- Stage 8：参数化预测赛道，包括双机起飞区、约 14.93 m 的 S 形狭窄通道、双降落平台、RflySim 动态实体、ROS 参考点云和 CopterSim 平地校准产物
 
 Stage 2.1 是进入后续 live 阶段的强制单机回程链路门：先启动选定的单机仿真路径，运行 `scripts\run_stage2_1_mavlink_check.bat` 并检查 `logs/stage2_1_live/mavlink_link_report.json`；只有 `status` 为 `ready` 才能继续排查双机扩展，否则应修复报告所分类的边界。双机扩展通过后，才运行 Stage 6D no-arm smoke。
 
@@ -64,6 +65,7 @@ powershell -ExecutionPolicy Bypass -File scripts\validate_stage6d.ps1
 powershell -ExecutionPolicy Bypass -File scripts\validate_stage6c.ps1
 powershell -ExecutionPolicy Bypass -File scripts\validate_stage6b.ps1
 powershell -ExecutionPolicy Bypass -File scripts\validate_stage7.ps1
+powershell -ExecutionPolicy Bypass -File scripts\validate_stage8.ps1
 ```
 
 双机仿真启动：
@@ -92,6 +94,28 @@ scripts\run_live_ego_swarm_dual.bat
 scripts\run_stage7_topic_probe.bat
 scripts\run_live_slam_ego_swarm_flight.bat --allow-arm --simulation-only
 ```
+
+## Stage 8 预测狭窄通道地图
+
+第一版赛道使用 `VisionRingBlank` 作为 UE/CopterSim 平地基础地图，并通过 Python 动态加载课程自有实体。唯一场景源是 `config/maps/predicted_narrow_course_v1.json`。其主要尺寸为：通道中心线约 14.927433 m、净宽 1.4–1.5 m、两个 0.9 m 转弯、2.5 m 墙高、双降落平台中心间距 2.0 m。
+
+离线生成和检查：
+
+```bat
+scripts\validate_stage8.ps1
+scripts\generate_predicted_narrow_course.bat
+scripts\start_predicted_course_two_uav.bat --dry-run
+```
+
+启动带地图的双机 GUI 仿真：
+
+```bat
+scripts\start_predicted_course_two_uav.bat
+```
+
+该入口生成地图产物、启动普通双机仿真并加载动态墙体和平台，但不会请求 OFFBOARD 或解锁。每次实际启动后，仍应先执行 `scripts\run_live_fastlio_dual.bat` 和 `scripts\run_stage7_topic_probe.bat` 完成 no-arm 传感器/定位检查；任何仿真飞行仍需另行显式使用 simulation-only arm 门禁。
+
+动态墙体不是 CopterSim 高度地形。地图验收以 RflySim LiDAR 可见性和项目几何净空评估为准，不能把 CopterSim 地形高度查询当作墙体碰撞证明。生成的 `VisionRingBlank.png/.txt` 位于 `generated/predicted_narrow_course_v1/`，不会自动覆盖安装目录。
 
 ## Live 联调顺序
 
