@@ -28,6 +28,7 @@
         "raw_imu_topic": "/uav1/rflysim/imu_raw",
         "lidar_topic": "/uav1/rflysim/lidar",
         "imu_topic": "/uav1/rflysim/imu",
+        "scan_period_s": 0.1,
         "identity_topic": "/uav1/rflysim/sensor_identity"
       },
       {
@@ -40,6 +41,7 @@
         "raw_imu_topic": "/uav2/rflysim/imu_raw",
         "lidar_topic": "/uav2/rflysim/lidar",
         "imu_topic": "/uav2/rflysim/imu",
+        "scan_period_s": 0.1,
         "identity_topic": "/uav2/rflysim/sensor_identity"
       }
     ],
