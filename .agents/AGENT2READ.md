@@ -58,7 +58,7 @@ Current limits:
 - Offline validation passes for the staged contracts. Live GUI validation has confirmed dual PX4, dual MAVROS and `state.connected: true`; the Stage 6D odometry input is `/uav*/mavros/odometry/in`, sourced from PX4 MAVLink `ODOMETRY` through MAVROS extras, and still requires fresh end-to-end confirmation.
 - Stage 6D dry-run validates the no-arm live runner contract without launching anything.
 - Stage 6E dry-run validates the simulation-arm runner contract; real execution first runs dual-MAVROS smoke checks, then may call `/uav1/mavros/cmd/arming` and `/uav2/mavros/cmd/arming` in simulation only when the checks and all arm gates pass.
-- Stage 7 dry-run/offline validation covers two identified sensor bridges, exact Ouster point fields/timing, normalized per-UAV LiDAR/IMU, run-scoped readiness validation, dual FAST-LIO, dual ego-swarm, and the guarded flight runner. It does not prove live sensor readiness or live flight.
+- Stage 7 dry-run/offline validation covers two identified sensor bridges, exact Ouster point fields/timing, normalized per-UAV LiDAR/IMU, run-scoped readiness validation, dual FAST-LIO, dual ego-swarm, and the guarded flight runner. Live sensor/FAST-LIO readiness is now proven separately by the 2026-08-01 no-arm run below; ego-swarm and live flight remain unproven.
 - `run_live_fastlio_dual.bat` is now the no-arm acceptance entrypoint. It writes `logs/stage7_live/<run-id>/sensor_readiness.json` and `logs/stage7_live/current_run.env`; later planner/flight runners reject missing, stale, cross-run, cross-instance, shared-source, unstable, or armed evidence.
 - Vision integration is still staged through deterministic providers rather than real detector inference.
 - New live-first direction: Stage 7 should focus on two UAVs running FAST-LIO/faster_lio localization and mapping, then project-local ego-swarm integration, then a minimal simulation-arm takeoff/flight/landing loop. Do not prioritize vision, target detection, or behavior-tree work until this live localization/planning/control loop is proven.
@@ -84,6 +84,13 @@ Latest live evidence, 2026-07-30:
 - After the dedicated-link change, `/uav1/mavros/state` and `/uav2/mavros/state` both reported `connected: True`, `armed: False`, `mode: MANUAL` and `system_status: 3`.
 - The previous Stage 6D no-arm smoke was blocked by missing `/uav1/mavros/local_position/odom` and `/uav2/mavros/local_position/odom`. That MAVROS topic requires `LOCAL_POSITION_NED_COV`, which this PX4 build cannot stream. Stage 6D now waits for `/uav1/mavros/odometry/in` and `/uav2/mavros/odometry/in`, the MAVROS outputs of PX4 `ODOMETRY`; `odometry/out` is the reverse input to PX4. Do not treat connection success as a completed mission smoke until a fresh no-arm report passes.
 
+Latest Stage 7 live evidence, 2026-08-01:
+
+- Run `stage7-20260801T082349Z-6875`, simulation instance `px4-ac4e722ff724856a`, saved `logs/stage7_live/stage7-20260801T082349Z-6875/sensor_readiness.json`.
+- `identity`, `schema`, `freshness`, `isolation`, and `stationary_stability` all passed; both MAVROS states remained `armed: false`, `mode: MANUAL`, and the report returned `ready: true`.
+- Each adapter accepted 17,408 points with the exact 32-byte Ouster field layout. Two independent `run_mapping_online` processes remained active and the FAST-LIO log had no missing-field, fatal, process-died, or segmentation errors.
+- Live corrections are committed as `e169acc` (ROS initialization, bounded startup and lifecycle cleanup) and `7c9e363` (namespaced IMU source remaps). No planner goal, setpoint, OFFBOARD, ego-swarm, or arming command was sent.
+
 ## Recommended Next Step
 
 Run the current smoke path only when checking MAVROS readiness:
@@ -91,12 +98,7 @@ Run the current smoke path only when checking MAVROS readiness:
 1. `scripts\start_two_uav.bat`
 2. `scripts\run_live_no_arm_smoke.bat`
 
-For continued development, execute Task 6 of `docs/superpowers/plans/2026-08-01-stage-7-dual-sensor-isolation.md` under the safety constraints in `docs/superpowers/specs/2026-08-01-stage-7-dual-sensor-isolation-design.md`:
-
-1. Bring up dual RflySim/PX4/MAVROS.
-2. Run `scripts\run_live_fastlio_dual.bat` and wait for the full stationary no-arm observation window.
-3. Accept only a saved report with all five gates `pass` and both MAVROS states `armed: false`.
-4. Stop there. Do not start ego-swarm, setpoints, OFFBOARD, or arming during this acceptance.
+Task 6 of `docs/superpowers/plans/2026-08-01-stage-7-dual-sensor-isolation.md` is complete. For continued development, keep the current no-arm boundary and proceed to the read-only Stage 7 topic probe, then the no-arm ego-swarm wrapper only after it accepts the same run and simulation instance. Do not start the flight runner, setpoints, OFFBOARD, or arming without separate explicit authorization.
 
 Current Stage 7 entrypoints:
 

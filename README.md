@@ -29,7 +29,7 @@ Stage 2.1 是进入后续 live 阶段的强制单机回程链路门：先启动�
 
 Stage 6D / 6E 提供了更直接的 live 入口。dry-run 验证不会启动 RflySim、PX4、MAVROS 或 GUI；真实运行时，6D 不会 arm，6E 会先执行双 MAVROS 连通性检查，只有检查通过且 `--allow-arm --simulation-only` 与配置门禁同时满足时，才调用仿真 MAVROS arming service。
 
-Stage 7 是当前 live-first 路线：两个项目本地 sensor bridge 分别绑定 CopterSim 1/2、SeqID 0/10 和 UDP 9999/10009；点云 adapter 生成 faster_lio 所需的 32-byte Ouster schema，IMU 也隔离到 `/uav1`、`/uav2`。`run_live_fastlio_dual` 会先生成 `logs/stage7_live/<run-id>/sensor_readiness.json`，只有 identity、schema、freshness、isolation、stationary_stability 五个 no-arm gate 全部通过，ego-swarm 和 flight runner 才能继续。Stage 7 现在只有离线 contract 通过；不要把它记为 live 完成。
+Stage 7 是当前 live-first 路线：两个项目本地 sensor bridge 分别绑定 CopterSim 1/2、SeqID 0/10 和 UDP 9999/10009；点云 adapter 生成 faster_lio 所需的 32-byte Ouster schema，IMU 也隔离到 `/uav1`、`/uav2`。`run_live_fastlio_dual` 会先生成 `logs/stage7_live/<run-id>/sensor_readiness.json`，只有 identity、schema、freshness、isolation、stationary_stability 五个 no-arm gate 全部通过，ego-swarm 和 flight runner 才能继续。2026-08-01 的 run `stage7-20260801T082349Z-6875` 已完成双 FAST-LIO 静止 no-arm live 验收：五个 gate 全部 `pass`、两机 `armed=false`、`ready=true`；这不代表 ego-swarm 或飞行闭环已经 live 完成。
 
 ### 进度估算
 
@@ -124,12 +124,12 @@ Rfly SIL 的 `16540/17540` 与 `16541/17541` 仅供 CopterSim/PX4 使用，不�
 
 ## 下一步
 
-下一步是 **仅 no-arm** 的 Stage 7 live 验收：运行 `start_two_uav -> run_live_fastlio_dual`，确认 run-scoped `sensor_readiness.json` 的五个 gate 均为 `pass`、两机 `armed=false`。在这份现场证据通过前不要启动 ego-swarm 或 flight runner；后续仿真解锁飞行仍需要单独明确授权。
+下一步是 Stage 7 的 **no-arm ego-swarm live 接入**：先对当前 run 执行只读 topic probe，再验证 ego-swarm 双机 wrapper 只消费本轮、同一仿真实例的 readiness 证据。当前不要启动 flight runner；后续 OFFBOARD、仿真解锁和飞行仍需要单独明确授权。
 
 当前 Stage 7 路线：
 
 1. `scripts\start_two_uav.bat` 启动双机 RflySim/PX4/MAVROS。
-2. `scripts\run_live_fastlio_dual.bat` 启动独立双 bridge、adapter、FAST-LIO，并生成 `logs/stage7_live/<run-id>/sensor_readiness.json`；当前验收在此停止且保持两机未解锁。
+2. `scripts\run_live_fastlio_dual.bat` 启动独立双 bridge、adapter、FAST-LIO，并生成 `logs/stage7_live/<run-id>/sensor_readiness.json`；2026-08-01 的 no-arm live 验收已在此通过并保持两机未解锁。
 3. `scripts\run_live_ego_swarm_dual.bat` 启动本项目 ego-swarm 双机 wrapper，替换 28comsim 的 ego-planner 流程，但不修改 `28com_sim`。
 4. `scripts\run_stage7_topic_probe.bat` 生成分层只读诊断报告，确认 sensor bridge、FAST-LIO、MAVROS、ego-swarm 和 flight gate。
 5. `scripts\run_live_slam_ego_swarm_flight.bat --allow-arm --simulation-only` 执行最小 live flight runner：两机进入 OFFBOARD、仿真解锁、起飞、短航段飞行并降落。
