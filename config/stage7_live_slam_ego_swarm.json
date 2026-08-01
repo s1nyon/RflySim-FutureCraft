@@ -16,7 +16,33 @@
   "fast_lio": {
     "reference_launch": "../28com_sim/UAV_demo/28com_uav/src/faster-lio-main/launch/mapping_mid360.launch",
     "project_launch": "future_aircraft_ws/src/multi_uav_mission/launch/rflysim_fastlio_dual.launch",
-    "sensor_topic_scope": "shared_rflysim_bridge",
+    "sensor_topic_scope": "isolated_rflysim_bridges",
+    "bridges": [
+      {
+        "uav_id": "uav1",
+        "copter_id": 1,
+        "config": "config/rflysim_sensor_uav1.json",
+        "sensor_seq_id": 0,
+        "udp_port": 9999,
+        "raw_lidar_topic": "/rflysim/sensor0/mid360_lidar",
+        "raw_imu_topic": "/uav1/rflysim/imu_raw",
+        "lidar_topic": "/uav1/rflysim/lidar",
+        "imu_topic": "/uav1/rflysim/imu",
+        "identity_topic": "/uav1/rflysim/sensor_identity"
+      },
+      {
+        "uav_id": "uav2",
+        "copter_id": 2,
+        "config": "config/rflysim_sensor_uav2.json",
+        "sensor_seq_id": 10,
+        "udp_port": 10009,
+        "raw_lidar_topic": "/rflysim/sensor10/mid360_lidar",
+        "raw_imu_topic": "/uav2/rflysim/imu_raw",
+        "lidar_topic": "/uav2/rflysim/lidar",
+        "imu_topic": "/uav2/rflysim/imu",
+        "identity_topic": "/uav2/rflysim/sensor_identity"
+      }
+    ],
     "rviz": false
   },
   "ego_swarm": {
@@ -44,7 +70,7 @@
       "uav_id": "uav1",
       "namespace": "/uav1",
       "sensor_lidar_topic": "/rflysim/sensor0/mid360_lidar",
-      "sensor_imu_topic": "/rflysim/imu",
+      "sensor_imu_topic": "/uav1/rflysim/imu_raw",
       "slam_namespace": "/uav1/slam",
       "slam_odom_topic": "/uav1/mavros/odometry/out",
       "slam_cloud_topic": "/uav1/slam/cloud_registered",
@@ -62,8 +88,8 @@
     {
       "uav_id": "uav2",
       "namespace": "/uav2",
-      "sensor_lidar_topic": "/rflysim/sensor0/mid360_lidar",
-      "sensor_imu_topic": "/rflysim/imu",
+      "sensor_lidar_topic": "/rflysim/sensor10/mid360_lidar",
+      "sensor_imu_topic": "/uav2/rflysim/imu_raw",
       "slam_namespace": "/uav2/slam",
       "slam_odom_topic": "/uav2/mavros/odometry/out",
       "slam_cloud_topic": "/uav2/slam/cloud_registered",
