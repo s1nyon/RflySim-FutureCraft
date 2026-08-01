@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Keep this script LF-only for WSL execution.
 set -eo pipefail
 
 PROJECT_DIR="${FUTURE_AIRCRAFT_SIM_WSL_DIR:-/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/future_aircraft_sim}"
@@ -9,10 +10,14 @@ SMOKE_REPORT="$OUTPUT_DIR/mavros_smoke_report.json"
 EVENTS="$OUTPUT_DIR/mission_events_no_arm.jsonl"
 TRACE="$OUTPUT_DIR/executor_trace_no_arm.json"
 SCORE="$OUTPUT_DIR/score_summary_no_arm.json"
+TARGET_PROVIDER_SERVICE="${TARGET_PROVIDER_SERVICE:-/mission/target_provider/query}"
+TARGET_PROVIDER_LOG="$OUTPUT_DIR/target_provider.log"
 
 mkdir -p "$OUTPUT_DIR"
 source /opt/ros/noetic/setup.bash
 source "$REF_28COM_UAV_WSL_DIR/devel/setup.bash"
+export ROS_MASTER_URI="${ROS_MASTER_URI:-http://127.0.0.1:11311}"
+export ROS_IP="${ROS_IP:-127.0.0.1}"
 
 python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/live_mission_contract.py" \
   --behavior-config "$PROJECT_DIR/config/stage5_behavior_tree.json" \
@@ -25,6 +30,26 @@ python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/mavros_sm
   --timeout-s 10 \
   --report "$SMOKE_REPORT"
 
+if ! rosservice list 2>/dev/null | grep -Fxq "$TARGET_PROVIDER_SERVICE"; then
+  nohup python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/sim_vision_target_provider.py" \
+    --config "$PROJECT_DIR/config/stage6b_sim_vision.json" \
+    --backend ros \
+    --service "$TARGET_PROVIDER_SERVICE" > "$TARGET_PROVIDER_LOG" 2>&1 &
+fi
+
+for _ in $(seq 1 20); do
+  if rosservice list 2>/dev/null | grep -Fxq "$TARGET_PROVIDER_SERVICE"; then
+    break
+  fi
+  sleep 0.5
+done
+
+if ! rosservice list 2>/dev/null | grep -Fxq "$TARGET_PROVIDER_SERVICE"; then
+  echo "[ERROR] target provider service not available: $TARGET_PROVIDER_SERVICE" >&2
+  tail -n 40 "$TARGET_PROVIDER_LOG" >&2 || true
+  exit 1
+fi
+
 python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/mission_executor.py" \
   --plan "$PLAN" \
   --live-config "$PROJECT_DIR/config/stage5_live_mission.json" \
@@ -32,4 +57,3 @@ python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/mission_e
   --events "$EVENTS" \
   --trace "$TRACE" \
   --score "$SCORE"
-

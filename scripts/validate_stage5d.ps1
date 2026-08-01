@@ -41,19 +41,34 @@ if ($missing.Count -eq 0 -and $pythonRunner) {
     $smokeScript = Join-Path $ProjectRoot 'future_aircraft_ws/src/multi_uav_mission/scripts/mavros_smoke_check.py'
     $liveConfigPath = Join-Path $ProjectRoot 'config/stage5_live_mission.json'
     $expectedPath = Join-Path $ProjectRoot 'tests/fixtures/stage5d/expected_mavros_smoke_report.json'
-
-    $smokeOutput = Invoke-ContractPythonScript -Runner $pythonRunner -ScriptPath $smokeScript -Arguments @('--live-config', $liveConfigPath, '--backend', 'dry-run', '--report', $reportOutputPath)
-    if ($LASTEXITCODE -ne 0) {
-        $contractErrors += "mavros_smoke_check.py failed with exit code ${LASTEXITCODE}: $($smokeOutput -join ' ')"
+    $liveConfig = Get-Content -Raw -LiteralPath $liveConfigPath | ConvertFrom-Json
+    $expectedOdomTopics = @{
+        uav1 = '/uav1/mavros/odometry/in'
+        uav2 = '/uav2/mavros/odometry/in'
     }
-    elseif (-not (Test-Path -LiteralPath $reportOutputPath)) {
-        $contractErrors += "mavros_smoke_check.py did not create output: $reportOutputPath"
+    foreach ($uav in $liveConfig.uavs) {
+        if ($uav.odom_topic -ne $expectedOdomTopics[$uav.uav_id]) {
+            $contractErrors += "unexpected odom_topic for $($uav.uav_id): $($uav.odom_topic)"
+        }
+    }
+
+    if ($contractErrors.Count -gt 0) {
+        # Preserve the contract failure without generating a report from an invalid interface.
     }
     else {
+        $smokeOutput = Invoke-ContractPythonScript -Runner $pythonRunner -ScriptPath $smokeScript -Arguments @('--live-config', $liveConfigPath, '--backend', 'dry-run', '--report', $reportOutputPath)
+        if ($LASTEXITCODE -ne 0) {
+        $contractErrors += "mavros_smoke_check.py failed with exit code ${LASTEXITCODE}: $($smokeOutput -join ' ')"
+        }
+        elseif (-not (Test-Path -LiteralPath $reportOutputPath)) {
+        $contractErrors += "mavros_smoke_check.py did not create output: $reportOutputPath"
+        }
+        else {
         $actual = Get-Content -Raw -LiteralPath $reportOutputPath | ConvertFrom-Json
         $expected = Get-Content -Raw -LiteralPath $expectedPath | ConvertFrom-Json
         if ((ConvertTo-StableJson $actual) -ne (ConvertTo-StableJson $expected)) {
             $contractErrors += 'mavros_smoke_report.json does not match Stage 5D fixture'
+        }
         }
     }
 

@@ -1,0 +1,73 @@
+<launch>
+  <arg name="uav1_odom_topic" default="/uav1/mavros/odometry/out"/>
+  <arg name="uav1_cloud_topic" default="/uav1/slam/cloud_registered"/>
+  <arg name="uav1_depth_topic" default="/uav1/rflysim/sensor1"/>
+  <arg name="uav1_pos_cmd_topic" default="/uav1/planning/pos_cmd"/>
+  <arg name="uav1_goal_topic" default="/uav1/planning/goal"/>
+
+  <arg name="uav2_odom_topic" default="/uav2/mavros/odometry/out"/>
+  <arg name="uav2_cloud_topic" default="/uav2/slam/cloud_registered"/>
+  <arg name="uav2_depth_topic" default="/uav2/rflysim/sensor1"/>
+  <arg name="uav2_pos_cmd_topic" default="/uav2/planning/pos_cmd"/>
+  <arg name="uav2_goal_topic" default="/uav2/planning/goal"/>
+
+  <arg name="map_size_x" default="12.0"/>
+  <arg name="map_size_y" default="8.0"/>
+  <arg name="map_size_z" default="2.0"/>
+  <arg name="max_vel" default="0.3"/>
+  <arg name="max_acc" default="0.5"/>
+  <arg name="planning_horizon" default="2.5"/>
+  <arg name="flight_type" default="1"/>
+
+  <include file="$(find multi_uav_mission)/launch/rflysim_ego_swarm_single.launch" ns="uav1/planner">
+    <arg name="drone_id" value="0"/>
+    <arg name="odom_topic" value="$(arg uav1_odom_topic)"/>
+    <arg name="cloud_topic" value="$(arg uav1_cloud_topic)"/>
+    <arg name="camera_pose_topic" value="/uav1/slam/camera_pose_unused"/>
+    <arg name="depth_topic" value="$(arg uav1_depth_topic)"/>
+    <arg name="pos_cmd_topic" value="$(arg uav1_pos_cmd_topic)"/>
+    <arg name="goal_topic" value="$(arg uav1_goal_topic)"/>
+    <arg name="map_size_x" value="$(arg map_size_x)"/>
+    <arg name="map_size_y" value="$(arg map_size_y)"/>
+    <arg name="map_size_z" value="$(arg map_size_z)"/>
+    <arg name="max_vel" value="$(arg max_vel)"/>
+    <arg name="max_acc" value="$(arg max_acc)"/>
+    <arg name="planning_horizon" value="$(arg planning_horizon)"/>
+    <arg name="flight_type" value="$(arg flight_type)"/>
+  </include>
+
+  <include file="$(find multi_uav_mission)/launch/rflysim_ego_swarm_single.launch" ns="uav2/planner">
+    <arg name="drone_id" value="1"/>
+    <arg name="odom_topic" value="$(arg uav2_odom_topic)"/>
+    <arg name="cloud_topic" value="$(arg uav2_cloud_topic)"/>
+    <arg name="camera_pose_topic" value="/uav2/slam/camera_pose_unused"/>
+    <arg name="depth_topic" value="$(arg uav2_depth_topic)"/>
+    <arg name="pos_cmd_topic" value="$(arg uav2_pos_cmd_topic)"/>
+    <arg name="goal_topic" value="$(arg uav2_goal_topic)"/>
+    <arg name="map_size_x" value="$(arg map_size_x)"/>
+    <arg name="map_size_y" value="$(arg map_size_y)"/>
+    <arg name="map_size_z" value="$(arg map_size_z)"/>
+    <arg name="max_vel" value="$(arg max_vel)"/>
+    <arg name="max_acc" value="$(arg max_acc)"/>
+    <arg name="planning_horizon" value="$(arg planning_horizon)"/>
+    <arg name="flight_type" value="$(arg flight_type)"/>
+  </include>
+
+  <group ns="uav1/planner">
+    <node pkg="waypoint_generator" name="waypoint_generator" type="waypoint_generator" output="screen">
+      <remap from="~odom" to="$(arg uav1_odom_topic)"/>
+      <remap from="~goal" to="$(arg uav1_goal_topic)"/>
+      <remap from="~traj_start_trigger" to="/uav1/planning/traj_start_trigger"/>
+      <param name="waypoint_type" value="manual-lonely-waypoint"/>
+    </node>
+  </group>
+
+  <group ns="uav2/planner">
+    <node pkg="waypoint_generator" name="waypoint_generator" type="waypoint_generator" output="screen">
+      <remap from="~odom" to="$(arg uav2_odom_topic)"/>
+      <remap from="~goal" to="$(arg uav2_goal_topic)"/>
+      <remap from="~traj_start_trigger" to="/uav2/planning/traj_start_trigger"/>
+      <param name="waypoint_type" value="manual-lonely-waypoint"/>
+    </node>
+  </group>
+</launch>

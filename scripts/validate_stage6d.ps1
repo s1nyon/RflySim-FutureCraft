@@ -29,23 +29,50 @@ foreach ($relativePath in $requiredPaths) {
 }
 
 $contractErrors = @()
+function Normalize-TextForComparison {
+    param([string]$Value)
+    return ($Value -replace "`r`n", "`n").Trim()
+}
+
 if ($missing.Count -eq 0) {
     $noArmScript = Join-Path $ProjectRoot 'scripts/run_live_no_arm_smoke.bat'
     $simArmScript = Join-Path $ProjectRoot 'scripts/run_live_sim_arm.bat'
     $noArmFixture = Join-Path $ProjectRoot 'tests/fixtures/stage6d/expected_no_arm_dry_run.txt'
     $simArmFixture = Join-Path $ProjectRoot 'tests/fixtures/stage6d/expected_sim_arm_dry_run.txt'
+    $liveConfigPath = Join-Path $ProjectRoot 'config/stage5_live_mission.json'
+    $liveConfig = Get-Content -Raw -LiteralPath $liveConfigPath | ConvertFrom-Json
+    $expectedOdomTopics = @{
+        uav1 = '/uav1/mavros/odometry/in'
+        uav2 = '/uav2/mavros/odometry/in'
+    }
+    foreach ($uav in $liveConfig.uavs) {
+        if ($uav.odom_topic -ne $expectedOdomTopics[$uav.uav_id]) {
+            $contractErrors += "unexpected odom_topic for $($uav.uav_id): $($uav.odom_topic)"
+        }
+    }
+
+    foreach ($relativePath in @('scripts/wsl/stage6d_live_no_arm_smoke.sh', 'scripts/wsl/stage6e_live_sim_arm.sh')) {
+        $fullPath = Join-Path $ProjectRoot $relativePath
+        $bytes = [System.IO.File]::ReadAllBytes($fullPath)
+        for ($i = 0; $i -lt ($bytes.Length - 1); $i++) {
+            if ($bytes[$i] -eq 13 -and $bytes[$i + 1] -eq 10) {
+                $contractErrors += "$relativePath must use LF line endings for WSL execution"
+                break
+            }
+        }
+    }
 
     $noArmOutput = & cmd /c $noArmScript --dry-run 2>&1
     if ($LASTEXITCODE -ne 0) {
         $contractErrors += "run_live_no_arm_smoke.bat --dry-run failed with exit code ${LASTEXITCODE}: $($noArmOutput -join ' ')"
-    } elseif (($noArmOutput -join "`r`n").Trim() -ne (Get-Content -Raw -LiteralPath $noArmFixture).Trim()) {
+    } elseif ((Normalize-TextForComparison ($noArmOutput -join "`n")) -ne (Normalize-TextForComparison (Get-Content -Raw -LiteralPath $noArmFixture))) {
         $contractErrors += 'run_live_no_arm_smoke.bat --dry-run output does not match fixture'
     }
 
     $simArmOutput = & cmd /c $simArmScript --dry-run 2>&1
     if ($LASTEXITCODE -ne 0) {
         $contractErrors += "run_live_sim_arm.bat --dry-run failed with exit code ${LASTEXITCODE}: $($simArmOutput -join ' ')"
-    } elseif (($simArmOutput -join "`r`n").Trim() -ne (Get-Content -Raw -LiteralPath $simArmFixture).Trim()) {
+    } elseif ((Normalize-TextForComparison ($simArmOutput -join "`n")) -ne (Normalize-TextForComparison (Get-Content -Raw -LiteralPath $simArmFixture))) {
         $contractErrors += 'run_live_sim_arm.bat --dry-run output does not match fixture'
     }
 

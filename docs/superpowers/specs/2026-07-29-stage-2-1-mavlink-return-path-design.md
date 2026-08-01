@@ -1,5 +1,7 @@
 # Stage 2.1 MAVLink Return-Path Validation Design
 
+> **Historical note, 2026-07-30:** This design's `16540/17540` FCU URL was superseded by the dedicated MAVROS links validated against the GUI simulation: `/uav1` `udp://:14601@127.0.0.1:14600`, `/uav2` `udp://:14611@127.0.0.1:14610`. The old ports belong to the Rfly SIL/CopterSim path and must not be restored as MAVROS URLs.
+
 ## Scope
 
 Stage 2.1 turns the unresolved MAVROS `connected: false` problem into a bounded, single-UAV validation stage. It verifies the MAVLink return path from PX4 to MAVROS before the project resumes dual-UAV startup, Stage 6D no-arm smoke, or any simulation arming flow.

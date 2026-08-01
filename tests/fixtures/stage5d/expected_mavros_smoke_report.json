@@ -18,7 +18,7 @@
           "name": "odom_topic",
           "ready": true,
           "status": "planned",
-          "target": "/uav1/mavros/local_position/odom"
+        "target": "/uav1/mavros/odometry/in"
         },
         {
           "kind": "outbound_topic",
@@ -67,7 +67,7 @@
           "name": "odom_topic",
           "ready": true,
           "status": "planned",
-          "target": "/uav2/mavros/local_position/odom"
+        "target": "/uav2/mavros/odometry/in"
         },
         {
           "kind": "outbound_topic",

@@ -1,5 +1,7 @@
 # Stage 2.1 MAVLink Return-Path Validation Implementation Plan
 
+> **Historical note, 2026-07-30:** The `16540/17540` FCU URL recorded below was superseded after live GUI verification showed that it is the Rfly SIL/CopterSim link. Current dual-MAVROS startup creates dedicated links: `/uav1` `udp://:14601@127.0.0.1:14600`, `/uav2` `udp://:14611@127.0.0.1:14610`. Retain this document for the original validation design; do not reuse its legacy FCU port values.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a read-only, single-UAV Stage 2.1 verifier that classifies the PX4-to-MAVROS return-path failure and blocks later live stages until `/uav1` is genuinely ready.

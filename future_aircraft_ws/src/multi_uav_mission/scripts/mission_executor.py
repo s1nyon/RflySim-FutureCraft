@@ -4,6 +4,7 @@
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 from score_summary import build_summary
@@ -15,6 +16,7 @@ SUPPORTED_ACTIONS = {
     "call_service",
     "publish_position_setpoint",
     "publish_planner_goal",
+    "verify_planned_navigation",
     "write_score_report",
 }
 
@@ -71,6 +73,9 @@ class RosBackend:
             from geometry_msgs.msg import PoseStamped
             from mavros_msgs.msg import PositionTarget
             from mavros_msgs.srv import CommandBool, SetMode
+            from mavros_msgs.msg import State
+            from nav_msgs.msg import Odometry
+            from quadrotor_msgs.msg import PositionCommand
             from std_srvs.srv import Trigger
         except ImportError as exc:
             raise RuntimeError(f"ROS backend requires rospy and MAVROS Python packages: {exc}") from exc
@@ -80,6 +85,9 @@ class RosBackend:
         self.PositionTarget = PositionTarget
         self.CommandBool = CommandBool
         self.SetMode = SetMode
+        self.State = State
+        self.Odometry = Odometry
+        self.PositionCommand = PositionCommand
         self.Trigger = Trigger
         if not rospy.core.is_initialized():
             rospy.init_node("future_aircraft_mission_executor", anonymous=True)
@@ -92,6 +100,8 @@ class RosBackend:
             return self._publish_position_target(action)
         if name == "publish_planner_goal":
             return self._publish_planner_goal(action)
+        if name == "verify_planned_navigation":
+            return self._verify_planned_navigation(action)
         if name == "call_service":
             return self._call_service(action)
         if name == "write_score_report":
@@ -124,8 +134,69 @@ class RosBackend:
         message.pose.position.y = float(goal["y"])
         message.pose.position.z = float(goal["z"])
         message.pose.orientation.w = 1.0
-        publisher.publish(message)
-        return {"status": "ros_success", "detail": "planner goal published"}
+        timeout_s = float(action.get("timeout_s", 5))
+        deadline = time.monotonic() + timeout_s
+        rate = self.rospy.Rate(10)
+        while publisher.get_num_connections() < 1 and time.monotonic() < deadline and not self.rospy.is_shutdown():
+            rate.sleep()
+        if publisher.get_num_connections() < 1:
+            raise RuntimeError(f"planner goal topic has no subscribers: {action['topic']}")
+
+        publish_count = max(3, min(10, int(timeout_s * 10)))
+        for _ in range(publish_count):
+            message.header.stamp = self.rospy.Time.now()
+            publisher.publish(message)
+            rate.sleep()
+        return {"status": "ros_success", "detail": f"planner goal published {publish_count} times"}
+
+    def _verify_planned_navigation(self, action):
+        timeout_s = float(action["timeout_s"])
+        deadline = time.monotonic() + timeout_s
+        planner_commands = 0
+        last_distance = float("inf")
+        self.rospy.wait_for_message(
+            action["planner_cmd_topic"],
+            self.PositionCommand,
+            timeout=timeout_s,
+        )
+        planner_commands += 1
+        goal = action["goal"]
+        tolerance_m = float(action["tolerance_m"])
+        while time.monotonic() < deadline and not self.rospy.is_shutdown():
+            remaining = max(0.01, deadline - time.monotonic())
+            odom = self.rospy.wait_for_message(
+                action["mavros_odom_topic"],
+                self.Odometry,
+                timeout=min(0.5, remaining),
+            )
+            position = odom.pose.pose.position
+            last_distance = (
+                (float(position.x) - float(goal["x"])) ** 2
+                + (float(position.y) - float(goal["y"])) ** 2
+                + (float(position.z) - float(goal["z"])) ** 2
+            ) ** 0.5
+            if last_distance <= tolerance_m:
+                return {
+                    "status": "ros_navigation_success",
+                    "detail": f"planned navigation reached goal within {last_distance:.3f}m",
+                    "navigation": {
+                        "distance_m": round(last_distance, 3),
+                        "planner_commands": planner_commands,
+                    },
+                }
+            try:
+                self.rospy.wait_for_message(
+                    action["planner_cmd_topic"],
+                    self.PositionCommand,
+                    timeout=min(0.05, remaining),
+                )
+                planner_commands += 1
+            except Exception:
+                pass
+        raise RuntimeError(
+            f"planned navigation not confirmed for {action['uav']} within {timeout_s:.1f}s; "
+            f"last_distance={last_distance:.3f}m planner_commands={planner_commands}"
+        )
 
     def _call_service(self, action):
         service = action["service"]
@@ -146,17 +217,132 @@ class RosBackend:
         if service.endswith("/set_mode"):
             self.rospy.wait_for_service(service, timeout=float(action.get("timeout_s", 10)))
             proxy = self.rospy.ServiceProxy(service, self.SetMode)
-            proxy(custom_mode=request["custom_mode"])
-            return {"status": "ros_success", "detail": f"called {service}"}
+            response = proxy(custom_mode=request["custom_mode"])
+            if not bool(getattr(response, "mode_sent", False)):
+                raise RuntimeError(f"set_mode failed for {service}: mode_sent=false")
+            return {"status": "ros_success", "detail": f"called {service}; mode_sent=true"}
         if service.endswith("/cmd/arming"):
             self.rospy.wait_for_service(service, timeout=float(action.get("timeout_s", 10)))
             proxy = self.rospy.ServiceProxy(service, self.CommandBool)
-            proxy(value=bool(request["value"]))
-            return {"status": "ros_success", "detail": f"called {service}"}
+            response = proxy(value=bool(request["value"]))
+            if not bool(getattr(response, "success", False)):
+                result = getattr(response, "result", "unknown")
+                raise RuntimeError(f"arming failed for {service}: success=false result={result}")
+            return {"status": "ros_success", "detail": f"called {service}; success=true"}
         return {"status": "ros_skipped_external_service", "detail": f"no generated client for {service}"}
+
+    def verify_action(self, action, live_config):
+        if live_config is None or not action.get("uav"):
+            return None
+
+        uav = _live_uav_for_action(live_config, action)
+        if action["action"] == "call_service" and str(action.get("service", "")).endswith("/set_mode"):
+            mode = action.get("request", {}).get("custom_mode")
+            if mode == "OFFBOARD":
+                state = self._wait_for_state(
+                    uav,
+                    lambda msg: msg.mode == "OFFBOARD",
+                    "OFFBOARD mode",
+                    _verification_timeout(action, 10),
+                )
+                return {
+                    "event": "offboard_confirmed",
+                    "stage": action["stage"],
+                    "uav": action["uav"],
+                    "mode": state.mode,
+                }
+            if mode == "AUTO.LAND":
+                odom = self._wait_for_landing(uav, action)
+                return {
+                    "event": "landing_confirmed",
+                    "stage": action["stage"],
+                    "uav": action["uav"],
+                    "altitude_m": round(float(odom.pose.pose.position.z), 3),
+                }
+
+        if _is_arming_action(action):
+            state = self._wait_for_state(
+                uav,
+                lambda msg: bool(msg.armed) is True,
+                "armed state",
+                _verification_timeout(action, 10),
+            )
+            return {
+                "event": "arming_confirmed",
+                "stage": action["stage"],
+                "uav": action["uav"],
+                "armed": bool(state.armed),
+            }
+
+        if action["stage"] == "multi_takeoff" and action["action"] == "publish_position_setpoint":
+            odom = self._wait_for_takeoff_altitude(uav, action)
+            return {
+                "event": "takeoff_altitude_confirmed",
+                "stage": action["stage"],
+                "uav": action["uav"],
+                "altitude_m": round(float(odom.pose.pose.position.z), 3),
+                "target_altitude_m": float(action["goal"]["z"]),
+            }
+
+        return None
+
+    def _wait_for_state(self, uav, predicate, description, timeout_s):
+        topic = uav["state_topic"]
+        deadline = time.monotonic() + timeout_s
+        last_state = "none"
+        while time.monotonic() < deadline and not self.rospy.is_shutdown():
+            remaining = max(0.01, deadline - time.monotonic())
+            try:
+                message = self.rospy.wait_for_message(topic, self.State, timeout=min(0.5, remaining))
+            except Exception:
+                continue
+            last_state = f"connected={bool(message.connected)} armed={bool(message.armed)} mode={message.mode}"
+            if predicate(message):
+                return message
+        raise RuntimeError(
+            f"{description} not confirmed for {uav['uav_id']} within {timeout_s:.1f}s; last_state={last_state}"
+        )
+
+    def _wait_for_takeoff_altitude(self, uav, action):
+        target_z = float(action["goal"]["z"])
+        threshold_z = max(0.5, target_z - 0.3)
+        return self._wait_for_odometry_altitude(
+            uav,
+            lambda z: z >= threshold_z,
+            f"takeoff altitude >= {threshold_z:.2f}m",
+            float(action.get("timeout_s", 20)),
+        )
+
+    def _wait_for_landing(self, uav, action):
+        goal_z = float(action.get("fallback_goal", {}).get("z", 0.0))
+        threshold_z = max(0.25, goal_z + 0.25)
+        return self._wait_for_odometry_altitude(
+            uav,
+            lambda z: z <= threshold_z,
+            f"landing altitude <= {threshold_z:.2f}m",
+            float(action.get("timeout_s", 30)),
+        )
+
+    def _wait_for_odometry_altitude(self, uav, predicate, description, timeout_s):
+        topic = uav["odom_topic"]
+        deadline = time.monotonic() + timeout_s
+        last_z = "none"
+        while time.monotonic() < deadline and not self.rospy.is_shutdown():
+            remaining = max(0.01, deadline - time.monotonic())
+            try:
+                message = self.rospy.wait_for_message(topic, self.Odometry, timeout=min(0.5, remaining))
+            except Exception:
+                continue
+            last_z = f"{float(message.pose.pose.position.z):.3f}"
+            if predicate(float(message.pose.pose.position.z)):
+                return message
+        raise RuntimeError(
+            f"{description} not confirmed for {uav['uav_id']} within {timeout_s:.1f}s; last_altitude_m={last_z}"
+        )
 
     def _position_target(self, goal):
         message = self.PositionTarget()
+        message.header.stamp = self.rospy.Time.now()
         message.coordinate_frame = self.PositionTarget.FRAME_LOCAL_NED
         message.type_mask = (
             self.PositionTarget.IGNORE_VX
@@ -166,6 +352,7 @@ class RosBackend:
             | self.PositionTarget.IGNORE_AFY
             | self.PositionTarget.IGNORE_AFZ
             | self.PositionTarget.IGNORE_YAW_RATE
+            | self.PositionTarget.FORCE
         )
         message.position.x = float(goal["x"])
         message.position.y = float(goal["y"])
@@ -326,6 +513,20 @@ def validate_action(action):
         _require(action, "uav", "topic", "goal", "timeout_s")
         _validate_timeout(action)
         _validate_goal(action["goal"], action["sequence"])
+    elif name == "verify_planned_navigation":
+        _require(
+            action,
+            "uav",
+            "planner_cmd_topic",
+            "mavros_odom_topic",
+            "goal",
+            "tolerance_m",
+            "timeout_s",
+        )
+        _validate_timeout(action)
+        _validate_goal(action["goal"], action["sequence"])
+        if float(action["tolerance_m"]) <= 0:
+            raise ValueError(f"sequence {action['sequence']} tolerance_m must be positive")
     elif name == "call_service":
         _require(action, "service", "request")
         if not isinstance(action["request"], dict):
@@ -432,10 +633,12 @@ def execute_plan(plan, backend, allow_arm=False, simulation_only=False, live_con
                     "service": action["service"],
                 }
             )
+            events.extend(_verification_events_for_action(action, backend, allow_arm, simulation_only, live_config, clock))
         else:
             result = backend.execute(action)
             result = _attach_target_results(action, result, target_results)
             events.extend(_events_for_action(action, result, clock))
+            events.extend(_verification_events_for_action(action, backend, allow_arm, simulation_only, live_config, clock))
 
         trace.append(_trace_entry(action, backend.name, result))
 
@@ -465,6 +668,36 @@ def _is_arming_action(action):
         and str(action.get("service", "")).endswith("/cmd/arming")
         and bool(action.get("request", {}).get("value")) is True
     )
+
+
+def _verification_timeout(action, default):
+    return float(action.get("timeout_s", default))
+
+
+def _live_uav_for_action(live_config, action):
+    for uav in live_config.get("uavs", []):
+        if uav.get("uav_id") == action.get("uav"):
+            return uav
+    raise RuntimeError(f"live config missing UAV '{action.get('uav')}'")
+
+
+def _verification_events_for_action(action, backend, allow_arm, simulation_only, live_config, clock):
+    if backend.name != "ros" or not allow_arm or not simulation_only:
+        return []
+    verifier = getattr(backend, "verify_action", None)
+    if verifier is None:
+        return []
+    verification = verifier(action, live_config)
+    if verification is None:
+        return []
+    if isinstance(verification, dict):
+        verification = [verification]
+    events = []
+    for event in verification:
+        recorded = dict(event)
+        recorded["time"] = clock.tick()
+        events.append(recorded)
+    return events
 
 
 def _is_target_provider_action(action):
@@ -517,6 +750,17 @@ def _events_for_action(action, result, clock):
         event["uav"] = action["uav"]
 
     events = [event]
+    if action["action"] == "verify_planned_navigation" and result.get("navigation"):
+        events.append(
+            {
+                "time": clock.tick(),
+                "event": "navigation_confirmed",
+                "stage": action["stage"],
+                "uav": action["uav"],
+                "distance_m": result["navigation"]["distance_m"],
+                "planner_commands": result["navigation"]["planner_commands"],
+            }
+        )
     if _is_target_provider_action(action):
         target_results = result.get("target_results")
         if target_results:

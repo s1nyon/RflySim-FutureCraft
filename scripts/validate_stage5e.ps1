@@ -80,8 +80,8 @@ if ($missing.Count -eq 0 -and $pythonRunner) {
                 $contractErrors += 'executor_trace.json does not match Stage 5E fixture'
             }
 
-            $actualEvents = Get-Content -Raw -LiteralPath $eventsOutputPath
-            $expectedEvents = Get-Content -Raw -LiteralPath $eventsFixturePath
+            $actualEvents = (Get-Content -Raw -LiteralPath $eventsOutputPath) -replace "`r`n", "`n"
+            $expectedEvents = (Get-Content -Raw -LiteralPath $eventsFixturePath) -replace "`r`n", "`n"
             if ($actualEvents -ne $expectedEvents) {
                 $contractErrors += 'mission_events.jsonl does not match Stage 5E fixture'
             }

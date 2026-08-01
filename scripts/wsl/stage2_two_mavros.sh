@@ -21,8 +21,11 @@ start_one() {
   local ns="$1"
   local fcu_url="$2"
   local sysid="$3"
+  local map_frame="${ns}_map"
+  local odom_parent_frame="${ns}_odom"
+  local odom_child_frame="${ns}_base_link"
   local log_file="$LOG_DIR/${ns}_mavros.log"
-  nohup bash -lc "source /opt/ros/noetic/setup.bash; source '$REF_28COM_UAV_WSL_DIR/devel/setup.bash'; export ROS_MASTER_URI='$ROS_MASTER_URI'; export ROS_NAMESPACE=$ns; roslaunch mavros px4.launch fcu_url:=$fcu_url tgt_system:=$sysid" >"$log_file" 2>&1 &
+  nohup bash -lc "source /opt/ros/noetic/setup.bash; source '$REF_28COM_UAV_WSL_DIR/devel/setup.bash'; if [[ -f '$PROJECT_ROOT/future_aircraft_ws/devel/setup.bash' ]]; then source '$PROJECT_ROOT/future_aircraft_ws/devel/setup.bash'; else export ROS_PACKAGE_PATH='$PROJECT_ROOT/future_aircraft_ws/src':\${ROS_PACKAGE_PATH:-}; fi; export ROS_MASTER_URI='$ROS_MASTER_URI'; roslaunch multi_uav_mission rflysim_mavros_px4.launch uav_namespace:=$ns fcu_url:=$fcu_url tgt_system:=$sysid map_id_des:=$map_frame odom_parent_id_des:=$odom_parent_frame odom_child_id_des:=$odom_child_frame" >"$log_file" 2>&1 &
   echo "[INFO] Started MAVROS namespace=$ns pid=$! log=$log_file"
 }
 
@@ -48,7 +51,9 @@ start_px4_mavros_link() {
     exit 1
   fi
 
-  "$PX4_MAVLINK_BIN" --instance "$sysid" start -u "$px4_port" -o "$mavros_port" -r 4000000
+  if ! "$PX4_MAVLINK_BIN" --instance "$sysid" start -u "$px4_port" -o "$mavros_port" -r 4000000; then
+    echo "[WARN] PX4 instance=$sysid MAVROS link may already exist; continuing with stream setup." >&2
+  fi
   "$PX4_MAVLINK_BIN" --instance "$sysid" stream -u "$px4_port" -s LOCAL_POSITION_NED -r 30
   "$PX4_MAVLINK_BIN" --instance "$sysid" stream -u "$px4_port" -s ODOMETRY -r 30
   "$PX4_MAVLINK_BIN" --instance "$sysid" boot_complete
@@ -61,7 +66,9 @@ if [[ "${1:-}" == "--dry-run" ]]; then
   echo "[DRY-RUN] PX4 uav1: px4-mavlink --instance 1 start -u 14600 -o 14601 -r 4000000"
   echo "[DRY-RUN] PX4 uav2: px4-mavlink --instance 2 start -u 14610 -o 14611 -r 4000000"
   echo "[DRY-RUN] uav1: ROS_NAMESPACE=uav1, fcu_url:=udp://:14601@127.0.0.1:14600, tgt_system:=1"
+  echo "[DRY-RUN] uav1 MAVROS odometry frames: map_id_des:=uav1_map, odom_parent_id_des:=uav1_odom, odom_child_id_des:=uav1_base_link"
   echo "[DRY-RUN] uav2: ROS_NAMESPACE=uav2, fcu_url:=udp://:14611@127.0.0.1:14610, tgt_system:=2"
+  echo "[DRY-RUN] uav2 MAVROS odometry frames: map_id_des:=uav2_map, odom_parent_id_des:=uav2_odom, odom_child_id_des:=uav2_base_link"
   echo "[DRY-RUN] logs: $LOG_DIR"
   exit 0
 fi

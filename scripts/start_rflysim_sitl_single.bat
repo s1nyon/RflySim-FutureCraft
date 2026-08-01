@@ -12,5 +12,5 @@ if /I "%~1"=="--dry-run" (
   echo [DRY-RUN] Expected side effects: RflySim3D, QGroundControl, CopterSim, PX4 SITL
   exit /b 0
 )
-start "RflySim SITL uav1" cmd /k "call ""%RFLYSIM_UAV_SITL_SCRIPT%"""
+start "RflySim SITL uav1" cmd /k call "%RFLYSIM_UAV_SITL_SCRIPT%"
 exit /b 0

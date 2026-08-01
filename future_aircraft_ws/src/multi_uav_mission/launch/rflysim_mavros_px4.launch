@@ -1,0 +1,30 @@
+<launch>
+  <arg name="uav_namespace" default="uav1"/>
+  <arg name="fcu_url" default="udp://:14601@127.0.0.1:14600"/>
+  <arg name="gcs_url" default=""/>
+  <arg name="tgt_system" default="1"/>
+  <arg name="tgt_component" default="1"/>
+  <arg name="log_output" default="screen"/>
+  <arg name="fcu_protocol" default="v2.0"/>
+  <arg name="respawn_mavros" default="false"/>
+  <arg name="map_id_des" default="$(arg uav_namespace)_map"/>
+  <arg name="odom_parent_id_des" default="$(arg uav_namespace)_odom"/>
+  <arg name="odom_child_id_des" default="$(arg uav_namespace)_base_link"/>
+
+  <group ns="$(arg uav_namespace)">
+    <include file="$(find mavros)/launch/px4.launch">
+      <arg name="namespace" value="mavros"/>
+      <arg name="fcu_url" value="$(arg fcu_url)"/>
+      <arg name="gcs_url" value="$(arg gcs_url)"/>
+      <arg name="tgt_system" value="$(arg tgt_system)"/>
+      <arg name="tgt_component" value="$(arg tgt_component)"/>
+      <arg name="log_output" value="$(arg log_output)"/>
+      <arg name="fcu_protocol" value="$(arg fcu_protocol)"/>
+      <arg name="respawn_mavros" value="$(arg respawn_mavros)"/>
+    </include>
+
+    <param name="mavros/odometry/fcu/map_id_des" value="$(arg map_id_des)" type="str"/>
+    <param name="mavros/odometry/fcu/odom_parent_id_des" value="$(arg odom_parent_id_des)" type="str"/>
+    <param name="mavros/odometry/fcu/odom_child_id_des" value="$(arg odom_child_id_des)" type="str"/>
+  </group>
+</launch>

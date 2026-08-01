@@ -6,7 +6,7 @@
       "stage": "preflight",
       "topics": [
         "/uav1/mavros/state",
-        "/uav1/mavros/local_position/odom"
+        "/uav1/mavros/odometry/in"
       ],
       "uav": "uav1"
     },
@@ -16,7 +16,7 @@
       "stage": "preflight",
       "topics": [
         "/uav2/mavros/state",
-        "/uav2/mavros/local_position/odom"
+        "/uav2/mavros/odometry/in"
       ],
       "uav": "uav2"
     },
@@ -262,7 +262,7 @@
   "uavs": [
     {
       "namespace": "/uav1",
-      "odom_topic": "/uav1/mavros/local_position/odom",
+      "odom_topic": "/uav1/mavros/odometry/in",
       "planner_goal_topic": "/uav1/planner/goal",
       "setpoint_topic": "/uav1/mavros/setpoint_raw/local",
       "state_topic": "/uav1/mavros/state",
@@ -270,7 +270,7 @@
     },
     {
       "namespace": "/uav2",
-      "odom_topic": "/uav2/mavros/local_position/odom",
+      "odom_topic": "/uav2/mavros/odometry/in",
       "planner_goal_topic": "/uav2/planner/goal",
       "setpoint_topic": "/uav2/mavros/setpoint_raw/local",
       "state_topic": "/uav2/mavros/state",

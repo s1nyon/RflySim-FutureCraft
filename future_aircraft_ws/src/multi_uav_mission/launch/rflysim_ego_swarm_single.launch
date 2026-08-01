@@ -5,6 +5,7 @@
   <arg name="camera_pose_topic" default="/unused_camera_pose"/>
   <arg name="depth_topic" default="/rflysim/sensor1"/>
   <arg name="pos_cmd_topic" default="/planning/pos_cmd"/>
+  <arg name="goal_topic" default="/move_base_simple/goal"/>
   <arg name="map_size_x" default="12.0"/>
   <arg name="map_size_y" default="8.0"/>
   <arg name="map_size_z" default="2.0"/>
@@ -17,6 +18,7 @@
   <node pkg="tf" type="static_transform_publisher" name="camera_link" args="0.1 0.04 0 0 0 0 base_link camera_link 1000"/>
 
   <node pkg="ego_planner" name="rflysim_ego_swarm_node" type="ego_planner_node" output="screen">
+    <remap from="/move_base_simple/goal" to="$(arg goal_topic)"/>
     <remap from="~odom_world" to="$(arg odom_topic)"/>
     <remap from="~planning/bspline" to="/drone_$(arg drone_id)_planning/bspline"/>
     <remap from="~planning/data_display" to="/drone_$(arg drone_id)_planning/data_display"/>

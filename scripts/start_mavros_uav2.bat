@@ -9,9 +9,9 @@ if not exist "%FUTURE_AIRCRAFT_WS%" (
 )
 if /I "%~1"=="--dry-run" (
   echo [DRY-RUN] Start MAVROS for /uav2 in WSL namespace
-  echo [DRY-RUN] ROS_NAMESPACE=uav2, fcu_url:=udp://:14542@127.0.0.1:14582, tgt_system:=2
+  echo [DRY-RUN] ROS_NAMESPACE=uav2, fcu_url:=udp://:16541@127.0.0.1:17541, tgt_system:=2
   exit /b 0
 )
-start "futureAircraftSim MAVROS uav2" wsl -d %RFLYSIM_WSL_DISTRO% -e bash -lic "export ROS_NAMESPACE=uav2; source /opt/ros/noetic/setup.bash; source '%REF_28COM_UAV_WSL_DIR%/devel/setup.bash'; roslaunch mavros px4.launch fcu_url:=udp://:14542@127.0.0.1:14582 tgt_system:=2"
+start "futureAircraftSim MAVROS uav2" wsl -d %RFLYSIM_WSL_DISTRO% -e bash -lic "export ROS_NAMESPACE=uav2; source /opt/ros/noetic/setup.bash; source '%REF_28COM_UAV_WSL_DIR%/devel/setup.bash'; roslaunch mavros px4.launch fcu_url:=udp://:16541@127.0.0.1:17541 tgt_system:=2"
 exit /b 0
 

@@ -1,0 +1,82 @@
+{
+  "stage": "stage7_live_slam_ego_swarm",
+  "mission_mode": "live_slam_ego_swarm_flight",
+  "reference_flow": [
+    "sensor_pkg/main.py",
+    "faster_lio mapping_mid360.launch",
+    "ego-swarm",
+    "MAVROS OFFBOARD"
+  ],
+  "excluded_runtime_flows": [
+    "object_det",
+    "target_provider",
+    "behavior_tree"
+  ],
+  "logs_dir": "logs/stage7_live",
+  "fast_lio": {
+    "reference_launch": "../28com_sim/UAV_demo/28com_uav/src/faster-lio-main/launch/mapping_mid360.launch",
+    "project_launch": "future_aircraft_ws/src/multi_uav_mission/launch/rflysim_fastlio_dual.launch",
+    "sensor_topic_scope": "shared_rflysim_bridge",
+    "rviz": false
+  },
+  "ego_swarm": {
+    "source_dir": "external/ego-planner-swarm",
+    "project_launch": "future_aircraft_ws/src/multi_uav_mission/launch/rflysim_ego_swarm_dual.launch",
+    "fallback_reference_launch": "future_aircraft_ws/src/multi_uav_mission/launch/rflysim_ego_swarm_single.launch"
+  },
+  "flight": {
+    "smoke_checker": "future_aircraft_ws/src/multi_uav_mission/scripts/ego_swarm_flight_smoke_check.py",
+    "report": "logs/stage7_live/flight_report.json",
+    "mission_events": "logs/stage7_live/mission_events.jsonl",
+    "executor_trace": "logs/stage7_live/executor_trace.json",
+    "score_summary": "logs/stage7_live/score_summary.json"
+  },
+  "simulation_arm_policy": {
+    "allow_arm": true,
+    "mode": "simulation_only",
+    "required_flags": [
+      "--allow-arm",
+      "--simulation-only"
+    ]
+  },
+  "uavs": [
+    {
+      "uav_id": "uav1",
+      "namespace": "/uav1",
+      "sensor_lidar_topic": "/rflysim/sensor0/mid360_lidar",
+      "sensor_imu_topic": "/rflysim/imu",
+      "slam_namespace": "/uav1/slam",
+      "slam_odom_topic": "/uav1/mavros/odometry/out",
+      "slam_cloud_topic": "/uav1/slam/cloud_registered",
+      "slam_odom_to_fcu_topic": "/uav1/mavros/odometry/out",
+      "planner_odom_topic": "/uav1/mavros/odometry/out",
+      "planner_cloud_topic": "/uav1/slam/cloud_registered",
+      "planner_cmd_topic": "/uav1/planning/pos_cmd",
+      "planner_goal_topic": "/uav1/planning/goal",
+      "mavros_state_topic": "/uav1/mavros/state",
+      "mavros_feedback_odom_topic": "/uav1/mavros/odometry/in",
+      "mavros_setpoint_topic": "/uav1/mavros/setpoint_raw/local",
+      "mavros_set_mode_service": "/uav1/mavros/set_mode",
+      "mavros_arming_service": "/uav1/mavros/cmd/arming"
+    },
+    {
+      "uav_id": "uav2",
+      "namespace": "/uav2",
+      "sensor_lidar_topic": "/rflysim/sensor0/mid360_lidar",
+      "sensor_imu_topic": "/rflysim/imu",
+      "slam_namespace": "/uav2/slam",
+      "slam_odom_topic": "/uav2/mavros/odometry/out",
+      "slam_cloud_topic": "/uav2/slam/cloud_registered",
+      "slam_odom_to_fcu_topic": "/uav2/mavros/odometry/out",
+      "planner_odom_topic": "/uav2/mavros/odometry/out",
+      "planner_cloud_topic": "/uav2/slam/cloud_registered",
+      "planner_cmd_topic": "/uav2/planning/pos_cmd",
+      "planner_goal_topic": "/uav2/planning/goal",
+      "mavros_state_topic": "/uav2/mavros/state",
+      "mavros_feedback_odom_topic": "/uav2/mavros/odometry/in",
+      "mavros_setpoint_topic": "/uav2/mavros/setpoint_raw/local",
+      "mavros_set_mode_service": "/uav2/mavros/set_mode",
+      "mavros_arming_service": "/uav2/mavros/cmd/arming"
+    }
+  ]
+}

@@ -9,6 +9,7 @@ set RFLYSIM_UAV_SITL_SCRIPT=%RFLYSIM_ROOT%\RflySimAPIs\8.RflySimVision\3.CustExp
 set RFLYSIM_VCXSRV_DIR=%RFLYSIM_ROOT%\VcXsrv
 set REF_28COM_UAV_DIR=%RFLYSIM_ROOT%\RflySimAPIs\8.RflySimVision\3.CustExps\e13.RobotCom26Adv\28com_sim\UAV_demo\28com_uav
 set REF_28COM_UAV_WSL_DIR=/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/28com_sim/UAV_demo/28com_uav
+set EGO_SWARM_WSL_DIR=/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/future_aircraft_sim/external/ego-planner-swarm
 set FUTURE_AIRCRAFT_WS=%FUTURE_AIRCRAFT_SIM_DIR%\future_aircraft_ws
 set FUTURE_AIRCRAFT_SIM_WSL_DIR=/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/future_aircraft_sim
 set ROS_MASTER_URI=http://127.0.0.1:11311

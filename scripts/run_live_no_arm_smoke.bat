@@ -7,8 +7,9 @@ if /I "%~1"=="--dry-run" (
   echo [DRY-RUN] Stage 6D live no-arm smoke runner
   echo [DRY-RUN] 1. generate logs/stage6d_live/live_mission_plan.json
   echo [DRY-RUN] 2. run mavros_smoke_check.py --backend ros --timeout-s 10
-  echo [DRY-RUN] 3. run mission_executor.py --backend ros without --allow-arm
-  echo [DRY-RUN] 4. expect arming_blocked events; no arming service is called
+  echo [DRY-RUN] 3. ensure sim_vision_target_provider.py exposes /mission/target_provider/query
+  echo [DRY-RUN] 4. run mission_executor.py --backend ros without --allow-arm
+  echo [DRY-RUN] 5. expect arming_blocked events; no arming service is called
   exit /b 0
 )
 if not exist "%FUTURE_AIRCRAFT_WS%" (
