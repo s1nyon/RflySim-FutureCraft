@@ -36,6 +36,24 @@ class DummyPositionTarget:
         self.yaw = 0.0
 
 
+class AlreadyAtGoalRospy:
+    def wait_for_message(self, topic, _message_type, timeout):
+        del timeout
+        if topic.endswith("/planning/pos_cmd"):
+            raise AssertionError("already-reached navigation must not wait for a future planner command")
+        return SimpleNamespace(
+            pose=SimpleNamespace(
+                pose=SimpleNamespace(
+                    position=SimpleNamespace(x=0.7, y=1.5, z=1.0)
+                )
+            )
+        )
+
+    @staticmethod
+    def is_shutdown():
+        return False
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--bridge-module", required=True, type=Path)
@@ -68,6 +86,7 @@ def main():
         "verify_planned_navigation",
         "verify_planned_navigation",
     ]
+    assert [action["goal"]["x"] for action in navigation_actions[:2]] == [0.7, 1.7]
     for action in navigation_actions[2:]:
         assert action["planner_cmd_topic"].startswith(f"/{action['uav']}/planning/")
         assert action["mavros_odom_topic"].startswith(f"/{action['uav']}/mavros/")
@@ -76,6 +95,22 @@ def main():
     sys.path.insert(0, str(args.executor_module.parent))
     executor = load_module("mission_executor_stage7", args.executor_module)
     executor.validate_plan(plan)
+    backend = executor.RosBackend.__new__(executor.RosBackend)
+    backend.rospy = AlreadyAtGoalRospy()
+    backend.PositionCommand = object
+    backend.Odometry = object
+    reached = backend._verify_planned_navigation(
+        {
+            "uav": "uav1",
+            "planner_cmd_topic": "/uav1/planning/pos_cmd",
+            "mavros_odom_topic": "/uav1/mavros/odometry/in",
+            "goal": {"x": 0.7, "y": 1.5, "z": 1.0},
+            "timeout_s": 1.0,
+            "tolerance_m": 0.3,
+        }
+    )
+    assert reached["status"] == "ros_navigation_success"
+    assert reached["navigation"]["planner_commands"] == 0
     events = executor._events_for_action(
         navigation_actions[2],
         {

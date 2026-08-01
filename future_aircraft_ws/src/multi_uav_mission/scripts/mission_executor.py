@@ -154,12 +154,6 @@ class RosBackend:
         deadline = time.monotonic() + timeout_s
         planner_commands = 0
         last_distance = float("inf")
-        self.rospy.wait_for_message(
-            action["planner_cmd_topic"],
-            self.PositionCommand,
-            timeout=timeout_s,
-        )
-        planner_commands += 1
         goal = action["goal"]
         tolerance_m = float(action["tolerance_m"])
         while time.monotonic() < deadline and not self.rospy.is_shutdown():
@@ -188,7 +182,7 @@ class RosBackend:
                 self.rospy.wait_for_message(
                     action["planner_cmd_topic"],
                     self.PositionCommand,
-                    timeout=min(0.05, remaining),
+                    timeout=min(0.5, remaining),
                 )
                 planner_commands += 1
             except Exception:
