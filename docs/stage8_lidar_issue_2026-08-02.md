@@ -79,4 +79,3 @@ Stage 8 的 Python 动态赛道可以在 RflySim3D 中显示，但 `VisionRingBl
 - 不要在传感器运行时执行 `RflyChangeMapbyName`。
 - 不要使用历史 readiness 报告通过新实例门禁。
 - 用户明确要求使用自有地图，不要切换到 `ChallengeMap` 作为最终方案。
-
