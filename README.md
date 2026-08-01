@@ -31,6 +31,8 @@ Stage 6D / 6E 提供了更直接的 live 入口。dry-run 验证不会启动 Rfl
 
 Stage 7 是当前 live-first 路线：两个项目本地 sensor bridge 分别绑定 CopterSim 1/2、SeqID 0/10 和 UDP 9999/10009；点云 adapter 生成 faster_lio 所需的 32-byte Ouster schema，IMU 也隔离到 `/uav1`、`/uav2`。`run_live_fastlio_dual` 会先生成 `logs/stage7_live/<run-id>/sensor_readiness.json`，只有 identity、schema、freshness、isolation、stationary_stability 五个 no-arm gate 全部通过，ego-swarm 和 flight runner 才能继续。2026-08-01 的 run `stage7-20260801T082349Z-6875` 已完成双 FAST-LIO 静止 no-arm live 验收：五个 gate 全部 `pass`、两机 `armed=false`、`ready=true`；这不代表 ego-swarm 或飞行闭环已经 live 完成。
 
+后续 no-arm run `stage7-20260801T090244Z-5522`（实例 `px4-2c74476509ac6faa`）再次通过五项 gate 且两机未解锁。首次 ego-swarm 启动在 `roslaunch` 前暴露 ROS overlay 顺序缺陷：standalone ego workspace 会隐藏项目包。`9ad9b4c` 已用 extend 方式恢复项目 overlay，`46178c0` 已把只读 topic probe 与 ego runner 的 readiness 窗口统一为 120 秒；两项修复均通过离线验证和 launch 解析，仍需在重新启动仿真后用全新 run/实例完成 ego-swarm live 复验。
+
 ### 进度估算
 
 当前项目总体进度约为 **78%**。该数字按完成真实双机任务闭环所需的关键路径估算，不是按 Stage 数量简单平均：
@@ -124,7 +126,7 @@ Rfly SIL 的 `16540/17540` 与 `16541/17541` 仅供 CopterSim/PX4 使用，不�
 
 ## 下一步
 
-下一步是 Stage 7 的 **no-arm ego-swarm live 接入**：先对当前 run 执行只读 topic probe，再验证 ego-swarm 双机 wrapper 只消费本轮、同一仿真实例的 readiness 证据。当前不要启动 flight runner；后续 OFFBOARD、仿真解锁和飞行仍需要单独明确授权。
+下一步是 Stage 7 的 **no-arm ego-swarm live 复验**：当前仿真已关闭，必须重新启动并生成新的 run-id 与 simulation_instance_id；readiness 通过后立即运行已修复的 ego-swarm wrapper，再执行只读 topic probe。当前不要启动 flight runner；后续 OFFBOARD、仿真解锁和飞行仍需要单独明确授权。
 
 当前 Stage 7 路线：
 

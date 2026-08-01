@@ -90,6 +90,7 @@ Latest Stage 7 live evidence, 2026-08-01:
 - `identity`, `schema`, `freshness`, `isolation`, and `stationary_stability` all passed; both MAVROS states remained `armed: false`, `mode: MANUAL`, and the report returned `ready: true`.
 - Each adapter accepted 17,408 points with the exact 32-byte Ouster field layout. Two independent `run_mapping_online` processes remained active and the FAST-LIO log had no missing-field, fatal, process-died, or segmentation errors.
 - Live corrections are committed as `e169acc` (ROS initialization, bounded startup and lifecycle cleanup) and `7c9e363` (namespaced IMU source remaps). No planner goal, setpoint, OFFBOARD, ego-swarm, or arming command was sent.
+- A later no-arm run `stage7-20260801T090244Z-5522`, simulation instance `px4-2c74476509ac6faa`, again passed identity, schema, freshness, isolation, and stationary stability with both vehicles disarmed. The first ego-swarm launch then failed before `roslaunch` because sourcing the standalone ego workspace hid the project ROS overlay; `9ad9b4c` restores the project overlay with `--extend`. `46178c0` also aligns the read-only topic probe with the ego runner's 120-second readiness window. These fixes passed offline validation and ROS launch resolution, but ego-swarm still requires a fresh live run after the simulator is restarted.
 
 ## Recommended Next Step
 
@@ -99,6 +100,8 @@ Run the current smoke path only when checking MAVROS readiness:
 2. `scripts\run_live_no_arm_smoke.bat`
 
 Task 6 of `docs/superpowers/plans/2026-08-01-stage-7-dual-sensor-isolation.md` is complete. For continued development, keep the current no-arm boundary and proceed to the read-only Stage 7 topic probe, then the no-arm ego-swarm wrapper only after it accepts the same run and simulation instance. Do not start the flight runner, setpoints, OFFBOARD, or arming without separate explicit authorization.
+
+The simulator was stopped after the `stage7-20260801T090244Z-5522` investigation. Do not reuse that readiness report: restart the base simulation, generate a new run and simulation instance, then immediately run the fixed ego-swarm wrapper and topic probe within the 120-second evidence window.
 
 Current Stage 7 entrypoints:
 
