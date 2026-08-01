@@ -17,6 +17,8 @@ catkin_install_python(PROGRAMS
   scripts/mavros_setpoint_keepalive.py
   scripts/mission_executor.py
   scripts/odom_frame_relay.py
+  scripts/rflysim_cloud_contract.py
+  scripts/rflysim_pointcloud_adapter.py
   scripts/rflysim_sensor_bridge.py
   scripts/score_summary.py
   scripts/sim_vision_target_provider.py
