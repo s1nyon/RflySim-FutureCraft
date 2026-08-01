@@ -58,10 +58,10 @@ Current limits:
 - Offline validation passes for the staged contracts. Live GUI validation has confirmed dual PX4, dual MAVROS and `state.connected: true`; the Stage 6D odometry input is `/uav*/mavros/odometry/in`, sourced from PX4 MAVLink `ODOMETRY` through MAVROS extras, and still requires fresh end-to-end confirmation.
 - Stage 6D dry-run validates the no-arm live runner contract without launching anything.
 - Stage 6E dry-run validates the simulation-arm runner contract; real execution first runs dual-MAVROS smoke checks, then may call `/uav1/mavros/cmd/arming` and `/uav2/mavros/cmd/arming` in simulation only when the checks and all arm gates pass.
-- Stage 7 dry-run/offline validation covers two identified sensor bridges, exact Ouster point fields/timing, normalized per-UAV LiDAR/IMU, run-scoped readiness validation, dual FAST-LIO, dual ego-swarm, and the guarded flight runner. Live sensor/FAST-LIO readiness is now proven separately by the 2026-08-01 no-arm run below; ego-swarm and live flight remain unproven.
+- Stage 7 dry-run/offline validation covers two identified sensor bridges, exact Ouster point fields/timing, normalized per-UAV LiDAR/IMU, run-scoped readiness validation, dual FAST-LIO, dual ego-swarm, and the guarded flight runner. Live sensor/FAST-LIO readiness and the minimum dual ego-swarm flight loop are proven by the 2026-08-01 runs below. The remaining gap is repeatability, longer/obstacle-rich routes, and full mission integration—not first-flight feasibility.
 - `run_live_fastlio_dual.bat` is now the no-arm acceptance entrypoint. It writes `logs/stage7_live/<run-id>/sensor_readiness.json` and `logs/stage7_live/current_run.env`; later planner/flight runners reject missing, stale, cross-run, cross-instance, shared-source, unstable, or armed evidence.
 - Vision integration is still staged through deterministic providers rather than real detector inference.
-- New live-first direction: Stage 7 should focus on two UAVs running FAST-LIO/faster_lio localization and mapping, then project-local ego-swarm integration, then a minimal simulation-arm takeoff/flight/landing loop. Do not prioritize vision, target detection, or behavior-tree work until this live localization/planning/control loop is proven.
+- New live-first direction: the Stage 7 FAST-LIO/faster_lio, project-local ego-swarm, and minimal simulation-arm takeoff/flight/landing loop is proven. Prioritize 3–5 fresh-instance repeat runs, longer collision-free routes, and run-scoped artifact cleanup before reconnecting vision, target detection, and behavior-tree mission logic.
 
 ## Live Debug Notes, 2026-07-29
 
@@ -92,18 +92,18 @@ Latest Stage 7 live evidence, 2026-08-01:
 - `identity`, `schema`, `freshness`, `isolation`, and `stationary_stability` all passed; both MAVROS states remained `armed: false`, `mode: MANUAL`, and the report returned `ready: true`.
 - Each adapter accepted 17,408 points with the exact 32-byte Ouster field layout. Two independent `run_mapping_online` processes remained active and the FAST-LIO log had no missing-field, fatal, process-died, or segmentation errors.
 - Live corrections are committed as `e169acc` (ROS initialization, bounded startup and lifecycle cleanup) and `7c9e363` (namespaced IMU source remaps). No planner goal, setpoint, OFFBOARD, ego-swarm, or arming command was sent.
-- A later no-arm run `stage7-20260801T090244Z-5522`, simulation instance `px4-2c74476509ac6faa`, again passed identity, schema, freshness, isolation, and stationary stability with both vehicles disarmed. The first ego-swarm launch then failed before `roslaunch` because sourcing the standalone ego workspace hid the project ROS overlay; `9ad9b4c` restores the project overlay with `--extend`. `46178c0` also aligns the read-only topic probe with the ego runner's 120-second readiness window. These fixes passed offline validation and ROS launch resolution, but ego-swarm still requires a fresh live run after the simulator is restarted.
+- A later no-arm run `stage7-20260801T090244Z-5522`, simulation instance `px4-2c74476509ac6faa`, again passed identity, schema, freshness, isolation, and stationary stability with both vehicles disarmed. The first ego-swarm launch then failed before `roslaunch` because sourcing the standalone ego workspace hid the project ROS overlay; `9ad9b4c` restores the project overlay with `--extend`, and `46178c0` aligns the read-only topic probe with the ego runner's 120-second readiness window. The successful `stage7-20260801T101757Z-2497` flight supersedes the earlier “requires fresh live run” status.
 
 ## Recommended Next Step
 
-Run the current smoke path only when checking MAVROS readiness:
+Stage 7's minimum dual-UAV live loop is accepted. Continue from this baseline in the following order:
 
-1. `scripts\start_two_uav.bat`
-2. `scripts\run_live_no_arm_smoke.bat`
+1. Repeat the complete run 3–5 times on fresh simulation instances and record clean-run rate, duration, minimum separation, collisions, OFFBOARD losses, and timeouts.
+2. Increase route length and wall clearance incrementally, retaining a failed offline regression before each defect fix.
+3. Move flight artifacts fully under their run directory so historical evidence cannot be confused with the current instance.
+4. Reconnect target perception and behavior-tree mission logic only after the live loop is repeatable.
 
-Task 6 of `docs/superpowers/plans/2026-08-01-stage-7-dual-sensor-isolation.md` is complete. For continued development, keep the current no-arm boundary and proceed to the read-only Stage 7 topic probe, then the no-arm ego-swarm wrapper only after it accepts the same run and simulation instance. Do not start the flight runner, setpoints, OFFBOARD, or arming without separate explicit authorization.
-
-The simulator was stopped after the `stage7-20260801T090244Z-5522` investigation. Do not reuse that readiness report: restart the base simulation, generate a new run and simulation instance, then immediately run the fixed ego-swarm wrapper and topic probe within the 120-second evidence window.
+Every simulator restart requires a new run id and simulation instance id. Historical readiness reports remain evidence only and must never authorize a later flight. Simulation flight still requires the explicit `--allow-arm --simulation-only` gates; real aircraft remain manual-arm.
 
 Current Stage 7 entrypoints:
 
