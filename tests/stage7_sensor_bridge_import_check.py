@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib.util
 import sys
 from pathlib import Path
@@ -18,10 +19,21 @@ def load_bridge(module_path: Path):
     return module
 
 
+@contextlib.contextmanager
+def expect_failure(message_fragment: str):
+    try:
+        yield
+    except ValueError as exc:
+        assert message_fragment in str(exc), str(exc)
+    else:
+        raise AssertionError(f"expected ValueError containing {message_fragment!r}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--module", required=True)
     parser.add_argument("--psp-path", required=True)
+    parser.add_argument("--config", type=Path, default=Path("config/rflysim_sensor_uav2.json"))
     args = parser.parse_args()
 
     sdk_root = str(Path(args.psp_path) / "RflySimAPIs/RflySimSDK")
@@ -30,6 +42,25 @@ def main() -> int:
     sys.path[:] = [value for value in sys.path if value != sdk_ue]
 
     bridge = load_bridge(Path(args.module))
+
+    sensor = bridge.validate_sensor_config(args.config, 2, 10, 10009)
+    identity_args = argparse.Namespace(
+        copter_id=2,
+        sensor_seq_id=10,
+        udp_port=10009,
+        raw_lidar_topic="/rflysim/sensor10/mid360_lidar",
+        raw_imu_topic="/uav2/rflysim/imu_raw",
+        identity_topic="/uav2/rflysim/sensor_identity",
+    )
+    identity = bridge.build_identity(identity_args, sensor, "127.0.0.1")
+    assert identity["copter_id"] == 2
+    assert identity["sensor_seq_id"] == 10
+    assert identity["udp_port"] == 10009
+    assert identity["raw_lidar_topic"] == "/rflysim/sensor10/mid360_lidar"
+
+    with expect_failure("TargetCopter"):
+        bridge.validate_sensor_config(args.config, 1, 10, 10009)
+
     bridge.add_sdk_paths(args.psp_path)
     assert sdk_root in sys.path, "RflySimSDK root must be on sys.path for ctrl.* imports"
     assert sdk_ue in sys.path, "RflySimSDK ue path must be on sys.path for UE4CtrlAPI imports"
