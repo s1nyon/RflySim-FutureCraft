@@ -314,6 +314,12 @@ if (Test-Path -LiteralPath $fastLioRunnerPath) {
     if ($fastLioRunner -notmatch 'STAGE7_SENSOR_STARTUP_TIMEOUT_SEC:-120') {
         $contractErrors += 'stage7_live_fastlio_dual.sh must allow 120 seconds for bounded RflySim point-cloud initialization'
     }
+    if ($fastLioRunner -notmatch 'STAGE7_READINESS_TOPIC_TIMEOUT_SEC:-10') {
+        $contractErrors += 'stage7_live_fastlio_dual.sh must allow 10 seconds for each readiness topic during asymmetric dual-adapter startup'
+    }
+    if ($fastLioRunner -notmatch '--timeout-s "\$READINESS_TOPIC_TIMEOUT_SEC"') {
+        $contractErrors += 'stage7_live_fastlio_dual.sh must pass the bounded readiness topic timeout to the live sampler'
+    }
     if ($fastLioRunner -notmatch 'SENSOR_STARTUP_DEADLINE') {
         $contractErrors += 'stage7_live_fastlio_dual.sh must enforce the sensor startup timeout with a deadline'
     }

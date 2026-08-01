@@ -12,9 +12,14 @@ READINESS_REPORT="$RUN_DIR/sensor_readiness.json"
 READINESS_LOG="$RUN_DIR/sensor_readiness.log"
 FASTLIO_LOG="$RUN_DIR/fastlio_dual.log"
 SENSOR_STARTUP_TIMEOUT_SEC="${STAGE7_SENSOR_STARTUP_TIMEOUT_SEC:-120}"
+READINESS_TOPIC_TIMEOUT_SEC="${STAGE7_READINESS_TOPIC_TIMEOUT_SEC:-10}"
 
 if ! [[ "$SENSOR_STARTUP_TIMEOUT_SEC" =~ ^[1-9][0-9]*$ ]]; then
   echo "[ERROR] STAGE7_SENSOR_STARTUP_TIMEOUT_SEC must be a positive integer" >&2
+  exit 2
+fi
+if ! [[ "$READINESS_TOPIC_TIMEOUT_SEC" =~ ^[1-9][0-9]*$ ]]; then
+  echo "[ERROR] STAGE7_READINESS_TOPIC_TIMEOUT_SEC must be a positive integer" >&2
   exit 2
 fi
 
@@ -159,7 +164,7 @@ set +e
 python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/stage7_sensor_readiness.py" \
   --config "$PROJECT_DIR/config/stage7_live_slam_ego_swarm.json" \
   --backend ros \
-  --timeout-s 3 \
+  --timeout-s "$READINESS_TOPIC_TIMEOUT_SEC" \
   --run-id "$RUN_ID" \
   --simulation-instance-id "$SIMULATION_INSTANCE_ID" \
   --report "$READINESS_REPORT" 2>&1 | tee "$READINESS_LOG"
