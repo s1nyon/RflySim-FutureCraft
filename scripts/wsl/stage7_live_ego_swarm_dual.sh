@@ -10,11 +10,6 @@ READINESS_MAX_AGE_SEC="${STAGE7_READINESS_MAX_AGE_SEC:-120}"
 
 source /opt/ros/noetic/setup.bash
 source "$PROJECT_DIR/scripts/wsl/stage7_run_context.sh"
-if [ -f "$PROJECT_DIR/future_aircraft_ws/devel/setup.bash" ]; then
-  source "$PROJECT_DIR/future_aircraft_ws/devel/setup.bash"
-else
-  export ROS_PACKAGE_PATH="$PROJECT_DIR/future_aircraft_ws/src:${ROS_PACKAGE_PATH:-}"
-fi
 export ROS_MASTER_URI="${ROS_MASTER_URI:-http://127.0.0.1:11311}"
 export ROS_IP="${ROS_IP:-127.0.0.1}"
 
@@ -32,6 +27,11 @@ if [ ! -f "$EGO_SWARM_WSL_DIR/devel/setup.bash" ]; then
   exit 1
 fi
 source "$EGO_SWARM_WSL_DIR/devel/setup.bash"
+if [ -f "$PROJECT_DIR/future_aircraft_ws/devel/setup.bash" ]; then
+  source "$PROJECT_DIR/future_aircraft_ws/devel/setup.bash" --extend
+else
+  export ROS_PACKAGE_PATH="$PROJECT_DIR/future_aircraft_ws/src:${ROS_PACKAGE_PATH:-}"
+fi
 
 EGO_LOG="$STAGE7_RUN_DIR/ego_swarm_dual.log"
 exec roslaunch multi_uav_mission rflysim_ego_swarm_dual.launch 2>&1 | tee "$EGO_LOG"

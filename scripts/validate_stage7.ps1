@@ -361,6 +361,11 @@ if (Test-Path -LiteralPath $egoRunnerPath) {
     if ($egoRunner -notmatch 'stage7_load_run_context' -or $egoRunner -notmatch 'STAGE7_CURRENT_SIMULATION_INSTANCE_ID') {
         $contractErrors += 'ego-swarm runner must recompute the current PX4 simulation instance before readiness validation'
     }
+    $egoOverlayIndex = $egoRunner.IndexOf('source "$EGO_SWARM_WSL_DIR/devel/setup.bash"')
+    $projectOverlayAfterEgoIndex = $egoRunner.IndexOf('future_aircraft_ws/devel/setup.bash', [Math]::Max(0, $egoOverlayIndex))
+    if ($egoOverlayIndex -lt 0 -or $projectOverlayAfterEgoIndex -lt $egoOverlayIndex) {
+        $contractErrors += 'ego-swarm runner must restore the project ROS overlay after sourcing ego-planner-swarm'
+    }
 }
 
 $topicProbeRunnerPath = Join-Path $ProjectRoot 'scripts/run_stage7_topic_probe.bat'
