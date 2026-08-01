@@ -50,6 +50,9 @@ record_early_failure() {
   local exit_code=$?
   trap - ERR
   set +e
+  if declare -F safe_land_disarm >/dev/null 2>&1; then
+    safe_land_disarm || true
+  fi
   python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/stage7_flight_report.py" \
     --smoke-report "$SMOKE_REPORT" \
     --events "$EVENTS" \
@@ -73,6 +76,58 @@ else
 fi
 export ROS_MASTER_URI="${ROS_MASTER_URI:-http://127.0.0.1:11311}"
 export ROS_IP="${ROS_IP:-127.0.0.1}"
+
+safe_land_disarm() {
+  set +e
+  if ! command -v rosservice >/dev/null 2>&1; then
+    echo "[ERROR] rosservice unavailable; cannot run safe landing cleanup" >&2
+    return 1
+  fi
+
+  local uav state all_disarmed
+  for uav in uav1 uav2; do
+    state="$(timeout 3s rostopic echo -n 1 "/$uav/mavros/state" 2>/dev/null || true)"
+    if grep -q '^armed: True$' <<<"$state"; then
+      echo "[WARN] Requesting AUTO.LAND for $uav after flight-path failure"
+      rosservice call "/$uav/mavros/set_mode" 0 AUTO.LAND || true
+    fi
+  done
+
+  for _attempt in $(seq 1 30); do
+    all_disarmed=true
+    for uav in uav1 uav2; do
+      state="$(timeout 3s rostopic echo -n 1 "/$uav/mavros/state" 2>/dev/null || true)"
+      if ! grep -q '^armed: False$' <<<"$state"; then
+        all_disarmed=false
+      fi
+    done
+    if [ "$all_disarmed" = true ]; then
+      echo "[INFO] Both simulated vehicles are disarmed"
+      return 0
+    fi
+    sleep 1
+  done
+
+  local MAV_CMD_COMPONENT_ARM_DISARM=400
+  for uav in uav1 uav2; do
+    state="$(timeout 3s rostopic echo -n 1 "/$uav/mavros/state" 2>/dev/null || true)"
+    if grep -q '^armed: True$' <<<"$state"; then
+      echo "[WARN] Force-disarming $uav PX4 SITL after AUTO.LAND timeout"
+      rosservice call "/$uav/mavros/cmd/command" \
+        "{broadcast: false, command: $MAV_CMD_COMPONENT_ARM_DISARM, confirmation: 0, param1: 0.0, param2: 21196.0, param3: 0.0, param4: 0.0, param5: 0.0, param6: 0.0, param7: 0.0}" || true
+    fi
+  done
+  sleep 2
+
+  all_disarmed=true
+  for uav in uav1 uav2; do
+    state="$(timeout 3s rostopic echo -n 1 "/$uav/mavros/state" 2>/dev/null || true)"
+    if ! grep -q '^armed: False$' <<<"$state"; then
+      all_disarmed=false
+    fi
+  done
+  [ "$all_disarmed" = true ]
+}
 
 RUN_PHASE="sensor_readiness"
 python3 $PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/stage7_sensor_readiness.py --validate \
@@ -136,6 +191,10 @@ python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/mission_e
   --score "$SCORE" >"$EXECUTOR_LOG" 2>&1
 EXECUTOR_EXIT_CODE=$?
 
+if [ "$EXECUTOR_EXIT_CODE" -ne 0 ]; then
+  safe_land_disarm || true
+fi
+
 python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/stage7_flight_report.py" \
   --smoke-report "$SMOKE_REPORT" \
   --events "$EVENTS" \
@@ -150,6 +209,7 @@ REPORT_EXIT_CODE=$?
 set -e
 
 if [ "$REPORT_EXIT_CODE" -ne 0 ]; then
+  safe_land_disarm || true
   echo "[ERROR] Stage 7 flight failed; inspect $FLIGHT_REPORT and $EXECUTOR_LOG" >&2
   tail -n 40 "$EXECUTOR_LOG" >&2 || true
 fi

@@ -350,6 +350,15 @@ if (Test-Path -LiteralPath $flightRunnerPath) {
     if ($flightRunner -notmatch 'cleanup_keepalive') {
         $contractErrors += 'stage7_live_slam_ego_swarm_flight.sh must clean up setpoint keepalive processes'
     }
+    if ($flightRunner -notmatch 'safe_land_disarm') {
+        $contractErrors += 'stage7_live_slam_ego_swarm_flight.sh must land and disarm after an armed-path failure'
+    }
+    if ($flightRunner -notmatch 'MAV_CMD_COMPONENT_ARM_DISARM=400') {
+        $contractErrors += 'stage7 live flight failure cleanup must include the PX4 SITL force-disarm command as a bounded fallback'
+    }
+    if ($flightRunner -notmatch 'EXECUTOR_EXIT_CODE[\s\S]+safe_land_disarm') {
+        $contractErrors += 'stage7 live flight runner must invoke safe landing when the executor fails'
+    }
     if ($flightRunner -notmatch 'stage7_flight_plan\.py') {
         $contractErrors += 'stage7_live_slam_ego_swarm_flight.sh must generate the flight plan from the Stage 7 config'
     }
