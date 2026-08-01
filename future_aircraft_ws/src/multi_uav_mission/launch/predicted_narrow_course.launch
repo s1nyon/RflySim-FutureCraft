@@ -1,0 +1,12 @@
+<launch>
+  <arg name="spec" default="$(find multi_uav_mission)/../../../config/maps/predicted_narrow_course_v1.json" />
+  <arg name="topic" default="/predicted_narrow_course/global_cloud" />
+  <arg name="frame_id" default="world" />
+  <arg name="spacing_m" default="0.1" />
+
+  <node pkg="multi_uav_mission"
+        type="narrow_course_cloud_server.py"
+        name="predicted_narrow_course_cloud_server"
+        output="screen"
+        args="--spec $(arg spec) --topic $(arg topic) --frame-id $(arg frame_id) --spacing-m $(arg spacing_m)" />
+</launch>

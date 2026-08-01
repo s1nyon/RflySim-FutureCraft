@@ -17,6 +17,7 @@ catkin_install_python(PROGRAMS
   scripts/mavros_setpoint_keepalive.py
   scripts/mission_executor.py
   scripts/narrow_course_artifacts.py
+  scripts/narrow_course_cloud_server.py
   scripts/narrow_course_geometry.py
   scripts/narrow_course_ue_loader.py
   scripts/odom_frame_relay.py
