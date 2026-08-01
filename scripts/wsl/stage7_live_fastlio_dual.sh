@@ -103,7 +103,7 @@ nohup env ROS_NAMESPACE=/uav1 python3 \
   --imu-rate-hz 200 \
   --keepalive \
   __name:=rflysim_sensor_bridge \
-  /rflysim/imu:=/uav1/rflysim/imu_raw >"$RUN_DIR/uav1_sensor_bridge.log" 2>&1 &
+  /uav1/rflysim/imu:=/uav1/rflysim/imu_raw >"$RUN_DIR/uav1_sensor_bridge.log" 2>&1 &
 
 nohup env ROS_NAMESPACE=/uav2 python3 \
   "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_sensor_bridge.py" \
@@ -120,7 +120,7 @@ nohup env ROS_NAMESPACE=/uav2 python3 \
   --imu-rate-hz 200 \
   --keepalive \
   __name:=rflysim_sensor_bridge \
-  /rflysim/imu:=/uav2/rflysim/imu_raw >"$RUN_DIR/uav2_sensor_bridge.log" 2>&1 &
+  /uav2/rflysim/imu:=/uav2/rflysim/imu_raw >"$RUN_DIR/uav2_sensor_bridge.log" 2>&1 &
 
 RAW_TOPICS=(
   /uav1/rflysim/sensor_identity

@@ -297,6 +297,14 @@ if (Test-Path -LiteralPath $fastLioRunnerPath) {
             $contractErrors += "stage7 FAST-LIO runner missing isolated readiness pattern: $pattern"
         }
     }
+    foreach ($imuRemap in @(
+        '/uav1/rflysim/imu:=/uav1/rflysim/imu_raw',
+        '/uav2/rflysim/imu:=/uav2/rflysim/imu_raw'
+    )) {
+        if ($fastLioRunner -notmatch [regex]::Escape($imuRemap)) {
+            $contractErrors += "stage7 FAST-LIO runner must remap the namespaced SDK IMU source: $imuRemap"
+        }
+    }
     if ($fastLioRunner -notmatch 'topic_has_publisher') {
         $contractErrors += 'stage7_live_fastlio_dual.sh must validate ROS sensor topic publishers, not only sensor bridge process existence'
     }
