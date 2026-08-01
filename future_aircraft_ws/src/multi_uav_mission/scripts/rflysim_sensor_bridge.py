@@ -75,20 +75,35 @@ def publish_identity(identity: dict, identity_topic: str):
     return publisher
 
 
-def start_bridge(args, sensor: dict):
-    add_sdk_paths(args.psp_path)
-    import ReqCopterSim
-    import VisionCaptureApi
+def stop_bridge(bridge):
+    """Ask the SDK receiver threads to stop before this process exits."""
+    bridge.stopRun()
 
-    VisionCaptureApi.isEnableRosTrans = True
 
-    requester = ReqCopterSim.ReqCopterSim()
+def start_bridge(
+    args,
+    sensor: dict,
+    requester_factory=None,
+    bridge_factory=None,
+    identity_publisher=None,
+):
+    if requester_factory is None or bridge_factory is None:
+        add_sdk_paths(args.psp_path)
+        import ReqCopterSim
+        import VisionCaptureApi
+
+        VisionCaptureApi.isEnableRosTrans = True
+        requester_factory = requester_factory or ReqCopterSim.ReqCopterSim
+        bridge_factory = bridge_factory or VisionCaptureApi.VisionCaptureApi
+    identity_publisher = identity_publisher or publish_identity
+
+    requester = requester_factory()
     target_ip = requester.getSimIpID(args.copter_id)
-    identity = build_identity(args, sensor, target_ip)
-    identity_publisher = publish_identity(identity, args.identity_topic)
     requester.sendReSimIP(args.copter_id)
 
-    bridge = VisionCaptureApi.VisionCaptureApi(target_ip)
+    bridge = bridge_factory(target_ip)
+    identity = build_identity(args, sensor, target_ip)
+    identity_handle = identity_publisher(identity, args.identity_topic)
     if args.config:
         bridge.jsonLoad(args.change_mode, str(args.config))
     else:
@@ -96,7 +111,7 @@ def start_bridge(args, sensor: dict):
     bridge.sendReqToUE4(0, target_ip)
     bridge.startImgCap()
     bridge.sendImuReqCopterSim(args.copter_id, target_ip, args.imu_rate_hz)
-    return target_ip, identity_publisher
+    return target_ip, identity_handle, bridge
 
 
 def main(argv=None):
@@ -134,6 +149,8 @@ def main(argv=None):
     if invalid_unknown:
         parser.error(f"unrecognized arguments: {' '.join(invalid_unknown)}")
 
+    bridge_handle = None
+    identity_handle = None
     try:
         if args.config is None:
             raise ValueError("--config is required to validate bridge identity")
@@ -141,12 +158,7 @@ def main(argv=None):
             raise ValueError("--process-start-marker is required for run-scoped bridge identity")
         sensor = validate_sensor_config(args.config, args.copter_id, args.sensor_seq_id, args.udp_port)
 
-        import rospy
-
-        if not rospy.core.is_initialized():
-            rospy.init_node("rflysim_sensor_bridge", anonymous=False)
-
-        target_ip, identity_publisher = start_bridge(args, sensor)
+        target_ip, identity_handle, bridge_handle = start_bridge(args, sensor)
         print(f"[INFO] RflySim sensor bridge started for CopterSim {args.copter_id} at {target_ip}", flush=True)
         if args.keepalive:
             stop = False
@@ -159,10 +171,16 @@ def main(argv=None):
             signal.signal(signal.SIGTERM, _stop)
             while not stop:
                 time.sleep(1.0)
-        del identity_publisher
     except Exception as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
         return 1
+    finally:
+        if bridge_handle is not None:
+            try:
+                stop_bridge(bridge_handle)
+            except Exception as exc:
+                print(f"[WARN] cannot stop RflySim sensor bridge cleanly: {exc}", file=sys.stderr)
+        del identity_handle
     return 0
 
 

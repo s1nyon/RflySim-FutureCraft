@@ -63,6 +63,75 @@ def main() -> int:
     with expect_failure("TargetCopter"):
         bridge.validate_sensor_config(args.config, 1, 10, 10009)
 
+    events = []
+
+    class FakeRequester:
+        def __init__(self):
+            events.append("requester")
+
+        def getSimIpID(self, copter_id):
+            assert copter_id == 2
+            return "127.0.0.1"
+
+        def sendReSimIP(self, copter_id):
+            assert copter_id == 2
+            events.append("request_sim")
+
+    class FakeVisionBridge:
+        def __init__(self, target_ip):
+            assert target_ip == "127.0.0.1"
+            events.append("sdk_ros_init")
+
+        def jsonLoad(self, change_mode, config_path):
+            assert change_mode == 1
+            assert config_path == str(args.config)
+            events.append("json_load")
+
+        def sendReqToUE4(self, window_id, target_ip):
+            assert (window_id, target_ip) == (0, "127.0.0.1")
+            events.append("request_ue4")
+
+        def startImgCap(self):
+            events.append("start_capture")
+
+        def sendImuReqCopterSim(self, copter_id, target_ip, rate_hz):
+            assert (copter_id, target_ip, rate_hz) == (2, "127.0.0.1", 200)
+            events.append("request_imu")
+
+        def stopRun(self):
+            events.append("stop_bridge")
+
+    start_args = argparse.Namespace(
+        psp_path=Path(args.psp_path),
+        config=args.config,
+        change_mode=1,
+        copter_id=2,
+        sensor_seq_id=10,
+        udp_port=10009,
+        raw_lidar_topic="/rflysim/sensor10/mid360_lidar",
+        raw_imu_topic="/uav2/rflysim/imu_raw",
+        identity_topic="/uav2/rflysim/sensor_identity",
+        process_start_marker="run-1:uav2:bridge",
+        imu_rate_hz=200,
+    )
+
+    def fake_publish_identity(value, topic):
+        assert value["sensor_seq_id"] == 10
+        assert topic == "/uav2/rflysim/sensor_identity"
+        events.append("publish_identity")
+        return object()
+
+    _, _, bridge_handle = bridge.start_bridge(
+        start_args,
+        sensor,
+        requester_factory=FakeRequester,
+        bridge_factory=FakeVisionBridge,
+        identity_publisher=fake_publish_identity,
+    )
+    assert events.index("sdk_ros_init") < events.index("publish_identity"), events
+    bridge.stop_bridge(bridge_handle)
+    assert events[-1] == "stop_bridge", events
+
     bridge.add_sdk_paths(args.psp_path)
     assert sdk_root in sys.path, "RflySimSDK root must be on sys.path for ctrl.* imports"
     assert sdk_ue in sys.path, "RflySimSDK ue path must be on sys.path for UE4CtrlAPI imports"

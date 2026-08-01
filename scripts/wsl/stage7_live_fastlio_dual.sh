@@ -11,6 +11,12 @@ RUN_DIR="$OUTPUT_DIR/$RUN_ID"
 READINESS_REPORT="$RUN_DIR/sensor_readiness.json"
 READINESS_LOG="$RUN_DIR/sensor_readiness.log"
 FASTLIO_LOG="$RUN_DIR/fastlio_dual.log"
+SENSOR_STARTUP_TIMEOUT_SEC="${STAGE7_SENSOR_STARTUP_TIMEOUT_SEC:-120}"
+
+if ! [[ "$SENSOR_STARTUP_TIMEOUT_SEC" =~ ^[1-9][0-9]*$ ]]; then
+  echo "[ERROR] STAGE7_SENSOR_STARTUP_TIMEOUT_SEC must be a positive integer" >&2
+  exit 2
+fi
 
 mkdir -p "$RUN_DIR"
 source /opt/ros/noetic/setup.bash
@@ -38,8 +44,50 @@ topic_has_publisher() {
   [[ "$info" == *"Publishers:"* && "$info" != *"Publishers: None"* ]]
 }
 
-pkill -f '[r]flysim_sensor_bridge.py' >/dev/null 2>&1 || true
-sleep 1
+cleanup_sensor_bridges() {
+  local pattern='[r]flysim_sensor_bridge.py'
+  local cleanup_deadline
+  pkill -TERM -f "$pattern" >/dev/null 2>&1 || true
+  cleanup_deadline=$((SECONDS + 5))
+  while pgrep -f "$pattern" >/dev/null 2>&1 && (( SECONDS < cleanup_deadline )); do
+    sleep 1
+  done
+  if pgrep -f "$pattern" >/dev/null 2>&1; then
+    pkill -KILL -f "$pattern" >/dev/null 2>&1 || true
+    sleep 1
+  fi
+  if pgrep -f "$pattern" >/dev/null 2>&1; then
+    echo "[ERROR] stale RflySim sensor bridge processes survived cleanup" >&2
+    return 1
+  fi
+}
+
+FASTLIO_PID=""
+cleanup_stage7_run() {
+  set +e
+  if [[ -n "$FASTLIO_PID" ]] && kill -0 "$FASTLIO_PID" >/dev/null 2>&1; then
+    kill -TERM "$FASTLIO_PID" >/dev/null 2>&1
+    for _attempt in $(seq 1 5); do
+      if ! kill -0 "$FASTLIO_PID" >/dev/null 2>&1; then
+        break
+      fi
+      sleep 1
+    done
+    if kill -0 "$FASTLIO_PID" >/dev/null 2>&1; then
+      kill -KILL "$FASTLIO_PID" >/dev/null 2>&1
+    fi
+    wait "$FASTLIO_PID" >/dev/null 2>&1
+  fi
+  cleanup_sensor_bridges
+}
+
+handle_shutdown() {
+  exit 130
+}
+
+cleanup_sensor_bridges
+trap cleanup_stage7_run EXIT
+trap handle_shutdown INT TERM
 nohup env ROS_NAMESPACE=/uav1 python3 \
   "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_sensor_bridge.py" \
   --psp-path "${PSP_PATH_LINUX:-/mnt/d/PX4PSP}" \
@@ -82,7 +130,8 @@ RAW_TOPICS=(
   /rflysim/sensor10/mid360_lidar
   /uav2/rflysim/imu_raw
 )
-for _attempt in $(seq 1 20); do
+SENSOR_STARTUP_DEADLINE=$((SECONDS + SENSOR_STARTUP_TIMEOUT_SEC))
+while (( SECONDS < SENSOR_STARTUP_DEADLINE )); do
   all_ready=true
   for topic in "${RAW_TOPICS[@]}"; do
     if ! topic_has_publisher "$topic"; then

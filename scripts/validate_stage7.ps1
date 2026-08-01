@@ -303,6 +303,22 @@ if (Test-Path -LiteralPath $fastLioRunnerPath) {
     if ($fastLioRunner -notmatch 'Publishers: None') {
         $contractErrors += 'stage7_live_fastlio_dual.sh must detect stale sensor bridge registrations with no ROS publishers'
     }
+    if ($fastLioRunner -notmatch 'STAGE7_SENSOR_STARTUP_TIMEOUT_SEC:-120') {
+        $contractErrors += 'stage7_live_fastlio_dual.sh must allow 120 seconds for bounded RflySim point-cloud initialization'
+    }
+    if ($fastLioRunner -notmatch 'SENSOR_STARTUP_DEADLINE') {
+        $contractErrors += 'stage7_live_fastlio_dual.sh must enforce the sensor startup timeout with a deadline'
+    }
+    foreach ($cleanupPattern in @('cleanup_sensor_bridges', 'pkill -KILL', 'pgrep -f')) {
+        if ($fastLioRunner -notmatch $cleanupPattern) {
+            $contractErrors += "stage7_live_fastlio_dual.sh missing bounded stale bridge cleanup: $cleanupPattern"
+        }
+    }
+    foreach ($lifecyclePattern in @('cleanup_stage7_run', 'FASTLIO_PID', 'kill -TERM "\$FASTLIO_PID"', 'handle_shutdown')) {
+        if ($fastLioRunner -notmatch $lifecyclePattern) {
+            $contractErrors += "stage7_live_fastlio_dual.sh missing owned FAST-LIO lifecycle cleanup: $lifecyclePattern"
+        }
+    }
 }
 
 $flightRunnerPath = Join-Path $ProjectRoot 'scripts/wsl/stage7_live_slam_ego_swarm_flight.sh'
