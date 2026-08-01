@@ -16,17 +16,54 @@
   "takeoff_zone": {
     "bounds": [-2.5, 2.5, -2.5, 2.5]
   },
+  "arena_objects": [
+    {
+      "name": "arena_floor",
+      "id": 12780,
+      "category": "arena_floor",
+      "center": [7.9, 2.2, 0.0],
+      "size": [30.8, 19.4, 0.05]
+    },
+    {
+      "name": "boundary_west",
+      "id": 12781,
+      "category": "boundary_wall",
+      "center": [-7.5, 2.2, 0.0],
+      "size": [0.2, 19.4, 2.5]
+    },
+    {
+      "name": "boundary_east",
+      "id": 12782,
+      "category": "boundary_wall",
+      "center": [23.3, 2.2, 0.0],
+      "size": [0.2, 19.4, 2.5]
+    },
+    {
+      "name": "boundary_south",
+      "id": 12783,
+      "category": "boundary_wall",
+      "center": [7.9, -7.5, 0.0],
+      "size": [30.8, 0.2, 2.5]
+    },
+    {
+      "name": "boundary_north",
+      "id": 12784,
+      "category": "boundary_wall",
+      "center": [7.9, 11.9, 0.0],
+      "size": [30.8, 0.2, 2.5]
+    }
+  ],
   "zone_surfaces": [
     {
       "name": "takeoff_surface",
       "id": 12790,
-      "center": [0.0, 0.0, -0.01],
+      "center": [0.0, 0.0, 0.0],
       "size": [5.0, 5.0, 0.02]
     },
     {
       "name": "landing_surface",
       "id": 12791,
-      "center": [15.8, 4.9, -0.01],
+      "center": [15.8, 4.9, 0.0],
       "size": [5.0, 4.0, 0.02]
     }
   ],
@@ -87,13 +124,13 @@
     {
       "name": "platform1",
       "id": 12800,
-      "center": [16.0, 3.9, 0.05],
+      "center": [16.0, 3.9, 0.0],
       "size": [0.8, 0.8, 0.1]
     },
     {
       "name": "platform2",
       "id": 12801,
-      "center": [16.0, 5.9, 0.05],
+      "center": [16.0, 5.9, 0.0],
       "size": [0.8, 0.8, 0.1]
     }
   ],

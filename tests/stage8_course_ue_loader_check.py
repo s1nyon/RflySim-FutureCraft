@@ -51,7 +51,7 @@ def main() -> int:
     model = geometry.load_course(args.spec)
     commands = loader.build_ue_commands(model)
 
-    assert len(commands) == len(model.scene_objects) == 26
+    assert len(commands) == len(model.scene_objects) == 31
     assert [command.copter_id for command in commands] == [
         obj.copter_id for obj in model.scene_objects
     ]
@@ -64,7 +64,7 @@ def main() -> int:
     assert first_wall.position_ned == geometry.enu_to_ned(source_wall.center)
     assert math.isclose(first_wall.yaw_ned, geometry.yaw_enu_to_ned(source_wall.yaw_rad))
     assert first_wall.scale == source_wall.size
-    assert first_wall.position_ned.z == -1.25
+    assert first_wall.position_ned.z == 0.0
 
     client = FakeUEClient()
     original_sleep = loader.time.sleep
@@ -101,7 +101,7 @@ def main() -> int:
         "clear_first": True,
         "id_range": [12000, 12999],
         "mode": "live",
-        "object_count": 26,
+        "object_count": 31,
         "spec_sha256": model.spec_sha256,
         "window_id": 0,
     }
@@ -132,7 +132,7 @@ def main() -> int:
     assert dry_receipt["mode"] == "dry-run"
     assert dry_receipt["change_map"] is False
     assert dry_receipt["window_id"] == 2
-    assert dry_receipt["object_count"] == 26
+    assert dry_receipt["object_count"] == 31
     assert dry_receipt["commands"][0]["position_ned"] == list(commands[0].position_ned)
 
     explicit_dry_run = subprocess.run(

@@ -58,12 +58,24 @@ def main() -> int:
     assert math.isclose(report["takeoff_separation_m"], 1.4, abs_tol=1e-9)
     assert math.isclose(report["platform_spacing_m"], 2.0, abs_tol=1e-9)
     assert report["object_count"] == len(model.scene_objects)
+    assert report["object_count"] == 31
     assert len(model.wall_boxes) >= 10
+    assert len(model.arena_objects) == 5
+    arena_floor = next(obj for obj in model.arena_objects if obj.category == "arena_floor")
+    assert arena_floor.center == module.Vec3(7.9, 2.2, 0.0)
+    assert arena_floor.size == module.Vec3(30.8, 19.4, 0.05)
+    boundary_walls = [obj for obj in model.arena_objects if obj.category == "boundary_wall"]
+    assert len(boundary_walls) == 4
+    assert all(obj.size.z == 2.5 for obj in boundary_walls)
+    assert all(obj.center.z == 0.0 for obj in boundary_walls)
     assert [surface.copter_id for surface in model.zone_surfaces] == [12790, 12791]
     assert [platform.copter_id for platform in model.landing_platforms] == [12800, 12801]
     assert max(wall.copter_id for wall in model.wall_boxes) < 12790
     assert all(wall.size.z == 2.5 for wall in model.wall_boxes)
     assert all(wall.size.y == 0.15 for wall in model.wall_boxes)
+    assert all(wall.center.z == 0.0 for wall in model.wall_boxes)
+    assert all(surface.center.z == 0.0 for surface in model.zone_surfaces)
+    assert all(platform.center.z == 0.0 for platform in model.landing_platforms)
 
     ned = module.enu_to_ned(module.Vec3(3.0, 4.0, 2.0))
     assert ned == module.Vec3(4.0, 3.0, -2.0)

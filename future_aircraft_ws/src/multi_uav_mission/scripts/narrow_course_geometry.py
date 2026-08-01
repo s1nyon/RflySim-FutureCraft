@@ -56,12 +56,13 @@ class CourseModel:
     raw: Dict[str, Any]
     takeoff_poses: Tuple[Pose, ...]
     wall_boxes: Tuple[BoxObject, ...]
+    arena_objects: Tuple[BoxObject, ...]
     zone_surfaces: Tuple[BoxObject, ...]
     landing_platforms: Tuple[BoxObject, ...]
 
     @property
     def scene_objects(self) -> Tuple[BoxObject, ...]:
-        return self.wall_boxes + self.zone_surfaces + self.landing_platforms
+        return self.wall_boxes + self.arena_objects + self.zone_surfaces + self.landing_platforms
 
 
 def _finite_number(value: Any, label: str) -> float:
@@ -140,7 +141,7 @@ def _line_wall_boxes(
                 center=Vec3(
                     center_x + sign * nx * offset,
                     center_y + sign * ny * offset,
-                    wall["height"] / 2.0,
+                    0.0,
                 ),
                 size=Vec3(length, wall["thickness"], wall["height"]),
                 yaw_rad=yaw,
@@ -186,7 +187,7 @@ def _arc_wall_boxes(
                     center=Vec3(
                         (p0[0] + p1[0]) / 2.0,
                         (p0[1] + p1[1]) / 2.0,
-                        wall["height"] / 2.0,
+                        0.0,
                     ),
                     size=Vec3(
                         _distance2(p0, p1), wall["thickness"], wall["height"]
@@ -299,6 +300,9 @@ def load_course(path: Path) -> CourseModel:
     zone_surfaces = tuple(
         _box_from_json(item, "zone_surface") for item in data["zone_surfaces"]
     )
+    arena_objects = tuple(
+        _box_from_json(item, str(item["category"])) for item in data["arena_objects"]
+    )
     platforms = tuple(
         _box_from_json(item, "landing_platform") for item in data["landing_platforms"]
     )
@@ -311,7 +315,7 @@ def load_course(path: Path) -> CourseModel:
         for item in data["takeoff_poses"]
     )
 
-    all_objects = tuple(wall_boxes) + zone_surfaces + platforms
+    all_objects = tuple(wall_boxes) + arena_objects + zone_surfaces + platforms
     object_ids = [obj.copter_id for obj in all_objects]
     if len(set(object_ids)) != len(object_ids):
         raise CourseValidationError("duplicate object ID")
@@ -354,6 +358,7 @@ def load_course(path: Path) -> CourseModel:
         raw=data,
         takeoff_poses=poses,
         wall_boxes=tuple(wall_boxes),
+        arena_objects=arena_objects,
         zone_surfaces=zone_surfaces,
         landing_platforms=platforms,
     )
