@@ -86,6 +86,8 @@ Latest live evidence, 2026-07-30:
 
 Latest Stage 7 live evidence, 2026-08-01:
 
+- Full dual-UAV flight run `stage7-20260801T101757Z-2497`, simulation instance `px4-bb8094a4352d452e`, completed successfully after `ce7e0a7` shortened the wall-adjacent navigation segment and made reached-goal verification independent of a future planner command. Both UAVs armed in OFFBOARD, took off to 1 m, completed the short ego-swarm segment, landed, and disarmed. `flight_report.json` recorded `ready: true`, `collision_count: 0`, `offboard_loss_count: 0`, `timeout_count: 0`, minimum separation `0.85 m`, and duration `23.5 s`.
+
 - Run `stage7-20260801T082349Z-6875`, simulation instance `px4-ac4e722ff724856a`, saved `logs/stage7_live/stage7-20260801T082349Z-6875/sensor_readiness.json`.
 - `identity`, `schema`, `freshness`, `isolation`, and `stationary_stability` all passed; both MAVROS states remained `armed: false`, `mode: MANUAL`, and the report returned `ready: true`.
 - Each adapter accepted 17,408 points with the exact 32-byte Ouster field layout. Two independent `run_mapping_online` processes remained active and the FAST-LIO log had no missing-field, fatal, process-died, or segmentation errors.

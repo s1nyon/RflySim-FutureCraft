@@ -12,6 +12,8 @@ AI 工作说明请见 [.agents/AGENT2READ.md](.agents/AGENT2READ.md)。
 
 ## 当前进度
 
+2026-08-01 的完整双机 live flight run `stage7-20260801T101757Z-2497` 已通过：两机完成 OFFBOARD、仿真解锁、1 m 起飞、ego-swarm 短航段、AUTO.LAND 与最终 disarm。报告为 `ready=true`，碰撞、OFFBOARD 丢失和超时均为 0，最小机间距 0.85 m，总时长 23.5 s。对应修复提交为 `ce7e0a7`。
+
 已经完成的离线阶段：
 
 - Stage 0：工作区与启动脚本骨架
