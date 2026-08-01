@@ -71,9 +71,17 @@ def main() -> int:
     loader.time.sleep = lambda _seconds: None
     try:
         receipt = loader.load_scene(client, model, clear_first=True, window_id=0)
+        explicit_client = FakeUEClient()
+        explicit_receipt = loader.load_scene(
+            explicit_client,
+            model,
+            clear_first=False,
+            window_id=2,
+            change_map=True,
+        )
     finally:
         loader.time.sleep = original_sleep
-    assert client.map_commands == [("RflyChangeMapbyName VisionRingBlank", 0)]
+    assert client.map_commands == []
     assert client.destroyed == [(value, 0) for value in range(12000, 13000)]
     assert len(client.created) == len(commands) * 3
     for index, command in enumerate(commands):
@@ -89,6 +97,7 @@ def main() -> int:
         assert call["windowID"] == 0
     assert receipt == {
         "base_map": "VisionRingBlank",
+        "change_map": False,
         "clear_first": True,
         "id_range": [12000, 12999],
         "mode": "live",
@@ -96,6 +105,10 @@ def main() -> int:
         "spec_sha256": model.spec_sha256,
         "window_id": 0,
     }
+    assert explicit_client.map_commands == [("RflyChangeMapbyName VisionRingBlank", 2)]
+    assert explicit_client.destroyed == []
+    assert len(explicit_client.created) == len(commands) * 3
+    assert explicit_receipt["change_map"] is True
 
     dry_env = dict(os.environ)
     dry_env["RFLYSIM_ROOT"] = str(args.spec.parent / "does-not-exist")
@@ -117,9 +130,27 @@ def main() -> int:
     assert dry_run.returncode == 0, dry_run.stderr
     dry_receipt = json.loads(dry_run.stdout)
     assert dry_receipt["mode"] == "dry-run"
+    assert dry_receipt["change_map"] is False
     assert dry_receipt["window_id"] == 2
     assert dry_receipt["object_count"] == 26
     assert dry_receipt["commands"][0]["position_ned"] == list(commands[0].position_ned)
+
+    explicit_dry_run = subprocess.run(
+        [
+            sys.executable,
+            str(args.loader_module),
+            "--spec",
+            str(args.spec),
+            "--dry-run",
+            "--change-map",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=dry_env,
+    )
+    assert explicit_dry_run.returncode == 0, explicit_dry_run.stderr
+    assert json.loads(explicit_dry_run.stdout)["change_map"] is True
 
     print("stage8 course UE loader: PASS")
     return 0

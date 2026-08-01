@@ -42,10 +42,17 @@ def build_ue_commands(model: CourseModel) -> List[UECommand]:
     ]
 
 
-def load_scene(client, model: CourseModel, clear_first: bool, window_id: int) -> Dict[str, object]:
+def load_scene(
+    client,
+    model: CourseModel,
+    clear_first: bool,
+    window_id: int,
+    change_map: bool = False,
+) -> Dict[str, object]:
     commands = build_ue_commands(model)
-    client.sendUE4Cmd("RflyChangeMapbyName {}".format(model.base_map), window_id)
-    time.sleep(3.0)
+    if change_map:
+        client.sendUE4Cmd("RflyChangeMapbyName {}".format(model.base_map), window_id)
+        time.sleep(3.0)
     if clear_first:
         for copter_id in range(model.owned_id_range[0], model.owned_id_range[1] + 1):
             client.sendUE4Destroy(copter_id, window_id)
@@ -64,6 +71,7 @@ def load_scene(client, model: CourseModel, clear_first: bool, window_id: int) ->
             time.sleep(0.02)
     return {
         "base_map": model.base_map,
+        "change_map": change_map,
         "clear_first": clear_first,
         "id_range": list(model.owned_id_range),
         "mode": "live",
@@ -107,6 +115,7 @@ def main() -> int:
     parser.add_argument("--spec", type=Path, required=True)
     parser.add_argument("--validation-report", type=Path)
     parser.add_argument("--window-id", type=int, default=-1)
+    parser.add_argument("--change-map", action="store_true")
     parser.add_argument("--no-clear", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
@@ -123,6 +132,7 @@ def main() -> int:
     if args.dry_run:
         receipt = {
             "base_map": model.base_map,
+            "change_map": args.change_map,
             "clear_first": not args.no_clear,
             "commands": [_command_dict(command) for command in commands],
             "id_range": list(model.owned_id_range),
@@ -137,6 +147,7 @@ def main() -> int:
             model,
             clear_first=not args.no_clear,
             window_id=args.window_id,
+            change_map=args.change_map,
         )
     print(json.dumps(receipt, indent=2, sort_keys=True))
     return 0
