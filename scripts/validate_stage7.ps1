@@ -369,6 +369,12 @@ if (Test-Path -LiteralPath $topicProbeRunnerPath) {
     if ($topicProbeRunner -notmatch 'stage7_load_run_context' -or $topicProbeRunner -notmatch 'STAGE7_CURRENT_SIMULATION_INSTANCE_ID') {
         $contractErrors += 'topic probe runner must recompute the current PX4 simulation instance before readiness validation'
     }
+    if ($topicProbeRunner -notmatch '--readiness-max-age-s') {
+        $contractErrors += 'topic probe runner must pass an explicit readiness age limit'
+    }
+    if ($topicProbeRunner -notmatch 'STAGE7_READINESS_MAX_AGE_SEC:-120') {
+        $contractErrors += 'topic probe runner must use the same 120-second readiness window as the ego-swarm runner'
+    }
 }
 
 foreach ($relativePath in @(
@@ -527,6 +533,10 @@ if ($missing.Count -eq 0) {
         $output = & cmd /c $fullPath --dry-run 2>&1
         if ($LASTEXITCODE -ne 0) {
             $contractErrors += "$script --dry-run failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
+        }
+        elseif ($script -eq 'scripts/run_stage7_topic_probe.bat' -and
+                ($output -join ' ') -notmatch 'readiness max age: 120 seconds') {
+            $contractErrors += 'topic probe dry-run must expose its 120-second readiness age limit'
         }
     }
 }
