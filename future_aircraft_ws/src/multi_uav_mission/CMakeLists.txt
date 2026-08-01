@@ -25,6 +25,7 @@ catkin_install_python(PROGRAMS
   scripts/stage7_flight_plan.py
   scripts/stage7_flight_report.py
   scripts/stage7_run_artifacts.py
+  scripts/stage7_sensor_readiness.py
   scripts/stage7_topic_probe.py
   scripts/target_provider.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

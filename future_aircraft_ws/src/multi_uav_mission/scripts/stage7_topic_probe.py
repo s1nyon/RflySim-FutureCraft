@@ -13,6 +13,25 @@ from pathlib import Path
 LAYERS = ("sensor_bridge", "fast_lio", "mavros", "ego_swarm", "flight_gate")
 
 
+def evaluate_saved_readiness(report, run_id, simulation_instance_id, max_age_sec, now):
+    from stage7_sensor_readiness import validate_report
+
+    if report is None:
+        errors = ["readiness report is unavailable"]
+    else:
+        errors = validate_report(
+            report, run_id, simulation_instance_id, max_age_sec, now
+        )
+    return {
+        "kind": "readiness_report",
+        "name": "isolated_sensor_readiness",
+        "target": "current_run_scoped_report",
+        "ready": not errors,
+        "status": "readiness_accepted" if not errors else "readiness_rejected",
+        "detail": "; ".join(errors),
+    }
+
+
 def load_config(path):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -26,7 +45,24 @@ def validate_config(config):
     if config.get("mission_mode") != "live_slam_ego_swarm_flight":
         raise ValueError("mission_mode must be 'live_slam_ego_swarm_flight'")
     uavs = config.get("uavs")
-    shared_sensor_bridge = config.get("fast_lio", {}).get("sensor_topic_scope") == "shared_rflysim_bridge"
+    bridges = config.get("fast_lio", {}).get("bridges")
+    if not isinstance(bridges, list) or len(bridges) != 2:
+        raise ValueError("stage7 config must contain two fast_lio.bridges entries")
+    bridge_by_uav = {bridge.get("uav_id"): bridge for bridge in bridges}
+    if set(bridge_by_uav) != {"uav1", "uav2"}:
+        raise ValueError("fast_lio.bridges must identify uav1 and uav2")
+    for field in (
+        "copter_id",
+        "sensor_seq_id",
+        "udp_port",
+        "raw_lidar_topic",
+        "raw_imu_topic",
+        "lidar_topic",
+        "imu_topic",
+        "identity_topic",
+    ):
+        if len({bridge.get(field) for bridge in bridges}) != 2:
+            raise ValueError(f"fast_lio.bridges must have distinct {field}")
     if not isinstance(uavs, list) or len(uavs) != 2:
         raise ValueError("stage7 config must contain two UAV entries")
     for index, uav in enumerate(uavs):
@@ -55,17 +91,43 @@ def validate_config(config):
                 if value != namespace:
                     raise ValueError(f"uavs[{index}].namespace mismatch: {value}")
                 continue
-            if shared_sensor_bridge and field in ("sensor_lidar_topic", "sensor_imu_topic"):
-                continue
             if not value.startswith(namespace + "/"):
                 raise ValueError(f"uavs[{index}].{field} must be under {namespace}: {value}")
+        bridge = bridge_by_uav.get(uav["uav_id"])
+        if bridge is None:
+            raise ValueError(f"uavs[{index}] has no matching fast_lio bridge")
+        if uav["sensor_lidar_topic"] != bridge["lidar_topic"]:
+            raise ValueError(f"uavs[{index}].sensor_lidar_topic must use normalized bridge output")
+        if uav["sensor_imu_topic"] != bridge["imu_topic"]:
+            raise ValueError(f"uavs[{index}].sensor_imu_topic must use normalized bridge output")
 
 
-def build_report(config, backend="dry-run", timeout_s=3.0):
+def build_report(
+    config,
+    backend="dry-run",
+    timeout_s=3.0,
+    readiness_report=None,
+    run_id=None,
+    simulation_instance_id=None,
+    readiness_max_age_s=30.0,
+):
     validate_config(config)
-    checker = DryRunChecker() if backend == "dry-run" else RosChecker(timeout_s=timeout_s)
+    checker = (
+        DryRunChecker()
+        if backend == "dry-run"
+        else RosChecker(
+            timeout_s=timeout_s,
+            readiness_report=readiness_report,
+            run_id=run_id,
+            simulation_instance_id=simulation_instance_id,
+            readiness_max_age_s=readiness_max_age_s,
+        )
+    )
     uav_reports = []
     layer_checks = {layer: [] for layer in LAYERS}
+    bridge_by_uav = {
+        bridge["uav_id"]: bridge for bridge in config["fast_lio"]["bridges"]
+    }
 
     for uav in sorted(config["uavs"], key=lambda item: item["uav_id"]):
         report = {
@@ -73,7 +135,7 @@ def build_report(config, backend="dry-run", timeout_s=3.0):
             "namespace": uav["namespace"],
             "layers": {},
         }
-        for layer, checks in _checks_for_uav(uav, config).items():
+        for layer, checks in _checks_for_uav(uav, bridge_by_uav[uav["uav_id"]], config).items():
             results = [checker.evaluate(check) for check in checks]
             report["layers"][layer] = {
                 "ready": all(item["ready"] for item in results),
@@ -90,6 +152,17 @@ def build_report(config, backend="dry-run", timeout_s=3.0):
         }
         for layer, checks in layer_checks.items()
     }
+    readiness_ready = any(
+        check.get("kind") == "readiness_report" and check.get("ready")
+        for check in layers["flight_gate"]["checks"]
+    )
+    if backend == "ros" and not readiness_ready:
+        layers["ego_swarm"]["ready"] = False
+        layers["flight_gate"]["ready"] = False
+        for uav_report in uav_reports:
+            uav_report["layers"]["ego_swarm"]["ready"] = False
+            uav_report["layers"]["flight_gate"]["ready"] = False
+            uav_report["ready"] = False
 
     return {
         "backend": backend,
@@ -100,12 +173,22 @@ def build_report(config, backend="dry-run", timeout_s=3.0):
     }
 
 
-def _checks_for_uav(uav, config):
+def _checks_for_uav(uav, bridge, config):
     policy = config.get("simulation_arm_policy", {})
     return {
         "sensor_bridge": [
-            _planned("topic_message", "lidar", uav["sensor_lidar_topic"]),
-            _planned("topic_message", "imu", uav["sensor_imu_topic"]),
+            _planned("topic_message", "identity", bridge["identity_topic"]),
+            _planned("topic_message", "raw_lidar", bridge["raw_lidar_topic"]),
+            _planned("topic_message", "raw_imu", bridge["raw_imu_topic"]),
+            _planned("topic_message", "normalized_lidar", bridge["lidar_topic"]),
+            _planned("topic_message", "normalized_imu", bridge["imu_topic"]),
+            _planned(
+                "topic_message",
+                "adapter_diagnostics",
+                bridge.get(
+                    "diagnostics_topic", f"/{uav['uav_id']}/rflysim/adapter_diagnostics"
+                ),
+            ),
         ],
         "fast_lio": [
             _planned("topic_message", "slam_odom_to_fcu", uav["slam_odom_to_fcu_topic"]),
@@ -132,7 +215,8 @@ def _checks_for_uav(uav, config):
                     "required_flags": ["--allow-arm", "--simulation-only"],
                 },
                 "observed": policy,
-            }
+            },
+            _planned("readiness_report", "isolated_sensor_readiness", "current_run_scoped_report"),
         ],
     }
 
@@ -154,7 +238,14 @@ class DryRunChecker:
 
 
 class RosChecker:
-    def __init__(self, timeout_s):
+    def __init__(
+        self,
+        timeout_s,
+        readiness_report,
+        run_id,
+        simulation_instance_id,
+        readiness_max_age_s,
+    ):
         try:
             import rospy
         except ImportError as exc:
@@ -162,6 +253,10 @@ class RosChecker:
 
         self.rospy = rospy
         self.timeout_s = float(timeout_s)
+        self.readiness_report = readiness_report
+        self.run_id = run_id
+        self.simulation_instance_id = simulation_instance_id
+        self.readiness_max_age_s = float(readiness_max_age_s)
         if not rospy.core.is_initialized():
             rospy.init_node("future_aircraft_stage7_topic_probe", anonymous=True)
         self._verify_ros_master()
@@ -189,6 +284,14 @@ class RosChecker:
             return self._wait_for_service(check)
         if kind == "config_gate":
             return self._evaluate_gate(check)
+        if kind == "readiness_report":
+            return evaluate_saved_readiness(
+                self.readiness_report,
+                self.run_id,
+                self.simulation_instance_id,
+                self.readiness_max_age_s,
+                time.time(),
+            )
         raise ValueError(f"unsupported check kind '{kind}'")
 
     def _wait_for_message(self, check):
@@ -266,10 +369,25 @@ def main(argv=None):
     parser.add_argument("--backend", choices=("dry-run", "ros"), default="dry-run", help="Probe backend")
     parser.add_argument("--timeout-s", type=float, default=3.0, help="ROS wait timeout for each check")
     parser.add_argument("--report", required=True, type=Path, help="Path to write the probe report")
+    parser.add_argument("--readiness-report", type=Path, help="Current run-scoped sensor readiness report")
+    parser.add_argument("--run-id", help="Expected Stage 7 run ID")
+    parser.add_argument("--simulation-instance-id", help="Expected simulator instance ID")
+    parser.add_argument("--readiness-max-age-s", type=float, default=30.0)
     args = parser.parse_args(argv)
 
     try:
-        report = build_report(load_config(args.config), backend=args.backend, timeout_s=args.timeout_s)
+        readiness_report = None
+        if args.readiness_report and args.readiness_report.exists():
+            readiness_report = load_config(args.readiness_report)
+        report = build_report(
+            load_config(args.config),
+            backend=args.backend,
+            timeout_s=args.timeout_s,
+            readiness_report=readiness_report,
+            run_id=args.run_id,
+            simulation_instance_id=args.simulation_instance_id,
+            readiness_max_age_s=args.readiness_max_age_s,
+        )
         write_json(args.report, report)
         if not report["ready"]:
             print("[ERROR] one or more Stage 7 probe layers are not ready", file=sys.stderr)
