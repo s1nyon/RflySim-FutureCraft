@@ -20,10 +20,16 @@ set STAGE1_BOOT_WAIT_SECONDS=20
 
 
 rem Keep both UAVs inside the ChallengeMap origin area while avoiding overlap.
-set STAGE2_POS_X_STR=0.5,1.5
-set STAGE2_POS_Y_STR=1.5,1.5
-set STAGE2_YAW_STR=0,0
+if not defined STAGE2_POS_X_STR set STAGE2_POS_X_STR=0.5,1.5
+if not defined STAGE2_POS_Y_STR set STAGE2_POS_Y_STR=1.5,1.5
+if not defined STAGE2_YAW_STR set STAGE2_YAW_STR=0,0
 set STAGE2_BOOT_WAIT_SECONDS=30
+
+if not defined RFLYSIM_UE4_MAP set RFLYSIM_UE4_MAP=ChallengeMap
+if not defined PREDICTED_COURSE_BASE_MAP set PREDICTED_COURSE_BASE_MAP=VisionRingBlank
+if not defined PREDICTED_COURSE_POS_X_STR set PREDICTED_COURSE_POS_X_STR=-0.7,0.7
+if not defined PREDICTED_COURSE_POS_Y_STR set PREDICTED_COURSE_POS_Y_STR=0,0
+if not defined PREDICTED_COURSE_YAW_STR set PREDICTED_COURSE_YAW_STR=90,90
 
 set PYTHON_EXE=%RFLYSIM_ROOT%\Python38\python.exe
 
