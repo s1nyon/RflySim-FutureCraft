@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "course_name": "predicted_narrow_course_v1",
-  "base_map": "VisionRingBlank",
+  "base_map": "SLAMScene",
   "frame": "ENU",
   "units": "m",
   "owned_id_range": [12000, 12999],
@@ -14,42 +14,42 @@
     "horizontal_diameter": 0.45
   },
   "takeoff_zone": {
-    "bounds": [-2.5, 2.5, -2.5, 2.5]
+    "bounds": [13.5, 18.5, -2.5, 2.5]
   },
   "arena_objects": [
     {
       "name": "arena_floor",
       "id": 12780,
       "category": "arena_floor",
-      "center": [7.9, 2.2, 0.0],
+      "center": [23.9, 2.2, 0.0],
       "size": [30.8, 19.4, 0.05]
     },
     {
       "name": "boundary_west",
       "id": 12781,
       "category": "boundary_wall",
-      "center": [-7.5, 2.2, 0.0],
+      "center": [8.5, 2.2, 0.0],
       "size": [0.2, 19.4, 2.5]
     },
     {
       "name": "boundary_east",
       "id": 12782,
       "category": "boundary_wall",
-      "center": [23.3, 2.2, 0.0],
+      "center": [39.3, 2.2, 0.0],
       "size": [0.2, 19.4, 2.5]
     },
     {
       "name": "boundary_south",
       "id": 12783,
       "category": "boundary_wall",
-      "center": [7.9, -7.5, 0.0],
+      "center": [23.9, -7.5, 0.0],
       "size": [30.8, 0.2, 2.5]
     },
     {
       "name": "boundary_north",
       "id": 12784,
       "category": "boundary_wall",
-      "center": [7.9, 11.9, 0.0],
+      "center": [23.9, 11.9, 0.0],
       "size": [30.8, 0.2, 2.5]
     }
   ],
@@ -57,80 +57,80 @@
     {
       "name": "takeoff_surface",
       "id": 12790,
-      "center": [0.0, 0.0, 0.0],
+      "center": [16.0, 0.0, 0.0],
       "size": [5.0, 5.0, 0.02]
     },
     {
       "name": "landing_surface",
       "id": 12791,
-      "center": [15.8, 4.9, 0.0],
+      "center": [31.8, 4.9, 0.0],
       "size": [5.0, 4.0, 0.02]
     }
   ],
   "takeoff_poses": [
     {
       "name": "uav1",
-      "position": [0.0, -0.7, 0.0],
+      "position": [16.0, -0.7, 0.0],
       "yaw": 0.0
     },
     {
       "name": "uav2",
-      "position": [0.0, 0.7, 0.0],
+      "position": [16.0, 0.7, 0.0],
       "yaw": 0.0
     }
   ],
   "centreline": [
     {
       "kind": "line",
-      "start": [2.5, 0.0],
-      "end": [7.0, 0.0],
+      "start": [18.5, 0.0],
+      "end": [23.0, 0.0],
       "width": 1.5
     },
     {
       "kind": "arc",
-      "start": [7.0, 0.0],
-      "end": [7.9, 0.9],
-      "center": [7.0, 0.9],
+      "start": [23.0, 0.0],
+      "end": [23.9, 0.9],
+      "center": [23.0, 0.9],
       "radius": 0.9,
       "turn": "left",
       "width": 1.5
     },
     {
       "kind": "line",
-      "start": [7.9, 0.9],
-      "end": [7.9, 4.0],
+      "start": [23.9, 0.9],
+      "end": [23.9, 4.0],
       "width": 1.4
     },
     {
       "kind": "arc",
-      "start": [7.9, 4.0],
-      "end": [8.8, 4.9],
-      "center": [8.8, 4.0],
+      "start": [23.9, 4.0],
+      "end": [24.8, 4.9],
+      "center": [24.8, 4.0],
       "radius": 0.9,
       "turn": "right",
       "width": 1.4
     },
     {
       "kind": "line",
-      "start": [8.8, 4.9],
-      "end": [13.3, 4.9],
+      "start": [24.8, 4.9],
+      "end": [29.3, 4.9],
       "width": 1.5
     }
   ],
   "landing_zone": {
-    "bounds": [13.3, 18.3, 2.9, 6.9]
+    "bounds": [29.3, 34.3, 2.9, 6.9]
   },
   "landing_platforms": [
     {
       "name": "platform1",
       "id": 12800,
-      "center": [16.0, 3.9, 0.0],
+      "center": [32.0, 3.9, 0.0],
       "size": [0.8, 0.8, 0.1]
     },
     {
       "name": "platform2",
       "id": 12801,
-      "center": [16.0, 5.9, 0.0],
+      "center": [32.0, 5.9, 0.0],
       "size": [0.8, 0.8, 0.1]
     }
   ],
@@ -139,8 +139,8 @@
     "native_size": [1.0, 1.0, 1.0]
   },
   "terrain": {
-    "bounds": [-25.0, 25.0, -25.0, 25.0],
-    "pixels": [513, 513],
+    "bounds": [-25.0, 55.0, -25.0, 25.0],
+    "pixels": [801, 501],
     "height_raw": 32768
   }
 }

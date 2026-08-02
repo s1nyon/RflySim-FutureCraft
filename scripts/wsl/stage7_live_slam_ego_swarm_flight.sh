@@ -137,8 +137,12 @@ python3 $PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/stage7_sen
   --max-age-sec "$READINESS_MAX_AGE_SEC"
 
 KEEPALIVE_PIDS=()
+WATCHDOG_PIDS=()
 cleanup_keepalive() {
   for pid in "${KEEPALIVE_PIDS[@]}"; do
+    kill "$pid" >/dev/null 2>&1 || true
+  done
+  for pid in "${WATCHDOG_PIDS[@]}"; do
     kill "$pid" >/dev/null 2>&1 || true
   done
 }
@@ -156,9 +160,21 @@ start_keepalive() {
     --initial-x "$x" \
     --initial-y "$y" \
     --initial-z "$z" \
+    --min-x -1 --max-x 17 --min-y -2 --max-y 7 --min-z 0 --max-z 2 \
     --yaw 0.0 \
     --rate-hz 20 >"$OUTPUT_DIR/$(basename "$topic" | tr '/' '_')_keepalive.log" 2>&1 &
   KEEPALIVE_PIDS+=("$!")
+}
+
+start_watchdog() {
+  local uav="$1"
+  nohup python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/course_geofence_watchdog.py" \
+    --state-topic "/$uav/mavros/state" --odom-topic "/$uav/mavros/odometry/in" \
+    --set-mode-service "/$uav/mavros/set_mode" \
+    --min-x -1 --max-x 17 --min-y -2 --max-y 7 --min-z 0 --max-z 2 \
+    --max-speed-mps 2 --max-odom-age-s 0.5 \
+    >"$OUTPUT_DIR/${uav}_geofence_watchdog.log" 2>&1 &
+  WATCHDOG_PIDS+=("$!")
 }
 
 RUN_PHASE="smoke_check"
@@ -169,13 +185,16 @@ python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/ego_swarm
   --report "$SMOKE_REPORT"
 
 RUN_PHASE="setpoint_bridge"
-start_keepalive "/uav1/mavros/setpoint_raw/local" "/uav1/planning/pos_cmd" 0.5 1.5 1.0
-start_keepalive "/uav2/mavros/setpoint_raw/local" "/uav2/planning/pos_cmd" 1.5 1.5 1.0
+start_keepalive "/uav1/mavros/setpoint_raw/local" "/uav1/planning/pos_cmd" 0.0 0.0 1.0
+start_keepalive "/uav2/mavros/setpoint_raw/local" "/uav2/planning/pos_cmd" 0.0 0.0 1.0
+start_watchdog uav1
+start_watchdog uav2
 sleep 2
 
 RUN_PHASE="plan_generation"
 python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/stage7_flight_plan.py" \
   --config "$PROJECT_DIR/config/stage7_live_slam_ego_swarm.json" \
+  --course-spec "$PROJECT_DIR/config/maps/predicted_narrow_course_v1.json" \
   --output "$PLAN"
 
 RUN_PHASE="executor"

@@ -90,6 +90,13 @@ def main() -> int:
     assert converted_values(converted, "<H", 24) == [0, 0, 0, 0]
     assert converted_values(converted, "<I", 28) == [1000, 2000, 3000, 3000]
 
+    sparse_raw = raw[:-16]
+    sparse = module.convert_cloud(sparse_raw, RAW_FIELDS, 3, 1, 16, 2, 2, 0.1)
+    assert sparse.accepted_points == 3
+    assert len(sparse.data) == 3 * 32
+    assert converted_values(sparse, "<I", 16) == [0, 50000000, 100000000]
+    assert converted_values(sparse, "<B", 22) == [0, 1, 0]
+
     nan_raw = struct.pack("<ffff", math.nan, 0.0, 0.0, 1.0)
     expect_value_error(
         lambda: module.convert_cloud(nan_raw, RAW_FIELDS, 1, 1, 16, 1, 1, 0.1),
@@ -101,7 +108,12 @@ def main() -> int:
     )
     expect_value_error(
         lambda: module.convert_cloud(raw[:-16], RAW_FIELDS, 4, 1, 16, 2, 2, 0.1),
-        "point count",
+        "data length",
+    )
+    oversized_raw = raw + raw[:16]
+    expect_value_error(
+        lambda: module.convert_cloud(oversized_raw, RAW_FIELDS, 5, 1, 16, 2, 2, 0.1),
+        "configured scan capacity",
     )
     expect_value_error(
         lambda: module.convert_cloud(raw, RAW_FIELDS[:-1], 4, 1, 16, 2, 2, 0.1),

@@ -50,7 +50,7 @@ def main() -> int:
     report = module.course_report(model)
 
     assert model.course_name == "predicted_narrow_course_v1"
-    assert model.base_map == "VisionRingBlank"
+    assert model.base_map == "SLAMScene"
     assert model.owned_id_range == (12000, 12999)
     assert math.isclose(report["centreline_length_m"], 14.927433, abs_tol=1e-6)
     assert report["minimum_clear_width_m"] == 1.4
@@ -62,7 +62,7 @@ def main() -> int:
     assert len(model.wall_boxes) >= 10
     assert len(model.arena_objects) == 5
     arena_floor = next(obj for obj in model.arena_objects if obj.category == "arena_floor")
-    assert arena_floor.center == module.Vec3(7.9, 2.2, 0.0)
+    assert arena_floor.center == module.Vec3(23.9, 2.2, 0.0)
     assert arena_floor.size == module.Vec3(30.8, 19.4, 0.05)
     boundary_walls = [obj for obj in model.arena_objects if obj.category == "boundary_wall"]
     assert len(boundary_walls) == 4
@@ -76,6 +76,15 @@ def main() -> int:
     assert all(wall.center.z == 0.0 for wall in model.wall_boxes)
     assert all(surface.center.z == 0.0 for surface in model.zone_surfaces)
     assert all(platform.center.z == 0.0 for platform in model.landing_platforms)
+    assert [pose.position for pose in model.takeoff_poses] == [
+        module.Vec3(16.0, -0.7, 0.0),
+        module.Vec3(16.0, 0.7, 0.0),
+    ]
+    assert model.raw["centreline"][0]["start"] == [18.5, 0.0]
+    assert model.raw["centreline"][-1]["end"] == [29.3, 4.9]
+    assert [platform.center.x for platform in model.landing_platforms] == [32.0, 32.0]
+    assert model.raw["terrain"]["bounds"] == [-25.0, 55.0, -25.0, 25.0]
+    assert model.raw["terrain"]["pixels"] == [801, 501]
 
     ned = module.enu_to_ned(module.Vec3(3.0, 4.0, 2.0))
     assert ned == module.Vec3(4.0, 3.0, -2.0)
@@ -98,7 +107,7 @@ def main() -> int:
         module,
         raw,
         lambda data: data["landing_platforms"][1].__setitem__(
-            "center", [16.0, 5.4, 0.05]
+            "center", [32.0, 5.4, 0.05]
         ),
         "platform spacing",
     )
@@ -120,7 +129,7 @@ def main() -> int:
         module,
         raw,
         lambda data: data["takeoff_poses"][0].__setitem__(
-            "position", [2.5, 0.75, 0.0]
+            "position", [18.5, 0.75, 0.0]
         ),
         "takeoff clearance",
     )

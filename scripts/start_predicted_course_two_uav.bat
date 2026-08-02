@@ -18,17 +18,25 @@ if /I "%~1"=="--dry-run" (
   echo [DRY-RUN] 1. generate_predicted_narrow_course.bat
   call "%SCRIPT_DIR%generate_predicted_narrow_course.bat" --dry-run
   if errorlevel 1 exit /b %ERRORLEVEL%
-  echo [DRY-RUN] 2. start_two_uav.bat
+  echo [DRY-RUN] 2. deploy_predicted_course_terrain.bat
+  call "%SCRIPT_DIR%deploy_predicted_course_terrain.bat" --dry-run
+  if errorlevel 1 exit /b %ERRORLEVEL%
+  echo [DRY-RUN] 3. start_two_uav.bat
   call "%SCRIPT_DIR%start_two_uav.bat" --dry-run
   if errorlevel 1 exit /b %ERRORLEVEL%
-  echo [DRY-RUN] 3. load_predicted_narrow_course.bat
+  echo [DRY-RUN] 4. wait %PREDICTED_COURSE_SCENE_WAIT_SECONDS% seconds before scene load
+  echo [DRY-RUN] 5. load_predicted_narrow_course.bat
   call "%SCRIPT_DIR%load_predicted_narrow_course.bat" --dry-run
   exit /b %ERRORLEVEL%
 )
 
 call "%SCRIPT_DIR%generate_predicted_narrow_course.bat"
 if errorlevel 1 exit /b %ERRORLEVEL%
+call "%SCRIPT_DIR%deploy_predicted_course_terrain.bat"
+if errorlevel 1 exit /b %ERRORLEVEL%
 call "%SCRIPT_DIR%start_two_uav.bat"
+if errorlevel 1 exit /b %ERRORLEVEL%
+powershell -NoLogo -NoProfile -Command "Start-Sleep -Seconds ([int]$env:PREDICTED_COURSE_SCENE_WAIT_SECONDS)"
 if errorlevel 1 exit /b %ERRORLEVEL%
 call "%SCRIPT_DIR%load_predicted_narrow_course.bat"
 exit /b %ERRORLEVEL%

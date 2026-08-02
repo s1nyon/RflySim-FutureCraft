@@ -75,15 +75,17 @@ def convert_cloud(
     layout_height: int,
     scan_period_sec: float,
 ) -> ConvertedCloud:
-    """Convert one complete organized RflySim scan to faster_lio's Ouster layout."""
+    """Convert one valid, possibly sparse RflySim scan to faster_lio's Ouster layout."""
     if point_step != RAW_POINT_STEP:
         raise ValueError(f"point_step must be {RAW_POINT_STEP}, got {point_step}")
     _validate_fields(fields)
     if width <= 0 or height <= 0 or layout_width <= 0 or layout_height <= 0:
         raise ValueError("cloud and configured layout dimensions must be positive")
     point_count = width * height
-    if point_count != layout_width * layout_height or len(data) != point_count * point_step:
-        raise ValueError("point count does not match data or configured scan layout")
+    if len(data) != point_count * point_step:
+        raise ValueError("data length does not match cloud point count")
+    if point_count > layout_width * layout_height:
+        raise ValueError("point count exceeds configured scan capacity")
     if layout_width > 256:
         raise ValueError("layout width exceeds uint8 ring capacity")
     if not math.isfinite(scan_period_sec) or scan_period_sec <= 0.0:

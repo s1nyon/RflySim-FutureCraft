@@ -5,6 +5,7 @@ $python = 'D:\PX4PSP\Python38\python.exe'
 $geometry = Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\narrow_course_geometry.py'
 $artifacts = Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\narrow_course_artifacts.py'
 $loader = Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\narrow_course_ue_loader.py'
+$lidarProbe = Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\stage8_dynamic_lidar_probe.py'
 $cloud = Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\narrow_course_cloud_server.py'
 $launch = Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\launch\predicted_narrow_course.launch'
 $spec = Join-Path $projectRoot 'config\maps\predicted_narrow_course_v1.json'
@@ -38,6 +39,21 @@ try {
         '--geometry-module', $geometry,
         '--loader-module', $loader,
         '--spec', $spec
+    )
+    Invoke-Checked $python @(
+        'tests\stage8_dynamic_lidar_probe_check.py', '--module', $lidarProbe
+    )
+    Invoke-Checked $python @(
+        'tests\stage8_geofence_check.py',
+        '--module', (Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\course_geofence.py'),
+        '--watchdog', (Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\course_geofence_watchdog.py')
+    )
+    Invoke-Checked $python @(
+        'tests\stage8_course_flight_plan_check.py',
+        '--plan-module', (Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\stage7_flight_plan.py'),
+        '--config', (Join-Path $projectRoot 'config\stage7_live_slam_ego_swarm.json'),
+        '--course-spec', $spec,
+        '--dual-launch', (Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\launch\rflysim_ego_swarm_dual.launch')
     )
     Invoke-Checked $python @('tests\stage8_course_launch_check.py', '--project-root', $projectRoot)
 

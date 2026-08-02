@@ -39,6 +39,13 @@ WSL-side conventions used by the scripts:
 
 ## Current State
 
+Latest Stage 8 live evidence, 2026-08-02:
+
+- The tunnel-flight run `stage7-20260802T102552Z-8563` did **not** pass. Sensor readiness and the layered topic probe passed, but UAV2 was observed armed in `ALTCTL` at approximately 11.257 m and left the effective localization area. The executor later failed UAV1 navigation with `planner_commands=0` and `last_distance=2.596m`.
+- Both simulated vehicles were confirmed disarmed at the end. Do not report tunnel traversal or landing success from this run.
+- Two preceding watchdog defects were reproduced and corrected in the working tree: duplicate ROS node names and an immediate non-OFFBOARD decision during the post-arm state-message race. These corrections pass the focused geofence check and offline Stage 8 validation, but they do not resolve the altitude/planner failure.
+- Read [docs/stage8_tunnel_live_issue_2026-08-02.md](../docs/stage8_tunnel_live_issue_2026-08-02.md) before the next live attempt. Capture actual planner z, MAVROS raw setpoint z/frame/type mask, odometry frame direction, PX4 mode-loss reason, and watchdog decisions before changing the route or relaxing safety bounds.
+
 Validated offline stages:
 
 - Stage 0: workspace and launch scaffold

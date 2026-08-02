@@ -3,6 +3,8 @@
 
 import argparse
 import json
+
+from course_geofence import Geofence, validate_point
 import sys
 import time
 from pathlib import Path
@@ -557,6 +559,7 @@ def _validate_timeout(action):
 
 def execute_plan(plan, backend, allow_arm=False, simulation_only=False, live_config=None, target_results=None):
     validate_plan(plan)
+    geofence = Geofence(**plan["geofence"]) if plan.get("geofence") else None
     validate_live_config(live_config)
     if target_results is not None:
         target_results = validate_target_results(target_results)
@@ -569,6 +572,8 @@ def execute_plan(plan, backend, allow_arm=False, simulation_only=False, live_con
     min_distance_emitted = False
 
     for action in plan["actions"]:
+        if geofence is not None and "goal" in action:
+            validate_point((action["goal"]["x"], action["goal"]["y"], action["goal"]["z"]), geofence)
         stage = action["stage"]
         if stage != current_stage:
             if current_stage is not None:

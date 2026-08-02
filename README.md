@@ -12,6 +12,8 @@ AI 工作说明请见 [.agents/AGENT2READ.md](.agents/AGENT2READ.md)。
 
 ## 当前进度
 
+> **Stage 8 live 状态（2026-08-02）：未通过。** 双机穿隧道 run `stage7-20260802T102552Z-8563` 虽通过 readiness 和 topic probe，但 UAV2 异常升高至约 11.257 m、切入 ALTCTL 并离开有效定位范围；随后执行器还记录 UAV1 `planner_commands=0`、导航超时。两机最终均已解除解锁。本次问题、已修正的 watchdog 前置竞态和下次排查顺序见 [docs/stage8_tunnel_live_issue_2026-08-02.md](docs/stage8_tunnel_live_issue_2026-08-02.md)。不得将当前状态描述为双机已完成穿隧道和降落。
+
 2026-08-01 的完整双机 live flight run `stage7-20260801T101757Z-2497` 已通过：两机完成 OFFBOARD、仿真解锁、1 m 起飞、ego-swarm 短航段、AUTO.LAND 与最终 disarm。报告为 `ready=true`，碰撞、OFFBOARD 丢失和超时均为 0，最小机间距 0.85 m，总时长 23.5 s。对应修复提交为 `ce7e0a7`。
 
 已经完成的离线阶段：

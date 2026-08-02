@@ -4,9 +4,19 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
+
+try:
+    from course_geofence import Geofence, GeofenceViolation, validate_point
+except ModuleNotFoundError:
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from course_geofence import Geofence, GeofenceViolation, validate_point
 
 
-def position_command_to_target(command, position_target_type):
+def position_command_to_target(command, position_target_type, fence=None):
+    if fence is not None:
+        validate_point((command.position.x, command.position.y, command.position.z), fence)
     target = position_target_type()
     target.coordinate_frame = position_target_type.FRAME_LOCAL_NED
     target.type_mask = (
@@ -48,6 +58,12 @@ def main(argv=None):
     parser.add_argument("--initial-z", required=True, type=float)
     parser.add_argument("--yaw", type=float, default=0.0)
     parser.add_argument("--rate-hz", type=float, default=20.0)
+    parser.add_argument("--min-x", type=float, default=-1.0)
+    parser.add_argument("--max-x", type=float, default=17.0)
+    parser.add_argument("--min-y", type=float, default=-2.0)
+    parser.add_argument("--max-y", type=float, default=7.0)
+    parser.add_argument("--min-z", type=float, default=0.0)
+    parser.add_argument("--max-z", type=float, default=2.0)
     args = parser.parse_args(argv)
     if args.rate_hz < 20.0:
         parser.error("--rate-hz must be at least 20")
@@ -57,6 +73,7 @@ def main(argv=None):
     from quadrotor_msgs.msg import PositionCommand
 
     rospy.init_node("future_aircraft_ego_swarm_setpoint_bridge", anonymous=True)
+    fence = Geofence(args.min_x, args.max_x, args.min_y, args.max_y, args.min_z, args.max_z)
     publisher = rospy.Publisher(args.setpoint_topic, PositionTarget, queue_size=10)
     state = {
         "target": initial_target(
@@ -69,7 +86,10 @@ def main(argv=None):
     }
 
     def planner_callback(command):
-        state["target"] = position_command_to_target(command, PositionTarget)
+        try:
+            state["target"] = position_command_to_target(command, PositionTarget, fence)
+        except GeofenceViolation as exc:
+            rospy.logerr_throttle(1.0, "planner command rejected by course geofence: %s", exc)
 
     rospy.Subscriber(args.planner_topic, PositionCommand, planner_callback, queue_size=10)
     rate = rospy.Rate(args.rate_hz)

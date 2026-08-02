@@ -75,8 +75,8 @@ def main() -> int:
         manifest_b = artifacts.generate_artifacts(args.spec, output_b)
 
         expected_names = [
-            "VisionRingBlank.png",
-            "VisionRingBlank.txt",
+            "SLAMScene.png",
+            "SLAMScene.txt",
             "course_preview.svg",
             "planning_points.json",
             "validation_report.json",
@@ -101,14 +101,14 @@ def main() -> int:
         assert points_doc["points"] == sorted(points_doc["points"])
         assert all(len(point) == 3 for point in points_doc["points"])
 
-        png = (output_a / "VisionRingBlank.png").read_bytes()
+        png = (output_a / "SLAMScene.png").read_bytes()
         assert png[24] == 16 and png[25] == 0
-        width, height, samples = decode_png16(output_a / "VisionRingBlank.png")
-        assert (width, height) == (513, 513)
-        assert len(samples) == 513 * 513
+        width, height, samples = decode_png16(output_a / "SLAMScene.png")
+        assert (width, height) == (801, 501)
+        assert len(samples) == 801 * 501
         assert set(samples) == {32768}
-        assert (output_a / "VisionRingBlank.txt").read_text(encoding="ascii").strip() == (
-            "2500,2500,0,-2500,-2500,0,0,0,0"
+        assert (output_a / "SLAMScene.txt").read_text(encoding="ascii").strip() == (
+            "5500,2500,0,-2500,-2500,0,0,0,0"
         )
 
         svg = (output_a / "course_preview.svg").read_text(encoding="utf-8")

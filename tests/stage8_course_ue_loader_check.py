@@ -96,7 +96,7 @@ def main() -> int:
         assert call["Scale"] == list(command.scale)
         assert call["windowID"] == 0
     assert receipt == {
-        "base_map": "VisionRingBlank",
+        "base_map": "SLAMScene",
         "change_map": False,
         "clear_first": True,
         "id_range": [12000, 12999],
@@ -105,7 +105,7 @@ def main() -> int:
         "spec_sha256": model.spec_sha256,
         "window_id": 0,
     }
-    assert explicit_client.map_commands == [("RflyChangeMapbyName VisionRingBlank", 2)]
+    assert explicit_client.map_commands == [("RflyChangeMapbyName SLAMScene", 2)]
     assert explicit_client.destroyed == []
     assert len(explicit_client.created) == len(commands) * 3
     assert explicit_receipt["change_map"] is True

@@ -11,8 +11,8 @@
   <arg name="uav2_pos_cmd_topic" default="/uav2/planning/pos_cmd"/>
   <arg name="uav2_goal_topic" default="/uav2/planning/goal"/>
 
-  <arg name="map_size_x" default="12.0"/>
-  <arg name="map_size_y" default="8.0"/>
+  <arg name="map_size_x" default="40.0"/>
+  <arg name="map_size_y" default="20.0"/>
   <arg name="map_size_z" default="2.0"/>
   <arg name="max_vel" default="0.3"/>
   <arg name="max_acc" default="0.5"/>

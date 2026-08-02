@@ -8,19 +8,61 @@ import json
 from pathlib import Path
 
 
-def build_plan(config):
+def _course_routes(course):
+    poses = {item["name"]: item["position"] for item in course["takeoff_poses"]}
+    platforms = course["landing_platforms"]
+    if set(poses) != {"uav1", "uav2"} or len(platforms) < 2:
+        raise ValueError("course flight requires uav1/uav2 poses and two landing platforms")
+    centreline = course["centreline"]
+    if not centreline:
+        raise ValueError("course flight requires a non-empty centreline")
+    world_waypoints = [centreline[0]["start"]] + [item["end"] for item in centreline]
+    routes = {}
+    for index, uav_id in enumerate(("uav1", "uav2")):
+        origin = poses[uav_id]
+        destination = platforms[index]["center"]
+        points = world_waypoints + [destination[:2]]
+        routes[uav_id] = [
+            {
+                "x": float(point[0]) - float(origin[0]),
+                "y": float(point[1]) - float(origin[1]),
+                "z": 1.0,
+                "yaw": 0.0,
+            }
+            for point in points
+        ]
+    return routes
+
+
+def build_plan(config, course=None):
     uavs = {item["uav_id"]: item for item in config["uavs"]}
     if set(uavs) != {"uav1", "uav2"}:
         raise ValueError("Stage 7 flight plan requires exactly uav1 and uav2")
 
-    takeoff_goals = {
-        "uav1": {"x": 0.5, "y": 1.5, "z": 1.0, "yaw": 0.0},
-        "uav2": {"x": 1.5, "y": 1.5, "z": 1.0, "yaw": 0.0},
-    }
-    navigation_goals = {
-        "uav1": {"x": 0.7, "y": 1.5, "z": 1.0, "yaw": 0.0},
-        "uav2": {"x": 1.7, "y": 1.5, "z": 1.0, "yaw": 0.0},
-    }
+    geofence = None
+    if course is None:
+        takeoff_goals = {
+            "uav1": {"x": 0.5, "y": 1.5, "z": 1.0, "yaw": 0.0},
+            "uav2": {"x": 1.5, "y": 1.5, "z": 1.0, "yaw": 0.0},
+        }
+        navigation_routes = {
+            "uav1": [{"x": 0.7, "y": 1.5, "z": 1.0, "yaw": 0.0}],
+            "uav2": [{"x": 1.7, "y": 1.5, "z": 1.0, "yaw": 0.0}],
+        }
+        mission_name = "stage7_live_slam_ego_swarm_flight"
+    else:
+        takeoff_goals = {
+            "uav1": {"x": 0.0, "y": 0.0, "z": 1.0, "yaw": 0.0},
+            "uav2": {"x": 0.0, "y": 0.0, "z": 1.0, "yaw": 0.0},
+        }
+        navigation_routes = _course_routes(course)
+        mission_name = "stage8_predicted_course_tunnel_flight"
+        geofence = {
+            "min_x": -1.0, "max_x": 17.0,
+            "min_y": -2.0, "max_y": 7.0,
+            "min_z": 0.0, "max_z": 2.0,
+            "max_speed_mps": 2.0, "max_odom_age_s": 0.5,
+        }
     actions = []
 
     def add(stage, action, uav_id=None, **values):
@@ -77,26 +119,50 @@ def build_plan(config):
             timeout_s=8,
             rate_hz=20,
         )
-    for uav_id in ("uav1", "uav2"):
-        add(
-            "collaborative_navigate",
-            "publish_planner_goal",
-            uav_id,
-            topic=uavs[uav_id]["planner_goal_topic"],
-            goal=navigation_goals[uav_id],
-            timeout_s=5,
-        )
-    for uav_id in ("uav1", "uav2"):
-        add(
-            "collaborative_navigate",
-            "verify_planned_navigation",
-            uav_id,
-            planner_cmd_topic=uavs[uav_id]["planner_cmd_topic"],
-            mavros_odom_topic=uavs[uav_id]["mavros_feedback_odom_topic"],
-            goal=navigation_goals[uav_id],
-            tolerance_m=0.3,
-            timeout_s=30,
-        )
+    if course is None:
+        for uav_id in ("uav1", "uav2"):
+            goal = navigation_routes[uav_id][0]
+            add(
+                "collaborative_navigate",
+                "publish_planner_goal",
+                uav_id,
+                topic=uavs[uav_id]["planner_goal_topic"],
+                goal=goal,
+                timeout_s=5,
+            )
+        for uav_id in ("uav1", "uav2"):
+            goal = navigation_routes[uav_id][0]
+            add(
+                "collaborative_navigate",
+                "verify_planned_navigation",
+                uav_id,
+                planner_cmd_topic=uavs[uav_id]["planner_cmd_topic"],
+                mavros_odom_topic=uavs[uav_id]["mavros_feedback_odom_topic"],
+                goal=goal,
+                tolerance_m=0.3,
+                timeout_s=30,
+            )
+    else:
+        for uav_id in ("uav1", "uav2"):
+            for goal in navigation_routes[uav_id]:
+                add(
+                    "collaborative_navigate",
+                    "publish_planner_goal",
+                    uav_id,
+                    topic=uavs[uav_id]["planner_goal_topic"],
+                    goal=goal,
+                    timeout_s=5,
+                )
+                add(
+                    "collaborative_navigate",
+                    "verify_planned_navigation",
+                    uav_id,
+                    planner_cmd_topic=uavs[uav_id]["planner_cmd_topic"],
+                    mavros_odom_topic=uavs[uav_id]["mavros_feedback_odom_topic"],
+                    goal=goal,
+                    tolerance_m=0.3,
+                    timeout_s=45,
+                )
     for uav_id in ("uav1", "uav2"):
         add(
             "aruco_landing",
@@ -108,16 +174,23 @@ def build_plan(config):
             timeout_s=30,
         )
     add("mission_report", "write_score_report", score_output="score_summary.json", timeout_s=1)
-    return {"mission_name": "stage7_live_slam_ego_swarm_flight", "actions": actions}
+    plan = {"mission_name": mission_name, "actions": actions}
+    if geofence is not None:
+        plan["geofence"] = geofence
+    return plan
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True, type=Path)
+    parser.add_argument("--course-spec", type=Path)
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args(argv)
     config = json.loads(args.config.read_text(encoding="utf-8"))
-    plan = build_plan(config)
+    course = None
+    if args.course_spec is not None:
+        course = json.loads(args.course_spec.read_text(encoding="utf-8"))
+    plan = build_plan(config, course)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return 0
