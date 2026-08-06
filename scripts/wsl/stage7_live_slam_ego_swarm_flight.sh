@@ -164,7 +164,7 @@ start_keepalive() {
     --initial-x "$x" \
     --initial-y "$y" \
     --initial-z "$z" \
-    --min-x -1 --max-x 17 --min-y -2 --max-y 7 --min-z 0 --max-z 2 \
+    --min-x -1 --max-x 17 --min-y -2 --max-y 7 --min-z -0.5 --max-z 2 \
     --yaw 0.0 \
     --rate-hz 20 >"$OUTPUT_DIR/$(basename "$topic" | tr '/' '_')_keepalive.log" 2>&1 &
   KEEPALIVE_PIDS+=("$!")
@@ -175,7 +175,7 @@ start_watchdog() {
   nohup python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/course_geofence_watchdog.py" \
     --state-topic "/$uav/mavros/state" --odom-topic "/$uav/mavros/local_position/odom" \
     --set-mode-service "/$uav/mavros/set_mode" \
-    --min-x -1 --max-x 17 --min-y -2 --max-y 7 --min-z 0 --max-z 2 \
+    --min-x -1 --max-x 17 --min-y -2 --max-y 7 --min-z -0.5 --max-z 2 \
     --max-speed-mps 2 --max-odom-age-s 0.5 \
     --output "$OUTPUT_DIR/${uav}_watchdog_events.jsonl" \
     >"$OUTPUT_DIR/${uav}_geofence_watchdog.log" 2>&1 &

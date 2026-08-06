@@ -51,7 +51,7 @@ def main() -> int:
     model = geometry.load_course(args.spec)
     commands = loader.build_ue_commands(model)
 
-    assert len(commands) == len(model.scene_objects) == 31
+    assert len(commands) == len(model.scene_objects) == 34
     assert [command.copter_id for command in commands] == [
         obj.copter_id for obj in model.scene_objects
     ]
@@ -79,9 +79,19 @@ def main() -> int:
             window_id=2,
             change_map=True,
         )
+        no_collision_client = FakeUEClient()
+        no_collision_receipt = loader.load_scene(
+            no_collision_client,
+            model,
+            clear_first=False,
+            window_id=0,
+            enable_collision=False,
+        )
     finally:
         loader.time.sleep = original_sleep
-    assert client.map_commands == []
+    assert client.map_commands == [("RflyChangeViewKeyCmd P", 0)], (
+        "default live load must enable the RflySim collision engine"
+    )
     assert client.destroyed == [(value, 0) for value in range(12000, 13000)]
     assert len(client.created) == len(commands) * 3
     for index, command in enumerate(commands):
@@ -101,14 +111,21 @@ def main() -> int:
         "clear_first": True,
         "id_range": [12000, 12999],
         "mode": "live",
-        "object_count": 31,
+        "object_count": 34,
+        "collision_enabled": True,
         "spec_sha256": model.spec_sha256,
         "window_id": 0,
     }
-    assert explicit_client.map_commands == [("RflyChangeMapbyName SLAMScene", 2)]
+    assert explicit_client.map_commands == [
+        ("RflyChangeMapbyName SLAMScene", 2),
+        ("RflyChangeViewKeyCmd P", 2),
+    ]
     assert explicit_client.destroyed == []
     assert len(explicit_client.created) == len(commands) * 3
     assert explicit_receipt["change_map"] is True
+    assert explicit_receipt["collision_enabled"] is True
+    assert no_collision_client.map_commands == []
+    assert no_collision_receipt["collision_enabled"] is False
 
     dry_env = dict(os.environ)
     dry_env["RFLYSIM_ROOT"] = str(args.spec.parent / "does-not-exist")
@@ -132,7 +149,8 @@ def main() -> int:
     assert dry_receipt["mode"] == "dry-run"
     assert dry_receipt["change_map"] is False
     assert dry_receipt["window_id"] == 2
-    assert dry_receipt["object_count"] == 31
+    assert dry_receipt["object_count"] == 34
+    assert dry_receipt["collision_enabled"] is True
     assert dry_receipt["commands"][0]["position_ned"] == list(commands[0].position_ned)
 
     explicit_dry_run = subprocess.run(

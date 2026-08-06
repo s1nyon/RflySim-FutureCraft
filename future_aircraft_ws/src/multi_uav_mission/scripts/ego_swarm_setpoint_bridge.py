@@ -62,7 +62,7 @@ def main(argv=None):
     parser.add_argument("--max-x", type=float, default=17.0)
     parser.add_argument("--min-y", type=float, default=-2.0)
     parser.add_argument("--max-y", type=float, default=7.0)
-    parser.add_argument("--min-z", type=float, default=0.0)
+    parser.add_argument("--min-z", type=float, default=-0.5)
     parser.add_argument("--max-z", type=float, default=2.0)
     args = parser.parse_args(argv)
     if args.rate_hz < 20.0:

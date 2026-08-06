@@ -58,12 +58,17 @@ def main() -> int:
     assert math.isclose(report["takeoff_separation_m"], 1.4, abs_tol=1e-9)
     assert math.isclose(report["platform_spacing_m"], 2.0, abs_tol=1e-9)
     assert report["object_count"] == len(model.scene_objects)
-    assert report["object_count"] == 31
+    assert report["object_count"] == 34
     assert len(model.wall_boxes) >= 10
-    assert len(model.arena_objects) == 5
+    assert len(model.arena_objects) == 8
     arena_floor = next(obj for obj in model.arena_objects if obj.category == "arena_floor")
     assert arena_floor.center == module.Vec3(23.9, 2.2, 0.0)
     assert arena_floor.size == module.Vec3(30.8, 19.4, 0.05)
+    ceilings = [obj for obj in model.arena_objects if obj.category == "ceiling"]
+    assert len(ceilings) == 3
+    assert all(ceiling.center.z == 2.5 for ceiling in ceilings)
+    assert all(ceiling.size.z == 0.2 for ceiling in ceilings)
+    assert [ceiling.copter_id for ceiling in ceilings] == [12785, 12786, 12787]
     boundary_walls = [obj for obj in model.arena_objects if obj.category == "boundary_wall"]
     assert len(boundary_walls) == 4
     assert all(obj.size.z == 2.5 for obj in boundary_walls)

@@ -48,6 +48,7 @@ def load_scene(
     clear_first: bool,
     window_id: int,
     change_map: bool = False,
+    enable_collision: bool = True,
 ) -> Dict[str, object]:
     commands = build_ue_commands(model)
     if change_map:
@@ -69,10 +70,13 @@ def load_scene(
         for _attempt in range(3):
             client.sendUE4PosScale(**kwargs)
             time.sleep(0.02)
+    if enable_collision:
+        client.sendUE4Cmd("RflyChangeViewKeyCmd P", window_id)
     return {
         "base_map": model.base_map,
         "change_map": change_map,
         "clear_first": clear_first,
+        "collision_enabled": enable_collision,
         "id_range": list(model.owned_id_range),
         "mode": "live",
         "object_count": len(commands),
@@ -117,6 +121,7 @@ def main() -> int:
     parser.add_argument("--window-id", type=int, default=-1)
     parser.add_argument("--change-map", action="store_true")
     parser.add_argument("--no-clear", action="store_true")
+    parser.add_argument("--no-enable-collision", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
         "--rflysim-root",
@@ -134,6 +139,7 @@ def main() -> int:
             "base_map": model.base_map,
             "change_map": args.change_map,
             "clear_first": not args.no_clear,
+            "collision_enabled": not args.no_enable_collision,
             "commands": [_command_dict(command) for command in commands],
             "id_range": list(model.owned_id_range),
             "mode": "dry-run",
@@ -148,6 +154,7 @@ def main() -> int:
             clear_first=not args.no_clear,
             window_id=args.window_id,
             change_map=args.change_map,
+            enable_collision=not args.no_enable_collision,
         )
     print(json.dumps(receipt, indent=2, sort_keys=True))
     return 0

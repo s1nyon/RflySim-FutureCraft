@@ -43,7 +43,7 @@ def main() -> int:
     assert plan["mission_name"] == "stage8_predicted_course_tunnel_flight"
     assert plan["geofence"] == {
         "min_x": -1.0, "max_x": 17.0, "min_y": -2.0, "max_y": 7.0,
-        "min_z": 0.0, "max_z": 2.0, "max_speed_mps": 2.0, "max_odom_age_s": 0.5,
+        "min_z": -0.5, "max_z": 2.0, "max_speed_mps": 2.0, "max_odom_age_s": 0.5,
     }
     navigation = [
         action for action in plan["actions"] if action["stage"] == "collaborative_navigate"

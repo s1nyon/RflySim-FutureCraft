@@ -51,6 +51,27 @@
       "category": "boundary_wall",
       "center": [23.9, 11.9, 0.0],
       "size": [30.8, 0.2, 2.5]
+    },
+    {
+      "name": "arena_ceiling_west",
+      "id": 12785,
+      "category": "ceiling",
+      "center": [13.7, 2.2, 2.5],
+      "size": [10.4, 19.4, 0.2]
+    },
+    {
+      "name": "arena_ceiling_center",
+      "id": 12786,
+      "category": "ceiling",
+      "center": [24.1, 2.2, 2.5],
+      "size": [10.4, 19.4, 0.2]
+    },
+    {
+      "name": "arena_ceiling_east",
+      "id": 12787,
+      "category": "ceiling",
+      "center": [34.5, 2.2, 2.5],
+      "size": [10.4, 19.4, 0.2]
     }
   ],
   "zone_surfaces": [
