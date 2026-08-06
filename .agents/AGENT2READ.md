@@ -53,9 +53,8 @@ Latest Stage 8 live evidence, 2026-08-02:
 - Two preceding watchdog defects were reproduced and corrected in the working tree: duplicate ROS node names and an immediate non-OFFBOARD decision during the post-arm state-message race. These corrections pass the focused geofence check and offline Stage 8 validation, but they do not resolve the altitude/planner failure.
 - Read [docs/stage8_tunnel_live_issue_2026-08-02.md](../docs/stage8_tunnel_live_issue_2026-08-02.md) before the next live attempt. Capture actual planner z, MAVROS raw setpoint z/frame/type mask, odometry frame direction, PX4 mode-loss reason, and watchdog decisions before changing the route or relaxing safety bounds.
 
-2026-08-07 interface updates (committed on `ds-operation`, not yet pushed:
-GitHub push has been failing with `Connection was reset` since 2026-08-07;
-local commits are authoritative until a push succeeds):
+2026-08-07 interface updates (committed on `ds-operation` and pushed to
+`origin/ds-operation` on 2026-08-07):
 
 - **ego-swarm inter-UAV coordination caveat**: the swarm trajectory broadcast
   (`/broadcast_bspline`, `/drone_*_planning/swarm_trajs`) assumes all UAVs share
@@ -287,10 +286,14 @@ config, ego-swarm wiring, odometry, or the live run flow.
   `run_live_slam_ego_swarm_flight.bat --allow-arm --simulation-only`.
 - `run_live_fastlio_dual.bat` now also relays RGB/depth/down-camera topics into
   `/uav*/rflysim/sensor*`; use those names in probes and planner wiring.
-- GitHub push to `s1nyon/RflySim-FutureCraft` has been failing with
-  `Connection was reset` since 2026-08-07 (TCP 443 reaches the host, TLS layer
-  is reset). Commits live on `ds-operation` locally until the network allows a
-  push; retry with `git -c http.version=HTTP/1.1 push` if needed.
+- GitHub push to `s1nyon/RflySim-FutureCraft` failed with `Connection was
+  reset` until git was pointed at the local Clash proxy. Fix (already applied,
+  global): `git config --global http.proxy http://127.0.0.1:7890` and the same
+  for `https.proxy`. Clash for Windows runs on 127.0.0.1:7890 and WinINET is
+  already set to it, but git had no proxy and was trying the blocked
+  `github.com` IP directly. If the GCM "Unable to persist credentials with the
+  'wincredman' credential store" warning appears, it is cosmetic; the push
+  still succeeds.
 
 ### Pending live validation (next simulation restart)
 
