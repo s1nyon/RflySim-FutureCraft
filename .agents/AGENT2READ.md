@@ -53,7 +53,9 @@ Latest Stage 8 live evidence, 2026-08-02:
 - Two preceding watchdog defects were reproduced and corrected in the working tree: duplicate ROS node names and an immediate non-OFFBOARD decision during the post-arm state-message race. These corrections pass the focused geofence check and offline Stage 8 validation, but they do not resolve the altitude/planner failure.
 - Read [docs/stage8_tunnel_live_issue_2026-08-02.md](../docs/stage8_tunnel_live_issue_2026-08-02.md) before the next live attempt. Capture actual planner z, MAVROS raw setpoint z/frame/type mask, odometry frame direction, PX4 mode-loss reason, and watchdog decisions before changing the route or relaxing safety bounds.
 
-2026-08-07 interface updates (uncommitted working tree):
+2026-08-07 interface updates (committed on `ds-operation`, not yet pushed:
+GitHub push has been failing with `Connection was reset` since 2026-08-07;
+local commits are authoritative until a push succeeds):
 
 - **ego-swarm inter-UAV coordination caveat**: the swarm trajectory broadcast
   (`/broadcast_bspline`, `/drone_*_planning/swarm_trajs`) assumes all UAVs share
@@ -85,6 +87,33 @@ Latest Stage 8 live evidence, 2026-08-02:
 - `stage8_dynamic_lidar_probe.py` is SLAMScene-aware: capture takes sensor
   pose/yaw and wall world-NED coordinates and projects the wall into the LiDAR
   frame for ROI counting.
+- **D435i sensor parity (commit `39742ab`)**: both UAV sensor configs now carry
+  Mid360 + D435i RGB/depth + down camera, matching the real FS-310/28comsim
+  payload. `rflysim_fastlio_dual.launch` relays `/rflysim/sensor*` camera
+  topics into `/uav*/rflysim/sensor*`; `rflysim_ego_swarm_dual.launch` feeds
+  the real `img_depth` topic into `grid_map/depth`. Read
+  [docs/d435i_sensor_parity_2026-08-07.md](../docs/d435i_sensor_parity_2026-08-07.md).
+
+Latest live evidence, 2026-08-01 (post-Stage-7 baseline):
+
+- Full dual-UAV flight run `stage7-20260801T101757Z-2497` passed (both UAVs
+  armed in OFFBOARD, takeoff to 1 m, short ego-swarm segment, landing, disarm;
+  min separation 0.85 m).
+- Staggered tunnel traversal succeeded end-to-end: UAV1 led, UAV2 lagged, all
+  seven course segments reached, no collision and no emergency stop.
+- Perception-based collision avoidance verified live: UAV1 was marked as an
+  obstacle in UAV2's grid_map and UAV2 executed `EMERGENCY_STOP` at 0.2 m.
+  Swarm-trajectory coordination is NOT reliable across the two independent
+  FAST-LIO frames and must not be treated as the collision guarantee.
+
+Latest D435i work, 2026-08-07 (offline only, live validation pending):
+
+- `config/rflysim_sensor_uav{1,2}.json` now define per UAV: Mid360 (TypeID 23),
+  D435i RGB (TypeID 1 @[0.1,0.04,0]), down camera (TypeID 1 @[0,0,0.1],
+  pitch -90), D435i depth (TypeID 2 @[0.1,0.04,0], 0.3-12 m).
+- Sensor contract test, bridge import test, and readiness test all pass
+  offline. Launch XML parses. Live no-arm verification of the depth topics and
+  of ego-swarm depth fusion still has to be run on the next simulation restart.
 
 Validated offline stages:
 
@@ -183,6 +212,95 @@ powershell -ExecutionPolicy Bypass -File scripts\validate_stage8.ps1
 `config/maps/predicted_narrow_course_v1.json` is the only authoritative course geometry. `scripts\generate_predicted_narrow_course.bat` creates the preview, reference points, validation report, and flat `VisionRingBlank` terrain pair under ignored `generated/` output. `scripts\start_predicted_course_two_uav.bat --dry-run` is the side-effect-free launch contract; without `--dry-run` it starts the existing two-UAV chain on `VisionRingBlank` and loads course-owned dynamic IDs `12000..12999`.
 
 The course launcher does not request OFFBOARD or arm. A live map check must proceed through `scripts\run_live_fastlio_dual.bat` and `scripts\run_stage7_topic_probe.bat` before any separately authorized simulation-only flight. Dynamic walls are not CopterSim terrain: accept them through RflySim LiDAR visibility and geometric-clearance evidence, not through terrain-height queries. Never deploy generated terrain files over `CopterSim\external\map` without an explicit user request and an exact-target backup/check.
+
+## Developer Lessons (2026-08-07)
+
+High-value findings from recent development. Read these before touching sensor
+config, ego-swarm wiring, odometry, or the live run flow.
+
+### Sensor stack: 28comsim parity and the "no D435i" question
+
+- The real FS-310/28comsim `UAV_demo` carries D435i (RGB + depth), a down-facing
+  monocular camera, and Mid360/IMU. Its simulation `Config.json` only has
+  mid360 + front RGB + down RGB: **there is no TypeID 2 depth in 28com's
+  simulation**. The FS-J310 launch's `depth_topic=/rflysim/sensor1` is dead in
+  simulation (the real topic is `/rflysim/sensor1/img_rgb`), so 28com's
+  simulation also runs EGO-Planner cloud-only. Our previous no-depth setup was
+  therefore 28com-sim parity, not a defect.
+- EGO-Planner's grid map builds from `grid_map/cloud` (required) and uses
+  `grid_map/depth` only as an optional enhancement (projection/filter). A LiDAR
+  cloud is enough to plan. What depth/RGB actually unlock are `drone_detect`
+  (other-UAV detection from depth) and `object_det` (YOLO on RGB). Neither is
+  currently used; inter-UAV avoidance must come from perception
+  (mid360 -> grid_map obstacle marking + `EMERGENCY_STOP`), which is verified.
+- RflySim `VisionCaptureApi` publishes absolute topics per `SeqID` and
+  `TypeID`: TypeID 1 -> `/rflysim/sensor{seq}/img_rgb`, TypeID 2 ->
+  `/rflysim/sensor{seq}/img_depth` (mono16, millimeters), TypeID 23 ->
+  `/rflysim/sensor{seq}/mid360_lidar`. Because topics are absolute, per-UAV
+  namespacing requires explicit `topic_tools` relays (already added in
+  `rflysim_fastlio_dual.launch`).
+- TypeID 2 depth over `SendProtocol=1` (UDP jpeg) is a standard, officially
+  documented combination and works from WSL/Linux; shared memory (protocol 0)
+  is Windows-local only.
+- This repo's sensor config JSONs must be comment-free plain JSON because
+  `rflysim_sensor_bridge.py` validates them with `json.loads`. 28com's
+  commented `Config.json` files only parse because `VisionCaptureApi` is
+  lenient.
+
+### ego-planner-swarm parameter semantics (this fork)
+
+- In `external/ego-planner-swarm`, `grid_map/pose_type` is
+  `POSE_STAMPED = 1`, `ODOMETRY = 2` (verify against `grid_map.h`; other EGO
+  forks may differ). Our launch uses `pose_type=2`, so the depth image is
+  synchronized with `grid_map/odom` via `depthOdomCallback` and
+  `grid_map/pose` is never subscribed. **No separate camera-pose topic is
+  needed.**
+- `md_.cam2body_` is a fixed rotation with no translation: depth projection
+  assumes the camera is at the body origin. The D435i's 0.1/0.04 m mounting
+  offset is ignored by EGO, which is acceptable inside the 0.25 m inflation.
+
+### Odometry and coordinate frames
+
+- The two UAVs run independent FAST-LIO frames (origins differ by the takeoff
+  offset, about 1.4 m). ego-swarm's swarm trajectory cost directly subtracts
+  trajectories, so cross-frame swarm coordination is invalid; the broadcast is
+  also gated by a 0.25 s start-time window, non-periodic publishing, and no
+  broadcast while in `WAIT_TARGET`. Fix path: unify frames first at the odom
+  layer (add takeoff offsets in `odom_frame_relay.py`), then optionally patch
+  `ego-planner-swarm` source (periodic broadcast, wider time window, stale
+  trajectory broadcast) and rebuild.
+- `/mavros/odometry/in` reporting z≈+1 (ENU side) is normal and is NOT evidence
+  of a coordinate-chain error. The real pre-arm gate is the MAVROS odometry
+  plugin's hardcoded `odom_ned`/`base_link_frd` TF lookups and PX4 EKF
+  external-vision fusion flags.
+- FAST-LIO `extrinsic_T=[0,0,0.1]` is the calibrated value matching the lidar
+  mount at `[0,0,-0.1]` (FRD). Do not "fix" it again.
+
+### Live flow and housekeeping
+
+- Simulation arm only with `--allow-arm --simulation-only`; real aircraft stay
+  manual-arm. Every simulator restart is a new `simulation_instance_id`;
+  readiness reports from other runs/instances are always rejected.
+- Stage 7 live order is fixed:
+  `start_two_uav.bat` -> `run_live_fastlio_dual.bat` ->
+  `run_live_ego_swarm_dual.bat` -> `run_stage7_topic_probe.bat` ->
+  `run_live_slam_ego_swarm_flight.bat --allow-arm --simulation-only`.
+- `run_live_fastlio_dual.bat` now also relays RGB/depth/down-camera topics into
+  `/uav*/rflysim/sensor*`; use those names in probes and planner wiring.
+- GitHub push to `s1nyon/RflySim-FutureCraft` has been failing with
+  `Connection was reset` since 2026-08-07 (TCP 443 reaches the host, TLS layer
+  is reset). Commits live on `ds-operation` locally until the network allows a
+  push; retry with `git -c http.version=HTTP/1.1 push` if needed.
+
+### Pending live validation (next simulation restart)
+
+1. No-arm: `/uav1/rflysim/sensor3/img_depth` and
+   `/uav2/rflysim/sensor13/img_depth` have exactly one publisher, ~30 Hz,
+   monotonic stamps, and non-empty depth matching the course walls/ceiling.
+2. ego-swarm log shows depth fusion actually triggering
+   (`depthOdomCallback` / `flag_use_depth_fusion`).
+3. Compare occupancy/trajectory in the narrow tunnel with depth fusion on vs
+   off; re-verify perception emergency stop still works with fusion enabled.
 
 ## File Map
 
