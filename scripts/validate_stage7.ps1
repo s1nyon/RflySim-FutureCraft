@@ -18,6 +18,7 @@ $requiredPaths = @(
     'future_aircraft_ws/src/multi_uav_mission/scripts/mavros_setpoint_keepalive.py',
 'future_aircraft_ws/src/multi_uav_mission/scripts/odom_frame_relay.py',
 'future_aircraft_ws/src/multi_uav_mission/scripts/odom_tf_contract_check.py',
+'future_aircraft_ws/src/multi_uav_mission/scripts/flight_event_recorder.py',
     'future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_cloud_contract.py',
     'future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_pointcloud_adapter.py',
     'future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_sensor_bridge.py',
@@ -36,6 +37,7 @@ $requiredPaths = @(
 'tests/stage7_planner_control_bridge_check.py',
 'tests/stage7_sensor_readiness_check.py',
 'tests/stage8_odom_tf_contract_check.py',
+'tests/stage7_flight_event_recorder_check.py',
     'scripts/run_live_fastlio_dual.bat',
     'scripts/run_live_ego_swarm_dual.bat',
     'scripts/run_stage7_topic_probe.bat',
@@ -599,6 +601,15 @@ if ($missing.Count -eq 0) {
         }
         elseif (-not (Test-Path -LiteralPath $odomTfReportPath)) {
             $contractErrors += 'odom_tf_contract_check.py did not create report'
+        }
+
+        $flightEventRecorderCheckScript = Join-Path $ProjectRoot 'tests/stage7_flight_event_recorder_check.py'
+        $flightEventRecorderModule = Join-Path $ProjectRoot 'future_aircraft_ws/src/multi_uav_mission/scripts/flight_event_recorder.py'
+        $output = Invoke-ContractPythonScript -Runner $pythonRunner -ScriptPath $flightEventRecorderCheckScript -Arguments @(
+            '--module', $flightEventRecorderModule
+        )
+        if ($LASTEXITCODE -ne 0) {
+            $contractErrors += "stage7_flight_event_recorder_check.py failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
         }
     }
 
