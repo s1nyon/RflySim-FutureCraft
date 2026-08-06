@@ -1,13 +1,13 @@
 <launch>
   <arg name="uav1_odom_topic" default="/uav1/mavros/odometry/out"/>
   <arg name="uav1_cloud_topic" default="/uav1/slam/cloud_registered"/>
-  <arg name="uav1_depth_topic" default="/uav1/rflysim/sensor1"/>
+  <arg name="uav1_depth_topic" default="/uav1/rflysim/sensor3/img_depth"/>
   <arg name="uav1_pos_cmd_topic" default="/uav1/planning/pos_cmd"/>
   <arg name="uav1_goal_topic" default="/uav1/planning/goal"/>
 
   <arg name="uav2_odom_topic" default="/uav2/mavros/odometry/out"/>
   <arg name="uav2_cloud_topic" default="/uav2/slam/cloud_registered"/>
-  <arg name="uav2_depth_topic" default="/uav2/rflysim/sensor1"/>
+  <arg name="uav2_depth_topic" default="/uav2/rflysim/sensor13/img_depth"/>
   <arg name="uav2_pos_cmd_topic" default="/uav2/planning/pos_cmd"/>
   <arg name="uav2_goal_topic" default="/uav2/planning/goal"/>
 

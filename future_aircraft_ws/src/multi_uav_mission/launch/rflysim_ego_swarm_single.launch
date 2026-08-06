@@ -3,7 +3,7 @@
   <arg name="odom_topic" default="/mavros/local_position/odom"/>
   <arg name="cloud_topic" default="/cloud_registered"/>
   <arg name="camera_pose_topic" default="/unused_camera_pose"/>
-  <arg name="depth_topic" default="/rflysim/sensor1"/>
+  <arg name="depth_topic" default="/uav1/rflysim/sensor3/img_depth"/>
   <arg name="pos_cmd_topic" default="/planning/pos_cmd"/>
   <arg name="goal_topic" default="/move_base_simple/goal"/>
   <arg name="map_size_x" default="12.0"/>

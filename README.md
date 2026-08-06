@@ -145,7 +145,7 @@ Stage 7 live-first 顺序：
 4. `scripts\run_stage7_topic_probe.bat`
 5. `scripts\run_live_slam_ego_swarm_flight.bat --allow-arm --simulation-only`
 
-`run_live_fastlio_dual` 会启动两个项目本地 sensor bridge，分别使用 `config/rflysim_sensor_uav1.json` 和 `config/rflysim_sensor_uav2.json`，再启动点云 adapter、IMU relay 与双机 FAST-LIO。它只采集 no-arm readiness，不启动 planner、不发布 setpoint、不请求模式或解锁。`run_live_ego_swarm_dual` 只 source 已构建的 `external/ego-planner-swarm`，且必须先验证同一 run/仿真实例的 readiness 报告。
+`run_live_fastlio_dual` 会启动两个项目本地 sensor bridge，分别使用 `config/rflysim_sensor_uav1.json` 和 `config/rflysim_sensor_uav2.json`，再启动点云 adapter、IMU relay、相机话题 relay 与双机 FAST-LIO。每架无人机的仿真传感器载荷与 28comsim `UAV_demo`（FS-310）保持一致：Mid360 雷达 + D435i（RGB + 深度）+ 下视相机；其中 D435i 深度话题被 relay 到 `/uav*/rflysim/sensor*/img_depth` 并接入 ego-swarm 的 `grid_map/depth`（`pose_type=2`，深度与 odom 同步，无需额外 camera pose）。它只采集 no-arm readiness，不启动 planner、不发布 setpoint、不请求模式或解锁。`run_live_ego_swarm_dual` 只 source 已构建的 `external/ego-planner-swarm`，且必须先验证同一 run/仿真实例的 readiness 报告。
 
 `run_stage7_topic_probe` 是只读诊断入口，不发布 setpoint、不发送 planner goal、不调用 arming。它加载 `logs/stage7_live/current_run.env`，拒绝 stale、跨 run 或跨仿真实例的 readiness 报告，再把状态分成 `sensor_bridge`、`fast_lio`、`mavros`、`ego_swarm`、`flight_gate` 五层。
 
@@ -174,4 +174,4 @@ Rfly SIL 的 `16540/17540` 与 `16541/17541` 仅供 CopterSim/PX4 使用，不�
 4. `scripts\run_stage7_topic_probe.bat` 生成分层只读诊断报告，确认 sensor bridge、FAST-LIO、MAVROS、ego-swarm 和 flight gate。
 5. `scripts\run_live_slam_ego_swarm_flight.bat --allow-arm --simulation-only` 执行已验收的最小 live flight runner：两机进入 OFFBOARD、仿真解锁、起飞、短航段飞行并降落；新实例不得复用旧 readiness 报告。
 
-视觉识别、target provider 和行为树暂时不进入这条主线。
+视觉识别、target provider 和行为树暂时不进入这条主线；D435i RGB 话题已随载荷上线，待 object_det 接入时直接复用 `/uav*/rflysim/sensor*/img_rgb`。

@@ -32,8 +32,12 @@ def validate(stage7, sensor_configs, sensor_paths):
         uav_id = bridge["uav_id"]
         assert Path(bridge["config"]).resolve() == sensor_paths[uav_id].resolve(), "config"
         sensors = sensor_configs[uav_id]["VisionSensors"]
-        assert len(sensors) == 1, "VisionSensors"
-        sensor = sensors[0]
+        assert len(sensors) >= 4, "VisionSensors"
+        assert len({sensor["SeqID"] for sensor in sensors}) == len(sensors), "unique SeqID"
+        assert len({sensor["SendProtocol"][5] for sensor in sensors}) == len(sensors), "unique UDP port"
+        lidar_sensors = [sensor for sensor in sensors if sensor["TypeID"] == 23]
+        assert len(lidar_sensors) == 1, "lidar count"
+        sensor = lidar_sensors[0]
         assert sensor["TypeID"] == 23, "TypeID"
         assert sensor["DataWidth"] == 64, "DataWidth"
         assert sensor["DataHeight"] == 272, "DataHeight"
@@ -45,6 +49,23 @@ def validate(stage7, sensor_configs, sensor_paths):
         assert sensor["TargetCopter"] == bridge["copter_id"]
         assert sensor["SeqID"] == bridge["sensor_seq_id"]
         assert sensor["SendProtocol"][5] == bridge["udp_port"]
+        rgb = [sensor for sensor in sensors if sensor["TypeID"] == 1 and sensor["SensorPosXYZ"] == [0.1, 0.04, 0.0]]
+        assert len(rgb) == 1, "D435i RGB"
+        assert rgb[0]["DataWidth"] == 640 and rgb[0]["DataHeight"] == 480, "D435i RGB resolution"
+        depth = [sensor for sensor in sensors if sensor["TypeID"] == 2]
+        assert len(depth) == 1, "D435i depth"
+        assert depth[0]["SensorPosXYZ"] == [0.1, 0.04, 0.0], "D435i depth pose"
+        assert depth[0]["otherParams"][:3] == [0.3, 12, 0.001], "D435i depth params"
+        bottom = [
+            sensor
+            for sensor in sensors
+            if sensor["TypeID"] == 1
+            and sensor["SensorPosXYZ"] == [0, 0, 0.1]
+            and sensor["SensorAngEular"] == [0, -90, 0]
+        ]
+        assert len(bottom) == 1, "downward camera"
+        for sensor in sensors:
+            assert sensor["TargetCopter"] == bridge["copter_id"], "sensor copter binding"
 
 
 def assert_rejected(label, callback):
@@ -72,11 +93,35 @@ def run_regression_cases(stage7, sensor_configs, sensor_paths):
         ("SensorAngEular", [1, 0, 0]),
     ):
         invalid_sensors = deepcopy(sensor_configs)
-        invalid_sensors["uav1"]["VisionSensors"][0][field] = incorrect_value
+        lidar_index = next(
+            index
+            for index, sensor in enumerate(invalid_sensors["uav1"]["VisionSensors"])
+            if sensor["TypeID"] == 23
+        )
+        invalid_sensors["uav1"]["VisionSensors"][lidar_index][field] = incorrect_value
         assert_rejected(
             f"incorrect {field}",
             lambda: validate(stage7, invalid_sensors, sensor_paths),
         )
+
+    missing_depth = deepcopy(sensor_configs)
+    missing_depth["uav1"]["VisionSensors"] = [
+        sensor for sensor in missing_depth["uav1"]["VisionSensors"] if sensor["TypeID"] != 2
+    ]
+    assert_rejected(
+        "missing D435i depth",
+        lambda: validate(stage7, missing_depth, sensor_paths),
+    )
+
+    wrong_depth_pose = deepcopy(sensor_configs)
+    wrong_depth_pose["uav1"]["VisionSensors"] = [
+        {**sensor, "SensorPosXYZ": [0, 0, 0.1]} if sensor["TypeID"] == 2 else sensor
+        for sensor in wrong_depth_pose["uav1"]["VisionSensors"]
+    ]
+    assert_rejected(
+        "D435i depth pose mismatch",
+        lambda: validate(stage7, wrong_depth_pose, sensor_paths),
+    )
 
     invalid_period = deepcopy(stage7)
     invalid_period["fast_lio"]["bridges"][0]["scan_period_s"] = 0.2

@@ -9,6 +9,10 @@
   <arg name="uav1_odom_topic" default="/uav1/mavros/odometry/out"/>
   <arg name="uav1_raw_odom_topic" default="/uav1/slam/odometry_raw"/>
   <arg name="uav1_cloud_topic" default="/uav1/slam/cloud_registered"/>
+  <arg name="uav1_raw_rgb_topic" default="/rflysim/sensor1/img_rgb"/>
+  <arg name="uav1_raw_bottom_topic" default="/rflysim/sensor2/img_rgb"/>
+  <arg name="uav1_raw_depth_topic" default="/rflysim/sensor3/img_depth"/>
+  <arg name="uav1_depth_topic" default="/uav1/rflysim/sensor3/img_depth"/>
 
   <arg name="uav2_raw_lidar_topic" default="/rflysim/sensor10/mid360_lidar"/>
   <arg name="uav2_raw_imu_topic" default="/uav2/rflysim/imu_raw"/>
@@ -18,6 +22,10 @@
   <arg name="uav2_odom_topic" default="/uav2/mavros/odometry/out"/>
   <arg name="uav2_raw_odom_topic" default="/uav2/slam/odometry_raw"/>
   <arg name="uav2_cloud_topic" default="/uav2/slam/cloud_registered"/>
+  <arg name="uav2_raw_rgb_topic" default="/rflysim/sensor11/img_rgb"/>
+  <arg name="uav2_raw_bottom_topic" default="/rflysim/sensor12/img_rgb"/>
+  <arg name="uav2_raw_depth_topic" default="/rflysim/sensor13/img_depth"/>
+  <arg name="uav2_depth_topic" default="/uav2/rflysim/sensor13/img_depth"/>
 
   <group ns="uav1">
     <node pkg="multi_uav_mission" type="rflysim_pointcloud_adapter.py" name="rflysim_pointcloud_adapter" output="screen">
@@ -30,6 +38,9 @@
       <param name="scan_period_sec" value="0.1" type="double"/>
     </node>
     <node pkg="topic_tools" type="relay" name="rflysim_imu_relay" args="$(arg uav1_raw_imu_topic) $(arg uav1_imu_topic)" output="screen"/>
+    <node pkg="topic_tools" type="relay" name="rflysim_rgb_relay" args="$(arg uav1_raw_rgb_topic) /uav1/rflysim/sensor1/img_rgb" output="screen"/>
+    <node pkg="topic_tools" type="relay" name="rflysim_bottom_relay" args="$(arg uav1_raw_bottom_topic) /uav1/rflysim/sensor2/img_rgb" output="screen"/>
+    <node pkg="topic_tools" type="relay" name="rflysim_depth_relay" args="$(arg uav1_raw_depth_topic) $(arg uav1_depth_topic)" output="screen"/>
   </group>
 
   <group ns="uav2">
@@ -43,6 +54,9 @@
       <param name="scan_period_sec" value="0.1" type="double"/>
     </node>
     <node pkg="topic_tools" type="relay" name="rflysim_imu_relay" args="$(arg uav2_raw_imu_topic) $(arg uav2_imu_topic)" output="screen"/>
+    <node pkg="topic_tools" type="relay" name="rflysim_rgb_relay" args="$(arg uav2_raw_rgb_topic) /uav2/rflysim/sensor11/img_rgb" output="screen"/>
+    <node pkg="topic_tools" type="relay" name="rflysim_bottom_relay" args="$(arg uav2_raw_bottom_topic) /uav2/rflysim/sensor12/img_rgb" output="screen"/>
+    <node pkg="topic_tools" type="relay" name="rflysim_depth_relay" args="$(arg uav2_raw_depth_topic) $(arg uav2_depth_topic)" output="screen"/>
   </group>
 
   <group ns="uav1/slam">
