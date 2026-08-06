@@ -53,8 +53,8 @@ Latest Stage 8 live evidence, 2026-08-02:
 - Two preceding watchdog defects were reproduced and corrected in the working tree: duplicate ROS node names and an immediate non-OFFBOARD decision during the post-arm state-message race. These corrections pass the focused geofence check and offline Stage 8 validation, but they do not resolve the altitude/planner failure.
 - Read [docs/stage8_tunnel_live_issue_2026-08-02.md](../docs/stage8_tunnel_live_issue_2026-08-02.md) before the next live attempt. Capture actual planner z, MAVROS raw setpoint z/frame/type mask, odometry frame direction, PX4 mode-loss reason, and watchdog decisions before changing the route or relaxing safety bounds.
 
-2026-08-07 interface updates (committed on `ds-operation` and pushed to
-`origin/ds-operation` on 2026-08-07):
+2026-08-07 interface updates (merged into `main` and pushed to
+`origin/main` on 2026-08-07; all development now happens on `main`):
 
 - **ego-swarm inter-UAV coordination caveat**: the swarm trajectory broadcast
   (`/broadcast_bspline`, `/drone_*_planning/swarm_trajs`) assumes all UAVs share
