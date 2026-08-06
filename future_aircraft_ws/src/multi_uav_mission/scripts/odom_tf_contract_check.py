@@ -107,31 +107,56 @@ class RosChecker:
         self.listener = tf2_ros.TransformListener(self.buffer)
         self.wait_start = time.monotonic()
 
-    def _lookup(self, target, source):
+    def _all_frames(self):
         try:
-            self.buffer.lookup_transform(target, source, self.rospy.Time(0))
-            return {"status": "ok", "detail": None, "ready": True}
-        except Exception as exc:
-            message = str(exc)
-            if "does not exist" in message or "not part of the same tree" in message:
+            return self.buffer.all_frames_as_string() or ""
+        except Exception:
+            return ""
+
+    def _lookup(self, target, source, deadline):
+        last_message = None
+        while time.monotonic() < deadline:
+            try:
+                if self.buffer.can_transform(
+                    target,
+                    source,
+                    self.rospy.Time(0),
+                    self.rospy.Duration(0.2),
+                ):
+                    self.buffer.lookup_transform(target, source, self.rospy.Time(0))
+                    return {"status": "ok", "detail": None, "ready": True}
+            except Exception as exc:
+                last_message = str(exc)
+            time.sleep(0.1)
+        if last_message is not None:
+            if "does not exist" in last_message or "not part of the same tree" in last_message:
                 status = "missing_frame"
-            elif "extrapolation" in message:
+            elif "extrapolation" in last_message:
                 status = "extrapolation"
             else:
                 status = "error"
-            return {"status": status, "detail": message, "ready": False}
+            return {"status": status, "detail": last_message, "ready": False}
+        return {
+            "status": "timeout",
+            "detail": f"lookup {target} <- {source} timed out: {last_message}",
+            "ready": False,
+        }
 
     def check_uav(self, uav):
         uav_id = uav["uav_id"]
+        frames_deadline = time.monotonic() + self.timeout_s
+        expected = set(expected_tf_frames(uav_id))
+        while time.monotonic() < frames_deadline:
+            if expected.issubset(self._all_frames()):
+                break
+            time.sleep(0.2)
         lookups = []
         for target, source in mavros_lookup_pairs(uav_id):
-            result = self._lookup(target, source)
+            lookup_deadline = time.monotonic() + self.timeout_s
+            result = self._lookup(target, source, lookup_deadline)
             lookups.append({"target": target, "source": source, **result})
+        all_frames = self._all_frames()
         frames = {}
-        try:
-            all_frames = self.buffer.all_frames_as_string()
-        except Exception:
-            all_frames = ""
         for frame in sorted(expected_tf_frames(uav_id)):
             frames[frame] = "present" if frame in all_frames else "missing"
         return {
