@@ -65,7 +65,7 @@
     <param name="grid_map/local_update_range_z" value="2.0"/>
     <param name="grid_map/obstacles_inflation" value="0.25"/>
     <param name="grid_map/local_map_margin" value="5"/>
-    <param name="grid_map/ground_height" value="-0.01"/>
+    <param name="grid_map/ground_height" value="-0.5"/>
     <param name="grid_map/cx" value="320.0"/>
     <param name="grid_map/cy" value="240.0"/>
     <param name="grid_map/fx" value="320.0"/>

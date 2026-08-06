@@ -47,6 +47,7 @@
 
   <group ns="uav1/slam">
     <rosparam command="load" file="$(find faster_lio)/config/mid360.yaml"/>
+    <rosparam param="mapping/extrinsic_T">[0, 0, 0.1]</rosparam>
     <param name="common/lid_topic" value="$(arg uav1_lidar_topic)" type="str"/>
     <param name="common/imu_topic" value="$(arg uav1_imu_topic)" type="str"/>
     <param name="publish/tf_world_frame" value="uav1_camera_init" type="str"/>
@@ -86,6 +87,7 @@
 
   <group ns="uav2/slam">
     <rosparam command="load" file="$(find faster_lio)/config/mid360.yaml"/>
+    <rosparam param="mapping/extrinsic_T">[0, 0, 0.1]</rosparam>
     <param name="common/lid_topic" value="$(arg uav2_lidar_topic)" type="str"/>
     <param name="common/imu_topic" value="$(arg uav2_imu_topic)" type="str"/>
     <param name="publish/tf_world_frame" value="uav2_camera_init" type="str"/>
