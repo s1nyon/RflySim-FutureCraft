@@ -41,7 +41,10 @@ RUN_ID="$STAGE7_RUN_ID"
 mkdir -p "$OUTPUT_DIR"
 python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/stage7_run_artifacts.py" \
   --output-dir "$OUTPUT_DIR" \
-  --run-id "$RUN_ID"
+  --run-id "$RUN_ID" \
+  --course-spec "$PROJECT_DIR/config/maps/predicted_narrow_course_v1.json" \
+  --simulation-instance-id "$STAGE7_CURRENT_SIMULATION_INSTANCE_ID" \
+  --ros-master-uri "$ROS_MASTER_URI"
 : >"$RUNNER_LOG"
 exec > >(tee -a "$RUNNER_LOG") 2>&1
 
@@ -62,6 +65,7 @@ record_early_failure() {
     --executor-exit-code "$exit_code" \
     --run-id "$RUN_ID" \
     --phase "$RUN_PHASE" \
+    --provenance "$OUTPUT_DIR/provenance.json" \
     --report "$FLIGHT_REPORT" >/dev/null 2>&1
   exit "$exit_code"
 }
@@ -169,10 +173,11 @@ start_keepalive() {
 start_watchdog() {
   local uav="$1"
   nohup python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/course_geofence_watchdog.py" \
-    --state-topic "/$uav/mavros/state" --odom-topic "/$uav/mavros/odometry/in" \
+    --state-topic "/$uav/mavros/state" --odom-topic "/$uav/mavros/local_position/odom" \
     --set-mode-service "/$uav/mavros/set_mode" \
     --min-x -1 --max-x 17 --min-y -2 --max-y 7 --min-z 0 --max-z 2 \
     --max-speed-mps 2 --max-odom-age-s 0.5 \
+    --output "$OUTPUT_DIR/${uav}_watchdog_events.jsonl" \
     >"$OUTPUT_DIR/${uav}_geofence_watchdog.log" 2>&1 &
   WATCHDOG_PIDS+=("$!")
 }
@@ -223,6 +228,7 @@ python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/stage7_fl
   --executor-exit-code "$EXECUTOR_EXIT_CODE" \
   --run-id "$RUN_ID" \
   --phase "complete" \
+  --provenance "$OUTPUT_DIR/provenance.json" \
   --report "$FLIGHT_REPORT"
 REPORT_EXIT_CODE=$?
 set -e

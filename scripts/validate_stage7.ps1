@@ -16,7 +16,8 @@ $requiredPaths = @(
     'future_aircraft_ws/src/multi_uav_mission/scripts/ego_swarm_flight_smoke_check.py',
     'future_aircraft_ws/src/multi_uav_mission/scripts/ego_swarm_setpoint_bridge.py',
     'future_aircraft_ws/src/multi_uav_mission/scripts/mavros_setpoint_keepalive.py',
-    'future_aircraft_ws/src/multi_uav_mission/scripts/odom_frame_relay.py',
+'future_aircraft_ws/src/multi_uav_mission/scripts/odom_frame_relay.py',
+'future_aircraft_ws/src/multi_uav_mission/scripts/odom_tf_contract_check.py',
     'future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_cloud_contract.py',
     'future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_pointcloud_adapter.py',
     'future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_sensor_bridge.py',
@@ -28,9 +29,13 @@ $requiredPaths = @(
     'tests/stage7_cloud_contract_check.py',
     'tests/stage7_dual_sensor_config_check.py',
     'tests/stage7_flight_artifact_check.py',
-    'tests/stage7_goal_delivery_check.py',
-    'tests/stage7_planner_control_bridge_check.py',
-    'tests/stage7_sensor_readiness_check.py',
+'tests/stage7_goal_delivery_check.py',
+'tests/stage7_executor_failure_artifact_check.py',
+'tests/stage7_probe_flow_check.py',
+'tests/stage7_provenance_check.py',
+'tests/stage7_planner_control_bridge_check.py',
+'tests/stage7_sensor_readiness_check.py',
+'tests/stage8_odom_tf_contract_check.py',
     'scripts/run_live_fastlio_dual.bat',
     'scripts/run_live_ego_swarm_dual.bat',
     'scripts/run_stage7_topic_probe.bat',
@@ -540,6 +545,60 @@ if ($missing.Count -eq 0) {
         )
         if ($LASTEXITCODE -ne 0) {
             $contractErrors += "stage7_planner_control_bridge_check.py failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
+        }
+
+        $executorFailureCheckScript = Join-Path $ProjectRoot 'tests/stage7_executor_failure_artifact_check.py'
+        $output = Invoke-ContractPythonScript -Runner $pythonRunner -ScriptPath $executorFailureCheckScript -Arguments @(
+            '--executor-module', $missionExecutorModule,
+            '--live-config', (Join-Path $ProjectRoot 'config/stage5_live_mission.json')
+        )
+        if ($LASTEXITCODE -ne 0) {
+            $contractErrors += "stage7_executor_failure_artifact_check.py failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
+        }
+
+        $probeFlowCheckScript = Join-Path $ProjectRoot 'tests/stage7_probe_flow_check.py'
+        $probeModule = Join-Path $ProjectRoot 'future_aircraft_ws/src/multi_uav_mission/scripts/stage7_topic_probe.py'
+        $output = Invoke-ContractPythonScript -Runner $pythonRunner -ScriptPath $probeFlowCheckScript -Arguments @(
+            '--probe-module', $probeModule,
+            '--config', $configPath
+        )
+        if ($LASTEXITCODE -ne 0) {
+            $contractErrors += "stage7_probe_flow_check.py failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
+        }
+
+        $provenanceCheckScript = Join-Path $ProjectRoot 'tests/stage7_provenance_check.py'
+        $flightReportModulePath = Join-Path $ProjectRoot 'future_aircraft_ws/src/multi_uav_mission/scripts/stage7_flight_report.py'
+        $runArtifactsModulePath = Join-Path $ProjectRoot 'future_aircraft_ws/src/multi_uav_mission/scripts/stage7_run_artifacts.py'
+        $output = Invoke-ContractPythonScript -Runner $pythonRunner -ScriptPath $provenanceCheckScript -Arguments @(
+            '--artifacts-module', $runArtifactsModulePath,
+            '--report-module', $flightReportModulePath
+        )
+        if ($LASTEXITCODE -ne 0) {
+            $contractErrors += "stage7_provenance_check.py failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
+        }
+
+        $odomTfContractCheckScript = Join-Path $ProjectRoot 'tests/stage8_odom_tf_contract_check.py'
+        $odomTfContractModule = Join-Path $ProjectRoot 'future_aircraft_ws/src/multi_uav_mission/scripts/odom_tf_contract_check.py'
+        $output = Invoke-ContractPythonScript -Runner $pythonRunner -ScriptPath $odomTfContractCheckScript -Arguments @(
+            '--module', $odomTfContractModule,
+            '--config', $configPath
+        )
+        if ($LASTEXITCODE -ne 0) {
+            $contractErrors += "stage8_odom_tf_contract_check.py failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
+        }
+
+        $odomTfReportPath = Join-Path $env:TEMP ("future_aircraft_odom_tf_contract_{0}.json" -f $PID)
+        if (Test-Path -LiteralPath $odomTfReportPath) { Remove-Item -LiteralPath $odomTfReportPath -Force }
+        $output = Invoke-ContractPythonScript -Runner $pythonRunner -ScriptPath $odomTfContractModule -Arguments @(
+            '--config', $configPath,
+            '--backend', 'dry-run',
+            '--report', $odomTfReportPath
+        )
+        if ($LASTEXITCODE -ne 0) {
+            $contractErrors += "odom_tf_contract_check.py dry-run failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
+        }
+        elseif (-not (Test-Path -LiteralPath $odomTfReportPath)) {
+            $contractErrors += 'odom_tf_contract_check.py did not create report'
         }
     }
 

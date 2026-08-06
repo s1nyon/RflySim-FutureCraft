@@ -13,6 +13,26 @@ from pathlib import Path
 LAYERS = ("sensor_bridge", "fast_lio", "mavros", "ego_swarm", "flight_gate")
 
 
+def parse_subscriber_count(system_state, topic):
+    """Count real subscribers for a topic from a ROS master system state tuple."""
+    _publishers, subscribers, _services = system_state
+    for name, connections in subscribers:
+        if name == topic:
+            return len(connections)
+    return 0
+
+
+def summarize_message_flow(sample_times, now):
+    """Summarize measured message flow from receive-time samples."""
+    if not sample_times:
+        return {"count": 0, "first_latency_s": None, "last_age_s": None}
+    return {
+        "count": len(sample_times),
+        "first_latency_s": round(float(sample_times[0]), 3),
+        "last_age_s": round(float(now) - float(sample_times[-1]), 3),
+    }
+
+
 def evaluate_saved_readiness(report, run_id, simulation_instance_id, max_age_sec, now):
     from stage7_sensor_readiness import validate_report
 
@@ -201,8 +221,19 @@ def _checks_for_uav(uav, bridge, config):
             _planned("service", "arming", uav["mavros_arming_service"]),
         ],
         "ego_swarm": [
-            _planned("topic_advertised", "planner_cmd", uav["planner_cmd_topic"]),
-            _planned("topic_ready_for_publish", "planner_goal", uav["planner_goal_topic"]),
+            _planned(
+                "topic_subscriber_count",
+                "planner_goal_subscribers",
+                uav["planner_goal_topic"],
+                min_count=1,
+            ),
+            _planned(
+                "topic_message_flow",
+                "planner_cmd_flow",
+                uav["planner_cmd_topic"],
+                duration_s=3.0,
+                min_messages=1,
+            ),
         ],
         "flight_gate": [
             {
@@ -221,12 +252,14 @@ def _checks_for_uav(uav, bridge, config):
     }
 
 
-def _planned(kind, name, target):
-    return {
+def _planned(kind, name, target, **extra):
+    check = {
         "kind": kind,
         "name": name,
         "target": target,
     }
+    check.update(extra)
+    return check
 
 
 class DryRunChecker:
@@ -280,6 +313,10 @@ class RosChecker:
             return self._wait_for_advertised_topic(check)
         if kind == "topic_ready_for_publish":
             return self._topic_ready_for_publish(check)
+        if kind == "topic_subscriber_count":
+            return self._wait_for_subscribers(check)
+        if kind == "topic_message_flow":
+            return self._measure_message_flow(check)
         if kind == "service":
             return self._wait_for_service(check)
         if kind == "config_gate":
@@ -327,6 +364,61 @@ class RosChecker:
         result = dict(check)
         result["status"] = "publisher_can_be_created"
         result["ready"] = True
+        return result
+
+    def _wait_for_subscribers(self, check):
+        result = dict(check)
+        deadline = time.monotonic() + self.timeout_s
+        last_count = 0
+        while time.monotonic() < deadline and not self.rospy.is_shutdown():
+            try:
+                _code, _status, system_state = self.rospy.get_master().getSystemState()
+            except Exception as exc:
+                result["status"] = "master_unavailable"
+                result["ready"] = False
+                result["detail"] = str(exc)
+                return result
+            last_count = parse_subscriber_count(system_state, check["target"])
+            if last_count >= int(check.get("min_count", 1)):
+                result["status"] = "subscribers_present"
+                result["ready"] = True
+                result["subscriber_count"] = last_count
+                return result
+            time.sleep(0.2)
+        result["status"] = "no_subscribers"
+        result["ready"] = False
+        result["subscriber_count"] = last_count
+        result["detail"] = f"observed {last_count} subscribers for {check['target']}"
+        return result
+
+    def _measure_message_flow(self, check):
+        result = dict(check)
+        duration_s = float(check.get("duration_s", 3.0))
+        min_messages = int(check.get("min_messages", 1))
+        samples = []
+        deadline = time.monotonic() + duration_s
+        while time.monotonic() < deadline and not self.rospy.is_shutdown():
+            remaining = max(0.01, deadline - time.monotonic())
+            try:
+                self.rospy.wait_for_message(
+                    check["target"], self.rospy.AnyMsg, timeout=min(0.5, remaining)
+                )
+                samples.append(time.monotonic())
+            except Exception:
+                pass
+        summary = summarize_message_flow(samples, now=time.monotonic())
+        result.update(summary)
+        if (
+            summary["count"] >= min_messages
+            and summary["last_age_s"] is not None
+            and summary["last_age_s"] <= duration_s
+        ):
+            result["status"] = "message_flow_ok"
+            result["ready"] = True
+        else:
+            result["status"] = "message_flow_empty"
+            result["ready"] = False
+            result["detail"] = f"expected at least {min_messages} message(s) in {duration_s:.1f}s"
         return result
 
     def _wait_for_service(self, check):

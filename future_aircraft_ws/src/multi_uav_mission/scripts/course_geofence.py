@@ -55,6 +55,37 @@ def validate_segment(start, end, fence: Geofence, step_m: float = 0.25) -> bool:
     return True
 
 
+def watchdog_decision_with_reason(
+    position,
+    fence: Geofence,
+    *,
+    armed: bool,
+    mode: str,
+    odom_age_s: float,
+    speed_mps: float,
+    mode_grace_active: bool = False,
+) -> tuple:
+    """Return (decision, reason) for a single watchdog observation."""
+    if not armed:
+        return "continue", "disarmed"
+    try:
+        validate_point(position, fence)
+    except GeofenceViolation:
+        x, y, z = (float(value) for value in position)
+        if x < fence.min_x or x > fence.max_x:
+            return "land", "outside_x"
+        if y < fence.min_y or y > fence.max_y:
+            return "land", "outside_y"
+        return "land", "outside_z"
+    if mode != "OFFBOARD" and not mode_grace_active:
+        return "land", "mode_loss"
+    if not math.isfinite(float(odom_age_s)) or odom_age_s > fence.max_odom_age_s:
+        return "land", "stale_odom"
+    if not math.isfinite(float(speed_mps)) or speed_mps > fence.max_speed_mps:
+        return "land", "max_speed"
+    return "continue", "ok"
+
+
 def watchdog_decision(
     position,
     fence: Geofence,
@@ -65,16 +96,14 @@ def watchdog_decision(
     speed_mps: float,
     mode_grace_active: bool = False,
 ) -> str:
-    if not armed:
-        return "continue"
-    try:
-        validate_point(position, fence)
-    except GeofenceViolation:
-        return "land"
-    if mode != "OFFBOARD" and not mode_grace_active:
-        return "land"
-    if not math.isfinite(float(odom_age_s)) or odom_age_s > fence.max_odom_age_s:
-        return "land"
-    if not math.isfinite(float(speed_mps)) or speed_mps > fence.max_speed_mps:
-        return "land"
-    return "continue"
+    """Legacy decision string kept for existing callers."""
+    decision, _reason = watchdog_decision_with_reason(
+        position,
+        fence,
+        armed=armed,
+        mode=mode,
+        odom_age_s=odom_age_s,
+        speed_mps=speed_mps,
+        mode_grace_active=mode_grace_active,
+    )
+    return decision

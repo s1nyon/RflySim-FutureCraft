@@ -12,6 +12,13 @@ This file is the machine-oriented operating guide for the repository. Any agent 
 - Keep ROS development inside `future_aircraft_ws`.
 - Keep Windows launch orchestration, environment setup, and run wrappers in `scripts/`, `config/`, and related support files.
 - Preserve the `/uav1` and `/uav2` namespace contract.
+- The watchdog, executor navigation verification, and preflight topic wait use
+  `/uavX/mavros/local_position/odom` (PX4-fused, 28com-parity) as the primary
+  odometry source. `/uavX/mavros/odometry/in` is only a cross-check; FAST-LIO raw
+  odometry stays under `/uavX/slam/odometry_raw`.
+- The MAVROS odometry plugin TF contract is a hard pre-arm gate
+  (`odom_tf_contract_check.py`): it mirrors the four static lookups MAVROS
+  1.20.1 performs per UAV and scans mavros logs for `ODOM: Ex`.
 - Keep Stage 5 `mission_events.jsonl` compatibility intact.
 - Simulation arming is acceptable in this project when `--simulation-only`, `--allow-arm`, and `simulation_arm_policy.allow_arm=true` all agree.
 - Never assume real-hardware arming is allowed; real aircraft must remain manual-arm by default.
@@ -45,6 +52,29 @@ Latest Stage 8 live evidence, 2026-08-02:
 - Both simulated vehicles were confirmed disarmed at the end. Do not report tunnel traversal or landing success from this run.
 - Two preceding watchdog defects were reproduced and corrected in the working tree: duplicate ROS node names and an immediate non-OFFBOARD decision during the post-arm state-message race. These corrections pass the focused geofence check and offline Stage 8 validation, but they do not resolve the altitude/planner failure.
 - Read [docs/stage8_tunnel_live_issue_2026-08-02.md](../docs/stage8_tunnel_live_issue_2026-08-02.md) before the next live attempt. Capture actual planner z, MAVROS raw setpoint z/frame/type mask, odometry frame direction, PX4 mode-loss reason, and watchdog decisions before changing the route or relaxing safety bounds.
+
+2026-08-07 interface updates (uncommitted working tree):
+
+- `mission_executor.py` now writes partial `mission_events.jsonl`,
+  `executor_trace.json`, and `score_summary.json` on every failure path
+  (`mission_failed` event plus completed-action trace), instead of only on success.
+- `stage7_run_artifacts.py` emits `provenance.json` (git_commit, base_map,
+  course_name, course_spec_sha256, simulation_instance_id, ros_master_uri);
+  `stage7_flight_report.py` embeds it under `report.provenance`.
+- `course_geofence_watchdog.py` writes structured JSONL decisions
+  (`--output`, every state change) with an explicit `reason`
+  (`outside_x|outside_y|outside_z|mode_loss|stale_odom|max_speed|disarmed|ok`);
+  `watchdog_decision_with_reason` is the canonical decision API.
+- `stage7_topic_probe.py` replaced the fake-positive goal check with a real
+  subscriber-count check and added planner-command message-flow measurement.
+- New `odom_tf_contract_check.py` (Gate B) verifies the namespaced TF frames and
+  the exact MAVROS odom-plugin lookups, and scans mavros logs for `ODOM: Ex`.
+- `rflysim_fastlio_dual.launch` static TF publishers now use `respawn="true"`;
+  `rflysim_ego_swarm_single.launch` no longer publishes global
+  `world/map/base_link/camera_link` static frames that polluted the TF tree.
+- `stage8_dynamic_lidar_probe.py` is SLAMScene-aware: capture takes sensor
+  pose/yaw and wall world-NED coordinates and projects the wall into the LiDAR
+  frame for ROI counting.
 
 Validated offline stages:
 

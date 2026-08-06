@@ -90,7 +90,7 @@
       "planner_cmd_topic": "/uav1/planning/pos_cmd",
       "planner_goal_topic": "/uav1/planning/goal",
       "mavros_state_topic": "/uav1/mavros/state",
-      "mavros_feedback_odom_topic": "/uav1/mavros/odometry/in",
+      "mavros_feedback_odom_topic": "/uav1/mavros/local_position/odom",
       "mavros_setpoint_topic": "/uav1/mavros/setpoint_raw/local",
       "mavros_set_mode_service": "/uav1/mavros/set_mode",
       "mavros_arming_service": "/uav1/mavros/cmd/arming"
@@ -109,7 +109,7 @@
       "planner_cmd_topic": "/uav2/planning/pos_cmd",
       "planner_goal_topic": "/uav2/planning/goal",
       "mavros_state_topic": "/uav2/mavros/state",
-      "mavros_feedback_odom_topic": "/uav2/mavros/odometry/in",
+      "mavros_feedback_odom_topic": "/uav2/mavros/local_position/odom",
       "mavros_setpoint_topic": "/uav2/mavros/setpoint_raw/local",
       "mavros_set_mode_service": "/uav2/mavros/set_mode",
       "mavros_arming_service": "/uav2/mavros/cmd/arming"

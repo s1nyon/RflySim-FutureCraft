@@ -44,7 +44,15 @@ try {
         'tests\stage8_dynamic_lidar_probe_check.py', '--module', $lidarProbe
     )
     Invoke-Checked $python @(
+        'tests\stage8_probe_slamscene_check.py', '--module', $lidarProbe
+    )
+    Invoke-Checked $python @(
         'tests\stage8_geofence_check.py',
+        '--module', (Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\course_geofence.py'),
+        '--watchdog', (Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\course_geofence_watchdog.py')
+    )
+    Invoke-Checked $python @(
+        'tests\stage8_watchdog_events_check.py',
         '--module', (Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\course_geofence.py'),
         '--watchdog', (Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\course_geofence_watchdog.py')
     )

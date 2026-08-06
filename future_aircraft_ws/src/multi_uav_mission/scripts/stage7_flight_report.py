@@ -44,6 +44,7 @@ def build_report(
     executor_exit_code,
     run_id=None,
     phase="executor",
+    provenance_path=None,
 ):
     events = _read_events(events_path)
     checks = {name: {uav_id: False for uav_id in UAV_IDS} for name in REQUIRED_EVENTS}
@@ -60,6 +61,7 @@ def build_report(
     smoke = _read_json(smoke_path)
     trace = _read_json(trace_path)
     score = _read_json(score_path)
+    provenance = _read_json(provenance_path) if provenance_path is not None else None
     artifacts_valid = trace is not None and score is not None
     smoke_ready = isinstance(smoke, dict) and smoke.get("ready") is True
     report = {
@@ -80,6 +82,8 @@ def build_report(
     }
     if run_id is not None:
         report["run_id"] = run_id
+    if provenance is not None:
+        report["provenance"] = provenance
     if smoke is not None:
         report["smoke"] = smoke
     if score is not None:
@@ -97,6 +101,7 @@ def main(argv=None):
     parser.add_argument("--executor-exit-code", required=True, type=int)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--phase", default="executor")
+    parser.add_argument("--provenance", type=Path, default=None)
     parser.add_argument("--report", required=True, type=Path)
     args = parser.parse_args(argv)
     report = build_report(
@@ -108,6 +113,7 @@ def main(argv=None):
         args.executor_exit_code,
         run_id=args.run_id,
         phase=args.phase,
+        provenance_path=args.provenance,
     )
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")

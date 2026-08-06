@@ -24,6 +24,26 @@ SUPPORTED_ACTIONS = {
 
 SUPPORTED_TARGET_SOURCE_MODES = ("ideal", "sim_vision")
 
+
+class MissionExecutionError(RuntimeError):
+    """Carry the partial events/trace out of execute_plan() on failure."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        events=None,
+        trace=None,
+        sequence=None,
+        stage=None,
+    ):
+        super().__init__(message)
+        self.events = list(events) if events else []
+        self.trace = list(trace) if trace else []
+        self.sequence = sequence
+        self.stage = stage
+
+
 STAGE_START_EVENTS = {
     "preflight": "preflight_start",
     "multi_takeoff": "multi_takeoff_start",
@@ -571,89 +591,98 @@ def execute_plan(plan, backend, allow_arm=False, simulation_only=False, live_con
     current_stage = None
     min_distance_emitted = False
 
-    for action in plan["actions"]:
-        if geofence is not None and "goal" in action:
-            validate_point((action["goal"]["x"], action["goal"]["y"], action["goal"]["z"]), geofence)
-        stage = action["stage"]
-        if stage != current_stage:
-            if current_stage is not None:
-                events.append({"time": clock.tick(), "event": STAGE_SUCCESS_EVENTS[current_stage], "stage": current_stage})
-            current_stage = stage
-            start_event = STAGE_START_EVENTS.get(stage, f"{stage}_start")
-            events.append({"time": clock.tick(), "event": start_event, "stage": stage})
+    try:
+        for action in plan["actions"]:
+            if geofence is not None and "goal" in action:
+                validate_point((action["goal"]["x"], action["goal"]["y"], action["goal"]["z"]), geofence)
+            stage = action["stage"]
+            if stage != current_stage:
+                if current_stage is not None:
+                    events.append({"time": clock.tick(), "event": STAGE_SUCCESS_EVENTS[current_stage], "stage": current_stage})
+                current_stage = stage
+                start_event = STAGE_START_EVENTS.get(stage, f"{stage}_start")
+                events.append({"time": clock.tick(), "event": start_event, "stage": stage})
 
-        arming_allowed = arm_authorized(action, allow_arm, simulation_only, live_config)
-        if backend.name == "ros" and _is_arming_action(action) and not arming_allowed:
-            result = {
-                "status": "blocked_by_safety_gate",
-                "detail": "arming service requires --allow-arm --simulation-only and simulation_arm_policy.allow_arm",
-            }
-            events.append(
-                {
-                    "time": clock.tick(),
-                    "event": "arming_blocked",
-                    "stage": stage,
-                    "uav": action.get("uav"),
-                    "service": action["service"],
+            arming_allowed = arm_authorized(action, allow_arm, simulation_only, live_config)
+            if backend.name == "ros" and _is_arming_action(action) and not arming_allowed:
+                result = {
+                    "status": "blocked_by_safety_gate",
+                    "detail": "arming service requires --allow-arm --simulation-only and simulation_arm_policy.allow_arm",
                 }
-            )
-        elif arming_allowed:
-            events.append(
-                {
-                    "time": clock.tick(),
-                    "event": "arming_requested",
-                    "stage": stage,
-                    "uav": action.get("uav"),
-                    "service": action["service"],
+                events.append(
+                    {
+                        "time": clock.tick(),
+                        "event": "arming_blocked",
+                        "stage": stage,
+                        "uav": action.get("uav"),
+                        "service": action["service"],
+                    }
+                )
+            elif arming_allowed:
+                events.append(
+                    {
+                        "time": clock.tick(),
+                        "event": "arming_requested",
+                        "stage": stage,
+                        "uav": action.get("uav"),
+                        "service": action["service"],
+                    }
+                )
+                events.append(
+                    {
+                        "time": clock.tick(),
+                        "event": "arming_allowed_by_simulation_gate",
+                        "stage": stage,
+                        "uav": action.get("uav"),
+                        "service": action["service"],
+                    }
+                )
+                backend.execute(action)
+                result = {
+                    "status": "simulation_arm_authorized",
+                    "detail": "arming permitted by simulation gate",
                 }
-            )
-            events.append(
-                {
-                    "time": clock.tick(),
-                    "event": "arming_allowed_by_simulation_gate",
-                    "stage": stage,
-                    "uav": action.get("uav"),
-                    "service": action["service"],
-                }
-            )
-            backend.execute(action)
-            result = {
-                "status": "simulation_arm_authorized",
-                "detail": "arming permitted by simulation gate",
-            }
-            result = _attach_target_results(action, result, target_results)
-            events.extend(_events_for_action(action, result, clock))
-            events.append(
-                {
-                    "time": clock.tick(),
-                    "event": "arming_service_called",
-                    "stage": stage,
-                    "uav": action.get("uav"),
-                    "service": action["service"],
-                }
-            )
-            events.extend(_verification_events_for_action(action, backend, allow_arm, simulation_only, live_config, clock))
-        else:
-            result = backend.execute(action)
-            result = _attach_target_results(action, result, target_results)
-            events.extend(_events_for_action(action, result, clock))
-            events.extend(_verification_events_for_action(action, backend, allow_arm, simulation_only, live_config, clock))
+                result = _attach_target_results(action, result, target_results)
+                events.extend(_events_for_action(action, result, clock))
+                events.append(
+                    {
+                        "time": clock.tick(),
+                        "event": "arming_service_called",
+                        "stage": stage,
+                        "uav": action.get("uav"),
+                        "service": action["service"],
+                    }
+                )
+                events.extend(_verification_events_for_action(action, backend, allow_arm, simulation_only, live_config, clock))
+            else:
+                result = backend.execute(action)
+                result = _attach_target_results(action, result, target_results)
+                events.extend(_events_for_action(action, result, clock))
+                events.extend(_verification_events_for_action(action, backend, allow_arm, simulation_only, live_config, clock))
 
-        trace.append(_trace_entry(action, backend.name, result))
+            trace.append(_trace_entry(action, backend.name, result))
 
-        if simulation_only and action["stage"] == "multi_takeoff" and action["action"] == "publish_position_setpoint":
-            events.append(
-                {
-                    "time": clock.tick(),
-                    "event": "takeoff_setpoint_published",
-                    "stage": "multi_takeoff",
-                    "uav": action.get("uav"),
-                }
-            )
+            if simulation_only and action["stage"] == "multi_takeoff" and action["action"] == "publish_position_setpoint":
+                events.append(
+                    {
+                        "time": clock.tick(),
+                        "event": "takeoff_setpoint_published",
+                        "stage": "multi_takeoff",
+                        "uav": action.get("uav"),
+                    }
+                )
 
-        if stage == "collaborative_navigate" and not min_distance_emitted:
-            events.append({"time": clock.tick(), "event": "min_uav_distance", "stage": stage, "distance_m": 0.85})
-            min_distance_emitted = True
+            if stage == "collaborative_navigate" and not min_distance_emitted:
+                events.append({"time": clock.tick(), "event": "min_uav_distance", "stage": stage, "distance_m": 0.85})
+                min_distance_emitted = True
+    except Exception as exc:
+        raise MissionExecutionError(
+            str(exc),
+            events=events,
+            trace=trace,
+            sequence=action.get("sequence"),
+            stage=action.get("stage"),
+        ) from exc
 
     if current_stage is not None:
         events.append({"time": clock.tick(), "event": STAGE_SUCCESS_EVENTS[current_stage], "stage": current_stage})
@@ -851,7 +880,54 @@ def main(argv=None):
         write_jsonl(args.events, events)
         write_json(args.trace, trace)
         write_json(args.score, build_summary(events))
+    except MissionExecutionError as exc:
+        events = list(exc.events)
+        if not events:
+            events = [
+                {
+                    "time": 0.0,
+                    "event": "mission_start",
+                    "mission": plan.get("mission_name", "unknown"),
+                    "backend": args.backend,
+                }
+            ]
+        failure = {"time": 0.0, "event": "mission_failed", "error": str(exc)}
+        if exc.sequence is not None:
+            failure["sequence"] = exc.sequence
+        if exc.stage is not None:
+            failure["stage"] = exc.stage
+        events.append(failure)
+        trace = list(exc.trace)
+        if exc.sequence is not None and not (
+            trace and trace[-1].get("sequence") == exc.sequence
+        ):
+            trace.append(
+                {
+                    "sequence": exc.sequence,
+                    "stage": exc.stage,
+                    "action": "failed",
+                    "status": "failed",
+                    "detail": str(exc),
+                }
+            )
+        write_jsonl(args.events, events)
+        write_json(args.trace, trace)
+        write_json(args.score, build_summary(events))
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        return 1
     except Exception as exc:
+        events = [
+            {
+                "time": 0.0,
+                "event": "mission_start",
+                "mission": "unknown",
+                "backend": args.backend,
+            },
+            {"time": 0.0, "event": "mission_failed", "error": str(exc)},
+        ]
+        write_jsonl(args.events, events)
+        write_json(args.trace, [])
+        write_json(args.score, build_summary(events))
         print(f"[ERROR] {exc}", file=sys.stderr)
         return 1
     return 0

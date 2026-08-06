@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Probe whether a runtime wall is visible to TypeID 23 on ChallengeMap."""
+"""Probe whether a runtime wall is visible to the TypeID 23 Mid360.
+
+The default flow targets the SLAMScene predicted-narrow-course setup; the wall
+center and vehicle pose are expressed in world NED and projected into the
+LiDAR frame so the ROI does not depend on stale ChallengeMap coordinates.
+"""
 
 from __future__ import annotations
 
@@ -12,7 +17,7 @@ from pathlib import Path
 import statistics
 import sys
 import time
-from typing import Dict, Iterable, List, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 
 Point3 = Tuple[float, float, float]
@@ -99,7 +104,10 @@ def count_wall_roi(
     depth_tolerance_m: float = 0.2,
     half_width_m: float = 1.5,
     half_height_m: float = 2.0,
+    wall_lidar_x: Optional[float] = None,
 ) -> int:
+    if wall_lidar_x is not None:
+        distance_m = abs(float(wall_lidar_x))
     return sum(
         1
         for x, y, z in points
@@ -107,6 +115,59 @@ def count_wall_roi(
         and abs(y) <= half_width_m
         and abs(z) <= half_height_m
     )
+
+
+def lidar_frame_xy(
+    wall_ned: Point3,
+    sensor_ned: Point3,
+    yaw_deg: float,
+):
+    """Project a world NED wall center into the LiDAR horizontal frame."""
+    dx = float(wall_ned[0]) - float(sensor_ned[0])
+    dy = float(wall_ned[1]) - float(sensor_ned[1])
+    yaw = math.radians(float(yaw_deg))
+    x = dx * math.cos(yaw) + dy * math.sin(yaw)
+    y = -dx * math.sin(yaw) + dy * math.cos(yaw)
+    return round(x, 3), round(y, 3)
+
+
+def capture_geometry(
+    sensor_pose_ned: Optional[Point3],
+    sensor_yaw_deg: Optional[float],
+    wall_position_ned: Optional[Point3],
+    sensor_frame: Optional[str],
+) -> Dict[str, object]:
+    """Describe the sensor pose and the wall center in the LiDAR frame."""
+    if (
+        sensor_pose_ned is not None
+        and sensor_yaw_deg is not None
+        and wall_position_ned is not None
+    ):
+        wall_lidar_x, wall_lidar_y = lidar_frame_xy(
+            wall_position_ned,
+            sensor_pose_ned,
+            sensor_yaw_deg,
+        )
+    else:
+        wall_lidar_x, wall_lidar_y = None, None
+    return {
+        "sensor_frame": sensor_frame,
+        "sensor_pose_ned": (
+            [float(value) for value in sensor_pose_ned]
+            if sensor_pose_ned is not None
+            else None
+        ),
+        "sensor_yaw_deg": (
+            float(sensor_yaw_deg) if sensor_yaw_deg is not None else None
+        ),
+        "wall_position_ned": (
+            [float(value) for value in wall_position_ned]
+            if wall_position_ned is not None
+            else None
+        ),
+        "wall_lidar_x": wall_lidar_x,
+        "wall_lidar_y": wall_lidar_y,
+    }
 
 
 def analyze_probe(
@@ -161,7 +222,17 @@ def _wall_receipt(action: str, wall: ProbeWall, dry_run: bool) -> Dict[str, obje
     }
 
 
-def _capture_counts(topic: str, state_topic: str, frames: int, timeout_s: float) -> Dict[str, object]:
+def _capture_counts(
+    topic: str,
+    state_topic: str,
+    frames: int,
+    timeout_s: float,
+    *,
+    sensor_pose_ned: Optional[Point3] = None,
+    sensor_yaw_deg: Optional[float] = None,
+    wall_position_ned: Optional[Point3] = None,
+    sensor_frame: Optional[str] = None,
+) -> Dict[str, object]:
     import rospy
     from mavros_msgs.msg import State
     from sensor_msgs import point_cloud2
@@ -176,6 +247,13 @@ def _capture_counts(topic: str, state_topic: str, frames: int, timeout_s: float)
     state = rospy.wait_for_message(state_topic, State, timeout=timeout_s)
     if state.armed:
         raise RuntimeError(f"refusing LiDAR probe while vehicle is armed: {state_topic}")
+    geometry = capture_geometry(
+        sensor_pose_ned,
+        sensor_yaw_deg,
+        wall_position_ned,
+        sensor_frame,
+    )
+    wall_lidar_x = geometry["wall_lidar_x"]
     counts: List[int] = []
     stamps: List[float] = []
     for _index in range(frames):
@@ -185,12 +263,12 @@ def _capture_counts(topic: str, state_topic: str, frames: int, timeout_s: float)
             field_names=("x", "y", "z"),
             skip_nans=True,
         )
-        counts.append(count_wall_roi(points))
+        counts.append(count_wall_roi(points, wall_lidar_x=wall_lidar_x))
         stamps.append(cloud.header.stamp.to_sec())
     final_state = rospy.wait_for_message(state_topic, State, timeout=timeout_s)
     if final_state.armed:
         raise RuntimeError(f"vehicle armed during LiDAR probe: {state_topic}")
-    return {
+    payload = {
         "armed": False,
         "counts": counts,
         "frames": frames,
@@ -198,6 +276,8 @@ def _capture_counts(topic: str, state_topic: str, frames: int, timeout_s: float)
         "stamps": stamps,
         "topic": topic,
     }
+    payload.update(geometry)
+    return payload
 
 
 def _read_json(path: Path) -> Dict[str, object]:
@@ -228,6 +308,14 @@ def _add_capture_parser(subparsers) -> None:
     parser.add_argument("--state-topic", default="/uav1/mavros/state")
     parser.add_argument("--frames", type=int, default=10)
     parser.add_argument("--timeout-s", type=float, default=10.0)
+    parser.add_argument("--sensor-pose-ned-x", type=float, default=None)
+    parser.add_argument("--sensor-pose-ned-y", type=float, default=None)
+    parser.add_argument("--sensor-pose-ned-z", type=float, default=None)
+    parser.add_argument("--sensor-yaw-deg", type=float, default=None)
+    parser.add_argument("--wall-position-ned-x", type=float, default=None)
+    parser.add_argument("--wall-position-ned-y", type=float, default=None)
+    parser.add_argument("--wall-position-ned-z", type=float, default=None)
+    parser.add_argument("--sensor-frame", default=None)
     parser.add_argument("--output", type=Path, required=True)
 
 
@@ -264,7 +352,32 @@ def main(argv=None) -> int:
         return 0
 
     if args.command == "capture":
-        payload = _capture_counts(args.topic, args.state_topic, args.frames, args.timeout_s)
+        payload = _capture_counts(
+            args.topic,
+            args.state_topic,
+            args.frames,
+            args.timeout_s,
+            sensor_pose_ned=(
+                (
+                    args.sensor_pose_ned_x,
+                    args.sensor_pose_ned_y,
+                    args.sensor_pose_ned_z,
+                )
+                if args.sensor_pose_ned_x is not None
+                else None
+            ),
+            sensor_yaw_deg=args.sensor_yaw_deg,
+            wall_position_ned=(
+                (
+                    args.wall_position_ned_x,
+                    args.wall_position_ned_y,
+                    args.wall_position_ned_z,
+                )
+                if args.wall_position_ned_x is not None
+                else None
+            ),
+            sensor_frame=args.sensor_frame,
+        )
         _write_json(args.output, payload)
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
