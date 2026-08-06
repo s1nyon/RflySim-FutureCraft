@@ -19,6 +19,7 @@ $requiredPaths = @(
 'future_aircraft_ws/src/multi_uav_mission/scripts/odom_frame_relay.py',
 'future_aircraft_ws/src/multi_uav_mission/scripts/odom_tf_contract_check.py',
 'future_aircraft_ws/src/multi_uav_mission/scripts/flight_event_recorder.py',
+'future_aircraft_ws/src/multi_uav_mission/scripts/check_swarm_obstacle.py',
     'future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_cloud_contract.py',
     'future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_pointcloud_adapter.py',
     'future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_sensor_bridge.py',
@@ -38,6 +39,7 @@ $requiredPaths = @(
 'tests/stage7_sensor_readiness_check.py',
 'tests/stage8_odom_tf_contract_check.py',
 'tests/stage7_flight_event_recorder_check.py',
+'tests/stage7_swarm_obstacle_check.py',
     'scripts/run_live_fastlio_dual.bat',
     'scripts/run_live_ego_swarm_dual.bat',
     'scripts/run_stage7_topic_probe.bat',
@@ -610,6 +612,15 @@ if ($missing.Count -eq 0) {
         )
         if ($LASTEXITCODE -ne 0) {
             $contractErrors += "stage7_flight_event_recorder_check.py failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
+        }
+
+        $swarmObstacleCheckScript = Join-Path $ProjectRoot 'tests/stage7_swarm_obstacle_check.py'
+        $swarmObstacleModule = Join-Path $ProjectRoot 'future_aircraft_ws/src/multi_uav_mission/scripts/check_swarm_obstacle.py'
+        $output = Invoke-ContractPythonScript -Runner $pythonRunner -ScriptPath $swarmObstacleCheckScript -Arguments @(
+            '--module', $swarmObstacleModule
+        )
+        if ($LASTEXITCODE -ne 0) {
+            $contractErrors += "stage7_swarm_obstacle_check.py failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
         }
     }
 

@@ -55,6 +55,16 @@ Latest Stage 8 live evidence, 2026-08-02:
 
 2026-08-07 interface updates (uncommitted working tree):
 
+- **ego-swarm inter-UAV coordination caveat**: the swarm trajectory broadcast
+  (`/broadcast_bspline`, `/drone_*_planning/swarm_trajs`) assumes all UAVs share
+  one coordinate frame and start times within 0.25 s. This project runs each UAV
+  on its own FAST-LIO frame (origin at its takeoff pose), so the received swarm
+  trajectories are NOT valid in the local frame and are often discarded by the
+  time-sync check. Do not rely on `swarm_clearance` for collision avoidance.
+  Inter-UAV collision avoidance must come from perception: each UAV's mid360
+  cloud feeds its grid map, and the planner's collision check triggers replan or
+  emergency stop. Verify with `check_swarm_obstacle.py` before trusting it.
+
 - `mission_executor.py` now writes partial `mission_events.jsonl`,
   `executor_trace.json`, and `score_summary.json` on every failure path
   (`mission_failed` event plus completed-action trace), instead of only on success.
