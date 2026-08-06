@@ -66,7 +66,9 @@ def main() -> int:
     assert arena_floor.size == module.Vec3(30.8, 19.4, 0.05)
     ceilings = [obj for obj in model.arena_objects if obj.category == "ceiling"]
     assert len(ceilings) == 3
-    assert all(ceiling.center.z == 2.5 for ceiling in ceilings)
+    # UE4 renders sendUE4PosScale z ~0.43 m low; 2.93 compensates so the
+    # ceiling top meets the 2.5 m boundary wall top in the rendered scene.
+    assert all(ceiling.center.z == 2.93 for ceiling in ceilings)
     assert all(ceiling.size.z == 0.2 for ceiling in ceilings)
     assert [ceiling.copter_id for ceiling in ceilings] == [12785, 12786, 12787]
     boundary_walls = [obj for obj in model.arena_objects if obj.category == "boundary_wall"]
