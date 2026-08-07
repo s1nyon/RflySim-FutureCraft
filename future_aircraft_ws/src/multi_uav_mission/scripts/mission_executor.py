@@ -6,6 +6,7 @@ import json
 
 from course_geofence import Geofence, validate_point
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -86,6 +87,56 @@ class DryRunBackend:
         }
 
 
+class TopicCache:
+    """Persistent subscriber-backed topic cache used by the ROS backend.
+
+    Navigation verification must not churn temporary subscribers via
+    ``rospy.wait_for_message``: repeated subscribe/unsubscribe cycles are
+    known to stall delivery for later goals (see run
+    ``stage7-20260807T124153Z-22785``).  A single long-lived subscriber keeps
+    the connection established, and the condition variable lets the executor
+    wait for fresh messages without tearing the subscription down.
+    """
+
+    def __init__(self, rospy, topic, topic_type, queue_size=1):
+        self._rospy = rospy
+        self.topic = topic
+        self.topic_type = topic_type
+        self.condition = threading.Condition()
+        self.message = None
+        self.sequence = 0
+        self.subscriber = rospy.Subscriber(
+            topic,
+            topic_type,
+            self._callback,
+            queue_size=queue_size,
+        )
+
+    def _callback(self, message):
+        with self.condition:
+            self.message = message
+            self.sequence += 1
+            self.condition.notify_all()
+
+    def get(self):
+        with self.condition:
+            return self.message
+
+    def wait_for_sequence(self, last_sequence, timeout):
+        """Wait until a message newer than ``last_sequence`` arrives.
+
+        Returns the newest message and its sequence, or ``(None, last_sequence)``
+        if the timeout expires.
+        """
+        with self.condition:
+            if self.sequence > last_sequence:
+                return self.message, self.sequence
+            self.condition.wait(timeout=timeout)
+            if self.sequence > last_sequence:
+                return self.message, self.sequence
+            return None, last_sequence
+
+
 class RosBackend:
     name = "ros"
 
@@ -111,6 +162,7 @@ class RosBackend:
         self.Odometry = Odometry
         self.PositionCommand = PositionCommand
         self.Trigger = Trigger
+        self._topic_caches = {}
         if not rospy.core.is_initialized():
             rospy.init_node("future_aircraft_mission_executor", anonymous=True)
 
@@ -178,13 +230,20 @@ class RosBackend:
         last_distance = float("inf")
         goal = action["goal"]
         tolerance_m = float(action["tolerance_m"])
+        odom_topic = action["mavros_odom_topic"]
+        planner_topic = action["planner_cmd_topic"]
+        odom_cache = self._ensure_topic_cache(odom_topic, self.Odometry)
+        planner_cache = self._ensure_topic_cache(planner_topic, self.PositionCommand)
+        last_odom_sequence = odom_cache.sequence
+        last_planner_sequence = planner_cache.sequence
         while time.monotonic() < deadline and not self.rospy.is_shutdown():
             remaining = max(0.01, deadline - time.monotonic())
-            odom = self.rospy.wait_for_message(
-                action["mavros_odom_topic"],
-                self.Odometry,
-                timeout=min(0.5, remaining),
+            odom, last_odom_sequence = odom_cache.wait_for_sequence(
+                last_odom_sequence,
+                min(0.5, remaining),
             )
+            if odom is None:
+                continue
             position = odom.pose.pose.position
             last_distance = (
                 (float(position.x) - float(goal["x"])) ** 2
@@ -200,19 +259,28 @@ class RosBackend:
                         "planner_commands": planner_commands,
                     },
                 }
-            try:
-                self.rospy.wait_for_message(
-                    action["planner_cmd_topic"],
-                    self.PositionCommand,
-                    timeout=min(0.5, remaining),
-                )
+            previous_planner_sequence = last_planner_sequence
+            _planner, last_planner_sequence = planner_cache.wait_for_sequence(
+                last_planner_sequence,
+                min(0.5, remaining),
+            )
+            if last_planner_sequence > previous_planner_sequence:
                 planner_commands += 1
-            except Exception:
-                pass
         raise RuntimeError(
             f"planned navigation not confirmed for {action['uav']} within {timeout_s:.1f}s; "
             f"last_distance={last_distance:.3f}m planner_commands={planner_commands}"
         )
+
+    def _ensure_topic_cache(self, topic, topic_type):
+        caches = getattr(self, "_topic_caches", None)
+        if caches is None:
+            caches = {}
+            self._topic_caches = caches
+        cache = caches.get(topic)
+        if cache is None:
+            cache = TopicCache(self.rospy, topic, topic_type)
+            caches[topic] = cache
+        return cache
 
     def _call_service(self, action):
         service = action["service"]

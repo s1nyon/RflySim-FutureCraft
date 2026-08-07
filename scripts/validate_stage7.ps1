@@ -33,9 +33,10 @@ $requiredPaths = @(
     'tests/stage7_flight_artifact_check.py',
 'tests/stage7_goal_delivery_check.py',
 'tests/stage7_executor_failure_artifact_check.py',
-'tests/stage7_probe_flow_check.py',
-'tests/stage7_quadrotor_msgs_overlay_check.py',
-'tests/stage7_provenance_check.py',
+    'tests/stage7_probe_flow_check.py',
+    'tests/stage7_quadrotor_msgs_overlay_check.py',
+    'tests/stage7_persistent_navigation_subscriber_check.py',
+    'tests/stage7_provenance_check.py',
 'tests/stage7_planner_control_bridge_check.py',
 'tests/stage7_sensor_readiness_check.py',
 'tests/stage8_odom_tf_contract_check.py',
@@ -602,6 +603,14 @@ if ($missing.Count -eq 0) {
         )
         if ($LASTEXITCODE -ne 0) {
             $contractErrors += "stage7_quadrotor_msgs_overlay_check.py failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
+        }
+
+        $persistentSubscriberCheckScript = Join-Path $ProjectRoot 'tests/stage7_persistent_navigation_subscriber_check.py'
+        $output = Invoke-ContractPythonScript -Runner $pythonRunner -ScriptPath $persistentSubscriberCheckScript -Arguments @(
+            '--executor-module', $missionExecutorModule
+        )
+        if ($LASTEXITCODE -ne 0) {
+            $contractErrors += "stage7_persistent_navigation_subscriber_check.py failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
         }
 
         $provenanceCheckScript = Join-Path $ProjectRoot 'tests/stage7_provenance_check.py'

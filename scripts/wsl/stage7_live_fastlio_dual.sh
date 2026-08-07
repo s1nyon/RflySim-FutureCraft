@@ -13,6 +13,7 @@ READINESS_LOG="$RUN_DIR/sensor_readiness.log"
 FASTLIO_LOG="$RUN_DIR/fastlio_dual.log"
 SENSOR_STARTUP_TIMEOUT_SEC="${STAGE7_SENSOR_STARTUP_TIMEOUT_SEC:-120}"
 READINESS_TOPIC_TIMEOUT_SEC="${STAGE7_READINESS_TOPIC_TIMEOUT_SEC:-10}"
+ODOM_INIT_TIMEOUT_SEC="${STAGE7_ODOM_INIT_TIMEOUT_SEC:-60}"
 
 if ! [[ "$SENSOR_STARTUP_TIMEOUT_SEC" =~ ^[1-9][0-9]*$ ]]; then
   echo "[ERROR] STAGE7_SENSOR_STARTUP_TIMEOUT_SEC must be a positive integer" >&2
@@ -20,6 +21,10 @@ if ! [[ "$SENSOR_STARTUP_TIMEOUT_SEC" =~ ^[1-9][0-9]*$ ]]; then
 fi
 if ! [[ "$READINESS_TOPIC_TIMEOUT_SEC" =~ ^[1-9][0-9]*$ ]]; then
   echo "[ERROR] STAGE7_READINESS_TOPIC_TIMEOUT_SEC must be a positive integer" >&2
+  exit 2
+fi
+if ! [[ "$ODOM_INIT_TIMEOUT_SEC" =~ ^[1-9][0-9]*$ ]]; then
+  echo "[ERROR] STAGE7_ODOM_INIT_TIMEOUT_SEC must be a positive integer" >&2
   exit 2
 fi
 
@@ -161,6 +166,34 @@ done
 nohup roslaunch multi_uav_mission rflysim_fastlio_dual.launch rviz:=false \
   >"$FASTLIO_LOG" 2>&1 &
 FASTLIO_PID=$!
+
+# Wait for the FAST-LIO odometry chain to come up before sampling readiness.
+# This is a publisher-presence gate (initialization wait), intentionally
+# separate from the per-topic message timeout used by the readiness sampler:
+# on a cold start the relay only begins publishing after lidar bridge ->
+# adapter -> FAST-LIO initialization, which can take longer than the
+# readiness topic timeout.  Do not widen the message timeout to absorb this.
+ODOM_INIT_DEADLINE=$((SECONDS + ODOM_INIT_TIMEOUT_SEC))
+while (( SECONDS < ODOM_INIT_DEADLINE )); do
+  odom_ready=true
+  for topic in /uav1/mavros/odometry/out /uav2/mavros/odometry/out; do
+    if ! topic_has_publisher "$topic"; then
+      odom_ready=false
+      break
+    fi
+  done
+  if [ "$odom_ready" = true ]; then
+    break
+  fi
+  sleep 1
+done
+for topic in /uav1/mavros/odometry/out /uav2/mavros/odometry/out; do
+  if ! topic_has_publisher "$topic"; then
+    echo "[ERROR] FAST-LIO odometry relay did not publish $topic within ${ODOM_INIT_TIMEOUT_SEC}s" >&2
+    exit 1
+  fi
+done
+echo "[INFO] FAST-LIO odometry relay publishers ready after $((SECONDS))s"
 
 set +e
 python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/stage7_sensor_readiness.py" \

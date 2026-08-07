@@ -89,17 +89,37 @@ vision / task logic / behavior tree
 - 此前多次成功是因为复用上一轮已运行的 fastlio/relay 链路（topic 已热）或时序恰好够。复飞前如清理了旧 fastlio roslaunch，应把 `STAGE7_READINESS_TOPIC_TIMEOUT_SEC` 提高到 30-60s，或等 `/uav1/slam/odometry_raw` 出现后再跑 readiness。
 - 非交互会话中若同时存在自动编排与手动启动，会出现两个 `rflysim_ego_swarm_dual.launch` 互相以 “new node registered with same name” 挤掉对方（ROS 同名节点注册冲突），表现为 executor 报 `planner goal topic has no subscribers`。启动前必须确认只有一个 stage7 runner 实例。
 
+## 2.3 P0 修复状态（2026-08-08）
+
+- `mission_executor.py` 的 `_verify_planned_navigation()` 已改为持久 `rospy.Subscriber` +
+  内存缓存（`TopicCache`，条件变量等待新消息），不再在循环内反复
+  `wait_for_message()`；语义保持：goal tolerance 0.3 m、planner_commands 按
+  verify 窗口内收到的新 PositionCommand 计数、45 s 超时行为与失败消息不变。
+- 新增离线回归测试 `tests/stage7_persistent_navigation_subscriber_check.py`
+  （5 个连续 navigation goal 只创建 1 个 odom subscriber + 1 个 planner
+  subscriber），并已接入 `scripts/validate_stage7.ps1`；
+  `tests/stage7_planner_control_bridge_check.py` 同步改为新语义。
+- cold-start readiness：`stage7_live_fastlio_dual.sh` 在启动 FAST-LIO
+  roslaunch 后新增 odom relay publisher-presence 初始化等待
+  （`STAGE7_ODOM_INIT_TIMEOUT_SEC`，默认 60 s），与 readiness 的
+  per-topic message timeout（10 s）分离；不再需要为提高冷启动而放大
+  消息超时。
+- 离线验证：`validate_stage6c/6d/7/8.ps1` 全部 PASS。
+- 待办：fresh-instance lidar_only live 阶梯（cold-start readiness → 双机
+  takeoff → 短导航 → 完整双机错时穿隧道）→ 至少 3 次 fresh-instance
+  PBL-1 重复。
+
 因此当前工作模型必须是：
 
 ```text
 GOOD BASELINE
 双机定位 + OFFBOARD + EGO-Swarm + 错时穿隧道
         ↓
-NEW FEATURE
-D435i RGB / Depth / down camera integration
+CURRENT BLOCKER
+executor 长航段导航 subscriber 失效（odom/planner command 收不到）
         ↓
-CURRENT REGRESSION
-飞机无法正常起飞
+FIX
+持久 Subscriber + 内存缓存（禁止循环 wait_for_message）
 ```
 
 而不是：
@@ -112,7 +132,7 @@ Stage 8 从未成功
 
 后者是错误心智模型。
 
-## 2.2 当前 Protected Baseline
+## 2.4 当前 Protected Baseline
 
 定义：
 
@@ -133,7 +153,7 @@ PBL-1 包含：
 
 D435i、视觉、行为树、后续群体协同增强都必须在不无声破坏 PBL-1 的前提下演进。
 
-## 2.3 当前回归的初始责任假设
+## 2.5 当前回归的初始责任假设
 
 当前“加入 D435i 后无法起飞”应首先视为以下层面的集成回归候选：
 
@@ -148,7 +168,7 @@ D435i、视觉、行为树、后续群体协同增强都必须在不无声破坏
 
 只有证据排除这些层后，才升级调查 EGO/Faster-LIO/PX4 核心。
 
-## 2.4 仓库当前存在 documentation debt
+## 2.6 仓库当前存在 documentation debt
 
 当前 `README.md` 和旧 `.agents/AGENT2READ.md` 同时保留了：
 
@@ -1397,7 +1417,7 @@ Motion
 
 当前回归应优先利用这些经验。
 
-## 22.5 2026-08-07 `planner_commands=0` PositionCommand md5 不匹配（已修复，待 live 复测）
+## 22.5 2026-08-07 `planner_commands=0` PositionCommand md5 不匹配（已修复，live 已验证）
 
 - 症状：`lidar_only` 下双机 takeoff 成功，导航阶段 UAV1 `planner_commands=0`（run `stage7-20260807T084232Z-2599`）；
 - 证据：`ego_swarm_dual.log` 大量 `md5sum [44d620d9...] but our version has [4712f060...] Dropping connection`；
@@ -1415,7 +1435,7 @@ Motion
 
 ---
 
-# 23. D435i Regression Playbook（当前优先）
+# 23. D435i Regression Playbook（视觉线待办，非当前 P0）
 
 当任务是“修好今天 D435i 导致无法起飞”时，推荐 Agent 严格按以下顺序。
 

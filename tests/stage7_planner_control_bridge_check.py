@@ -7,6 +7,8 @@ import argparse
 import importlib.util
 import json
 import sys
+import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -37,17 +39,44 @@ class DummyPositionTarget:
 
 
 class AlreadyAtGoalRospy:
-    def wait_for_message(self, topic, _message_type, timeout):
-        del timeout
-        if topic.endswith("/planning/pos_cmd"):
-            raise AssertionError("already-reached navigation must not wait for a future planner command")
-        return SimpleNamespace(
+    """Simulate MAVROS/EGO publishers with persistent subscribers.
+
+    The executor now subscribes once per topic and caches the latest message
+    instead of calling ``wait_for_message`` per navigation goal.  The odom
+    subscriber immediately delivers a position equal to the goal so the
+    already-reached path must succeed without ever waiting for a planner
+    command.
+    """
+
+    def __init__(self):
+        self.odom = SimpleNamespace(
             pose=SimpleNamespace(
                 pose=SimpleNamespace(
                     position=SimpleNamespace(x=0.7, y=1.5, z=1.0)
                 )
             )
         )
+        self.subscribers = []
+        self.planner_wait_attempted = False
+        self._stop = threading.Event()
+        self._publisher = threading.Thread(target=self._stream_odom, daemon=True)
+        self._publisher.start()
+
+    def _stream_odom(self):
+        while not self._stop.is_set():
+            for subscriber in list(self.subscribers):
+                if subscriber.topic.endswith("/mavros/odometry/in"):
+                    subscriber.callback(self.odom)
+            time.sleep(0.02)
+
+    def close(self):
+        self._stop.set()
+        self._publisher.join(timeout=1.0)
+
+    def Subscriber(self, topic, _message_type, callback, queue_size=1):
+        subscriber = SimpleNamespace(topic=topic, queue_size=queue_size, callback=callback)
+        self.subscribers.append(subscriber)
+        return subscriber
 
     @staticmethod
     def is_shutdown():
@@ -111,6 +140,13 @@ def main():
     )
     assert reached["status"] == "ros_navigation_success"
     assert reached["navigation"]["planner_commands"] == 0
+    planner_subscribers = [
+        subscriber
+        for subscriber in backend.rospy.subscribers
+        if subscriber.topic.endswith("/planning/pos_cmd")
+    ]
+    assert len(planner_subscribers) == 1, "navigation must create one persistent planner subscriber"
+    backend.rospy.close()
     events = executor._events_for_action(
         navigation_actions[2],
         {
