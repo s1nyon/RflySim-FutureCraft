@@ -86,6 +86,17 @@ Latest Stage 8 live evidence, 2026-08-02:
 - `stage8_dynamic_lidar_probe.py` is SLAMScene-aware: capture takes sensor
   pose/yaw and wall world-NED coordinates and projects the wall into the LiDAR
   frame for ROI counting.
+- `stage7_topic_probe.py` now carries the D435i transport contract in its
+  `sensor_bridge` layer: `topic_publisher_count` (exactly one publisher on
+  `/uav*/rflysim/sensor*/img_depth`) and `depth_image_flow` (hard checks for
+  `mono16`, 640x480, 20-45 Hz receive rate, monotonic header stamps, and at
+  least one non-all-zero frame; report includes zero_ratio and depth
+  min/max). `validate_config()` now requires the vision fields
+  (`raw_rgb_topic`, `raw_bottom_topic`, `raw_depth_topic`, `depth_topic`,
+  `sensor_rgb_topic`, `sensor_bottom_topic`, `sensor_depth_topic`,
+  `planner_depth_topic`, `mavros_setpoint_topic`). This covers the transport
+  half of the D435i pending live items; wall-geometry consistency is still a
+  live-only check.
 - **D435i sensor parity (commit `39742ab`)**: both UAV sensor configs now carry
   Mid360 + D435i RGB/depth + down camera, matching the real FS-310/28comsim
   payload. `rflysim_fastlio_dual.launch` relays `/rflysim/sensor*` camera
@@ -111,8 +122,11 @@ Latest D435i work, 2026-08-07 (offline only, live validation pending):
   D435i RGB (TypeID 1 @[0.1,0.04,0]), down camera (TypeID 1 @[0,0,0.1],
   pitch -90), D435i depth (TypeID 2 @[0.1,0.04,0], 0.3-12 m).
 - Sensor contract test, bridge import test, and readiness test all pass
-  offline. Launch XML parses. Live no-arm verification of the depth topics and
-  of ego-swarm depth fusion still has to be run on the next simulation restart.
+  offline. Launch XML parses. The D435i transport probe (unique publisher,
+  ~30 Hz, mono16/640x480, monotonic stamps, non-zero frames) is now part of
+  `stage7_topic_probe.py` and passes offline. Live no-arm verification of the
+  depth topics, depth wall-geometry consistency, and of ego-swarm depth fusion
+  still has to be run on the next simulation restart.
 
 Validated offline stages:
 
@@ -297,9 +311,11 @@ config, ego-swarm wiring, odometry, or the live run flow.
 
 ### Pending live validation (next simulation restart)
 
-1. No-arm: `/uav1/rflysim/sensor3/img_depth` and
-   `/uav2/rflysim/sensor13/img_depth` have exactly one publisher, ~30 Hz,
-   monotonic stamps, and non-empty depth matching the course walls/ceiling.
+1. No-arm: run `scripts\run_stage7_topic_probe.bat`; the new
+   `depth_publisher_count` and `depth_flow` checks must pass for
+   `/uav1/rflysim/sensor3/img_depth` and `/uav2/rflysim/sensor13/img_depth`
+   (transport half). Confirm depth values match the course walls/ceiling
+   geometry (live-only; the transport probe cannot prove it).
 2. ego-swarm log shows depth fusion actually triggering
    (`depthOdomCallback` / `flag_use_depth_fusion`).
 3. Compare occupancy/trajectory in the narrow tunnel with depth fusion on vs

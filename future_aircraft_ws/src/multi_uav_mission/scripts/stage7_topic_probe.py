@@ -22,6 +22,87 @@ def parse_subscriber_count(system_state, topic):
     return 0
 
 
+def parse_publisher_count(system_state, topic):
+    """Count real publishers for a topic from a ROS master system state tuple."""
+    publishers, _subscribers, _services = system_state
+    for name, connections in publishers:
+        if name == topic:
+            return len(connections)
+    return 0
+
+
+def depth_image_stats(data):
+    """Return mono16 little-endian depth statistics for a raw image buffer."""
+    if not data:
+        return {"zero_ratio": 1.0, "min_depth": None, "max_depth": None}
+    values = []
+    for index in range(0, len(data) - 1, 2):
+        values.append(data[index] | (data[index + 1] << 8))
+    nonzero = sum(1 for value in values if value != 0)
+    return {
+        "zero_ratio": round((len(values) - nonzero) / len(values), 4),
+        "min_depth": min(values),
+        "max_depth": max(values),
+    }
+
+
+def summarize_depth_flow(samples, now, duration_s):
+    """Summarize measured mono16 depth image flow from ROS samples."""
+    if not samples:
+        return {
+            "count": 0,
+            "receive_rate_hz": 0.0,
+            "header_rate_hz": None,
+            "stamp_monotonic": True,
+            "any_nonzero_sample": False,
+            "encoding": None,
+            "width": None,
+            "height": None,
+            "last_zero_ratio": None,
+            "last_min_depth": None,
+            "last_max_depth": None,
+            "last_age_s": None,
+        }
+    receive_times = [float(sample["receive"]) for sample in samples]
+    headers = [
+        float(sample["header_stamp"])
+        for sample in samples
+        if sample.get("header_stamp") is not None
+    ]
+
+    def frame_stats(sample):
+        return sample.get("stats") or depth_image_stats(sample.get("data") or b"")
+
+    last = samples[-1]
+    last_stats = frame_stats(last)
+    return {
+        "count": len(receive_times),
+        "receive_rate_hz": round(
+            len(receive_times) / max(float(duration_s), 1e-6), 2
+        ),
+        "header_rate_hz": (
+            round((len(headers) - 1) / max(headers[-1] - headers[0], 1e-6), 2)
+            if len(headers) >= 2 and headers[-1] > headers[0]
+            else None
+        ),
+        "stamp_monotonic": all(
+            headers[index] <= headers[index + 1]
+            for index in range(len(headers) - 1)
+        ),
+        "any_nonzero_sample": any(
+            frame_stats(sample).get("max_depth") not in (None, 0)
+            for sample in samples
+        ),
+        "encoding": last.get("encoding"),
+        "width": last.get("width"),
+        "height": last.get("height"),
+        "last_zero_ratio": last_stats["zero_ratio"],
+        "last_min_depth": last_stats["min_depth"],
+        "last_max_depth": last_stats["max_depth"],
+        "last_age_s": round(now - receive_times[-1], 3),
+    }
+
+
 def summarize_message_flow(sample_times, now):
     """Summarize measured message flow from receive-time samples."""
     if not sample_times:
@@ -71,14 +152,22 @@ def validate_config(config):
     bridge_by_uav = {bridge.get("uav_id"): bridge for bridge in bridges}
     if set(bridge_by_uav) != {"uav1", "uav2"}:
         raise ValueError("fast_lio.bridges must identify uav1 and uav2")
+    for field in ("raw_rgb_topic", "raw_bottom_topic", "raw_depth_topic", "depth_topic"):
+        for bridge in bridges:
+            if not bridge.get(field):
+                raise ValueError(f"fast_lio.bridges missing required field '{field}'")
     for field in (
         "copter_id",
         "sensor_seq_id",
         "udp_port",
         "raw_lidar_topic",
+        "raw_rgb_topic",
+        "raw_bottom_topic",
+        "raw_depth_topic",
         "raw_imu_topic",
         "lidar_topic",
         "imu_topic",
+        "depth_topic",
         "identity_topic",
     ):
         if len({bridge.get(field) for bridge in bridges}) != 2:
@@ -91,6 +180,10 @@ def validate_config(config):
             "namespace",
             "sensor_lidar_topic",
             "sensor_imu_topic",
+            "sensor_rgb_topic",
+            "sensor_bottom_topic",
+            "sensor_depth_topic",
+            "planner_depth_topic",
             "slam_odom_topic",
             "slam_cloud_topic",
             "slam_odom_to_fcu_topic",
@@ -98,6 +191,7 @@ def validate_config(config):
             "planner_goal_topic",
             "mavros_state_topic",
             "mavros_feedback_odom_topic",
+            "mavros_setpoint_topic",
             "mavros_set_mode_service",
             "mavros_arming_service",
         ):
@@ -120,6 +214,8 @@ def validate_config(config):
             raise ValueError(f"uavs[{index}].sensor_lidar_topic must use normalized bridge output")
         if uav["sensor_imu_topic"] != bridge["imu_topic"]:
             raise ValueError(f"uavs[{index}].sensor_imu_topic must use normalized bridge output")
+    if len({uav.get("sensor_depth_topic") for uav in uavs}) != 2:
+        raise ValueError("uavs must have distinct sensor_depth_topic")
 
 
 def build_report(
@@ -202,6 +298,24 @@ def _checks_for_uav(uav, bridge, config):
             _planned("topic_message", "raw_imu", bridge["raw_imu_topic"]),
             _planned("topic_message", "normalized_lidar", bridge["lidar_topic"]),
             _planned("topic_message", "normalized_imu", bridge["imu_topic"]),
+            _planned(
+                "topic_publisher_count",
+                "depth_publisher_count",
+                uav["sensor_depth_topic"],
+                min_count=1,
+                max_count=1,
+            ),
+            _planned(
+                "depth_image_flow",
+                "depth_flow",
+                uav["sensor_depth_topic"],
+                duration_s=5.0,
+                min_rate_hz=20,
+                max_rate_hz=45,
+                expected_encoding="mono16",
+                expected_width=640,
+                expected_height=480,
+            ),
             _planned(
                 "topic_message",
                 "adapter_diagnostics",
@@ -313,10 +427,14 @@ class RosChecker:
             return self._wait_for_advertised_topic(check)
         if kind == "topic_ready_for_publish":
             return self._topic_ready_for_publish(check)
+        if kind == "topic_publisher_count":
+            return self._wait_for_publisher_count(check)
         if kind == "topic_subscriber_count":
             return self._wait_for_subscribers(check)
         if kind == "topic_message_flow":
             return self._measure_message_flow(check)
+        if kind == "depth_image_flow":
+            return self._measure_depth_image_flow(check)
         if kind == "service":
             return self._wait_for_service(check)
         if kind == "config_gate":
@@ -364,6 +482,36 @@ class RosChecker:
         result = dict(check)
         result["status"] = "publisher_can_be_created"
         result["ready"] = True
+        return result
+
+    def _wait_for_publisher_count(self, check):
+        result = dict(check)
+        deadline = time.monotonic() + self.timeout_s
+        last_count = 0
+        min_count = int(check.get("min_count", 1))
+        max_count = int(check.get("max_count", min_count))
+        while time.monotonic() < deadline and not self.rospy.is_shutdown():
+            try:
+                _code, _status, system_state = self.rospy.get_master().getSystemState()
+            except Exception as exc:
+                result["status"] = "master_unavailable"
+                result["ready"] = False
+                result["detail"] = str(exc)
+                return result
+            last_count = parse_publisher_count(system_state, check["target"])
+            if min_count <= last_count <= max_count:
+                result["status"] = "publishers_present"
+                result["ready"] = True
+                result["publisher_count"] = last_count
+                return result
+            time.sleep(0.2)
+        result["status"] = "publisher_count_unexpected"
+        result["ready"] = False
+        result["publisher_count"] = last_count
+        result["detail"] = (
+            f"observed {last_count} publishers for {check['target']}; "
+            f"expected {min_count}-{max_count}"
+        )
         return result
 
     def _wait_for_subscribers(self, check):
@@ -419,6 +567,75 @@ class RosChecker:
             result["status"] = "message_flow_empty"
             result["ready"] = False
             result["detail"] = f"expected at least {min_messages} message(s) in {duration_s:.1f}s"
+        return result
+
+    def _measure_depth_image_flow(self, check):
+        from sensor_msgs.msg import Image
+
+        result = dict(check)
+        duration_s = float(check.get("duration_s", 5.0))
+        min_count = int(check.get("min_messages", 1))
+        max_samples = int(check.get("max_samples", 200))
+        expected_encoding = str(check.get("expected_encoding", "mono16"))
+        expected_width = int(check.get("expected_width", 640))
+        expected_height = int(check.get("expected_height", 480))
+        min_rate_hz = float(check.get("min_rate_hz", 20.0))
+        max_rate_hz = float(check.get("max_rate_hz", 45.0))
+        samples = []
+        deadline = time.monotonic() + duration_s
+        while time.monotonic() < deadline and not self.rospy.is_shutdown():
+            remaining = max(0.01, deadline - time.monotonic())
+            try:
+                message = self.rospy.wait_for_message(
+                    check["target"], Image, timeout=min(0.5, remaining)
+                )
+            except Exception:
+                continue
+            header = message.header.stamp
+            data = bytes(message.data)
+            samples.append(
+                {
+                    "receive": time.monotonic(),
+                    "header_stamp": header.secs + header.nsecs * 1e-9,
+                    "stats": depth_image_stats(data),
+                    "encoding": str(message.encoding),
+                    "width": int(message.width),
+                    "height": int(message.height),
+                }
+            )
+            if len(samples) > max_samples:
+                samples.pop(0)
+        summary = summarize_depth_flow(
+            samples, now=time.monotonic(), duration_s=duration_s
+        )
+        result.update(summary)
+        errors = []
+        if summary["count"] < min_count:
+            errors.append(
+                f"expected at least {min_count} depth image(s) in {duration_s:.1f}s"
+            )
+        if not (min_rate_hz <= summary["receive_rate_hz"] <= max_rate_hz):
+            errors.append(
+                f"depth rate {summary['receive_rate_hz']} Hz outside "
+                f"{min_rate_hz}-{max_rate_hz} Hz"
+            )
+        if not summary["stamp_monotonic"]:
+            errors.append("depth header stamps are not monotonic")
+        if summary["encoding"] != expected_encoding:
+            errors.append(
+                f"expected encoding {expected_encoding}, got {summary['encoding']}"
+            )
+        if summary["width"] != expected_width or summary["height"] != expected_height:
+            errors.append(
+                f"expected {expected_width}x{expected_height}, "
+                f"got {summary['width']}x{summary['height']}"
+            )
+        if not summary["any_nonzero_sample"]:
+            errors.append("depth image samples are all zero")
+        result["status"] = "depth_flow_ok" if not errors else "depth_flow_bad"
+        result["ready"] = not errors
+        if errors:
+            result["detail"] = "; ".join(errors)
         return result
 
     def _wait_for_service(self, check):

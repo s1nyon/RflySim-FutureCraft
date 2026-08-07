@@ -54,10 +54,33 @@ EGO-Planner 的 grid_map 有两个独立输入：
 - 两个传感器配置 JSON 与 stage7 配置 JSON 可被 `json.loads` 解析；
 - `stage7_dual_sensor_config_check.py`、`stage7_sensor_bridge_import_check.py`、`stage7_sensor_readiness_check.py` 全部通过。
 
+### 2026-08-07 追加：D435i transport probe 已实现（离线）
+
+- `stage7_topic_probe.py` 的 `sensor_bridge` 层新增两项深度检查：
+  - `topic_publisher_count`：`/uav1/rflysim/sensor3/img_depth`、
+    `/uav2/rflysim/sensor13/img_depth` 必须恰好 1 个 publisher（topic_tools relay）；
+  - `depth_image_flow`：订阅 `sensor_msgs/Image`，硬检查
+    `encoding=mono16`、`640x480`、接收帧率 20–45 Hz、header 时间戳单调、
+    至少一帧非全零；报告同时给出 `count / receive_rate_hz /
+    header_rate_hz / stamp_monotonic / encoding / width / height /
+    zero_ratio / min / max`。
+- `validate_config()` 现在强制校验 bridge 侧
+  `raw_rgb_topic/raw_bottom_topic/raw_depth_topic/depth_topic` 与 UAV 侧
+  `sensor_rgb_topic/sensor_bottom_topic/sensor_depth_topic/
+  planner_depth_topic/mavros_setpoint_topic`。
+- 新增断言已并入 `tests/stage7_probe_flow_check.py`，`scripts\validate_stage7.ps1`
+  离线验证通过。
+
+注意：深度“非全零”只证明传输链路活着，**不证明深度值与 SLAMScene
+赛道墙体/天花板几何一致**。几何一致性仍属 live 待办，本次提交不得被描述为
+“D435i live 验证通过”。
+
 待下次仿真启动后完成（live）：
 
-1. no-arm 检查 `/uav1/rflysim/sensor3/img_depth`、`/uav2/rflysim/sensor13/img_depth` 有唯一 publisher、帧率约 30 Hz、时间戳单调；
-2. 检查深度图像非全零、与 SLAMScene 赛道中的墙体/天花板一致；
+1. no-arm 实跑 `scripts\run_stage7_topic_probe.bat`，确认 transport probe
+   （唯一 publisher、约 30 Hz、mono16/640x480、时间戳单调、非全零）真实通过；
+2. 检查深度图像与 SLAMScene 赛道墙体/天花板的几何距离一致性（transport probe
+   无法覆盖，需 live 可视化或点云比对）；
 3. 确认 ego-swarm 日志中深度融合实际触发（`has_first_depth_`/`flag_use_depth_fusion`），并在窄隧道中对比开/关深度滤波的占用图与轨迹；
 4. 复测感知防撞（UAV2 急停）在深度融合开启后仍正常。
 

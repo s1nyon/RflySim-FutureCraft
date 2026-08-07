@@ -18,7 +18,7 @@
 - Stage 7 最小双机闭环已通过现场验收（2026-08-01）：OFFBOARD、解锁、起飞、ego-swarm 短航段、降落、自动卸锁，报告 `ready=true`，最小机间距 0.85 m。
 - 双机错时穿隧道全程成功：UAV1 领先、UAV2 落后，7 段全部到达，无碰撞、无急停。
 - 机间防撞以感知为主：UAV1 被 UAV2 的 Mid360 grid_map 标记为障碍，UAV2 在 0.2 m 触发 `EMERGENCY_STOP`。两机 FAST-LIO 坐标系相互独立，ego-swarm 的轨迹广播不参与防撞决策。
-- 仿真传感器载荷已补齐 D435i 并接入 EGO-Swarm 深度融合（离线验证通过，live 验证待下次仿真确认）。
+- 仿真传感器载荷已补齐 D435i 并接入 EGO-Swarm 深度融合（离线验证通过，live 验证待下次仿真确认）。深度链路 transport 契约（唯一 publisher、约 30 Hz、mono16/640x480、时间戳单调、非全零）已纳入 `run_stage7_topic_probe.bat` 的 `sensor_bridge` 层；与赛道墙体/天花板几何一致性仍需 live 确认。
 
 待办：跨新实例的重复运行（3–5 次）、更长航段、目标感知与行为树任务集成、实机迁移。
 
