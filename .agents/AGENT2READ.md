@@ -178,6 +178,23 @@ Latest D435i work, 2026-08-07 (offline only, live validation pending):
   30 Hz, so `depth_image_flow` failed its rate gate. Raw-vs-relay rate
   comparison and wall-geometry consistency are still open live items.
 
+Latest live evidence, 2026-08-07 (fresh instance `px4-7535c751ee1c7e3f`):
+
+- Sensor bridges now run `--sensor-mode lidar_only` (SDK loads only the
+  requested SeqID). The 4-sensor D435i payload overloaded the UE4 renderer and
+  caused 0.52–2.04 s odometry gaps that aborted takeoff; with lidar-only the
+  chain is stable and readiness passes in ~40 s on a fresh instance.
+- Flight run `stage7-20260807T084232Z-2599`: OFFBOARD, arming, and takeoff
+  altitude confirmed for BOTH UAVs (takeoff no longer aborted). Navigation
+  still fails with `planner_commands=0` (ego-swarm does not emit `/planning/
+  pos_cmd` after a goal) — this is the same Stage 8 blocker as 08-02 and is
+  the next live item. D435i live integration is paused (full mode later);
+  wall-geometry and 30 Hz depth checks remain pending.
+- UE Editor is NOT installed and must not be proposed again; the map issue is
+  temporarily solved with SLAMScene + dynamic bricks
+  (`scripts\start_predicted_course_two_uav.bat`). See
+  `docs/decisions/2026-08-07-no-ue-editor.md`.
+
 Validated offline stages:
 
 - Stage 0: workspace and launch scaffold
@@ -238,7 +255,10 @@ Latest Stage 7 live evidence, 2026-08-01:
 
 Stage 7's minimum dual-UAV live loop is accepted. Continue from this baseline in the following order:
 
-1. Repeat the complete run 3–5 times on fresh simulation instances and record clean-run rate, duration, minimum separation, collisions, OFFBOARD losses, and timeouts.
+1. Fix the current navigation blocker (`planner_commands=0` after a goal) on a
+   fresh lidar-only instance, then repeat the complete run 3–5 times and
+   record clean-run rate, duration, minimum separation, collisions, OFFBOARD
+   losses, and timeouts.
 2. Increase route length and wall clearance incrementally, retaining a failed offline regression before each defect fix.
 3. Move flight artifacts fully under their run directory so historical evidence cannot be confused with the current instance. (completed 2026-08-07)
 4. Reconnect target perception and behavior-tree mission logic only after the live loop is repeatable.
@@ -368,17 +388,15 @@ config, ego-swarm wiring, odometry, or the live run flow.
 
 ### Pending live validation (next simulation restart)
 
-1. No-arm: run `scripts\run_stage7_topic_probe.bat`; the new
-   `depth_publisher_count` and `depth_flow` checks must pass for
-   `/uav1/rflysim/sensor3/img_depth` and `/uav2/rflysim/sensor13/img_depth`
-   (transport half; note the first live probe measured ~2 Hz, below the
-   20-45 Hz gate — compare raw vs relayed rate before accepting).
-   Confirm depth values match the course walls/ceiling geometry (live-only;
-   the transport probe cannot prove it).
-2. ego-swarm log shows depth fusion actually triggering
-   (`depthOdomCallback` / `flag_use_depth_fusion`).
-3. Compare occupancy/trajectory in the narrow tunnel with depth fusion on vs
-   off; re-verify perception emergency stop still works with fusion enabled.
+1. Fix `planner_commands=0` (navigation phase): goal acceptance, odom/cloud
+   inputs, `traj_start_trigger`, and waypoint generator behavior on a fresh
+   lidar-only run.
+2. After navigation works, re-run the full dual-UAV flight on a fresh
+   instance and record clean-run rate, duration, min separation, collisions,
+   OFFBOARD losses, timeouts.
+3. D435i (full mode) is paused: depth 30 Hz, wall-geometry consistency, and
+   ego-swarm depth fusion checks stay pending; do not run the flight chain in
+   full mode until the lidar-only chain is repeatable.
 
 ## File Map
 

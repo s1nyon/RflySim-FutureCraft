@@ -129,6 +129,20 @@ planner 层失败；readiness 超过 120 秒过期导致 flight_gate 拒绝。
   `skipped_lidar_only`（不阻塞链路），full 模式下仍硬检查。
 - 深度 30 Hz / 几何一致性 live 验证移至 `full` 模式待办。
 
+### 2026-08-07 最终结论：D435i live 集成暂缓
+
+原计划是把 D435i（RGB + 深度）加入仿真链路，但今天的 live 复测证明：在
+当前机器上 4 传感器载荷（双机 2×RGB + 2×深度 + 2×lidar + 2×IMU）会导致
+UE4 渲染过载、传感器/odom 流间歇停摆，起飞窗内出现 0.52–2.04 s 断流并被
+watchdog 误判失联打断起飞；深度帧率也只有约 2–3 Hz（远低于 30 Hz）。因此：
+
+- **live 飞行链默认 `lidar_only`**（只加载 Mid360），配置契约与 D435i
+  文件保留，`--sensor-mode full` 显式加载全部传感器（供后续视觉任务）；
+- 切换后双机起飞已恢复（takeoff 确认通过），导航阶段 `planner_commands=0`
+  是下一个待解决问题，与 D435i 无关；
+- D435i 深度 30 Hz、几何一致性等 live 验证全部延后到 `full` 模式，
+  不阻塞主飞行链。
+
 待下次仿真启动后完成（live）：
 
 1. no-arm 实跑 `scripts\run_stage7_topic_probe.bat`，确认 transport probe

@@ -1,5 +1,11 @@
 # 明天继续开发 Prompt
 
+> **状态：已搁置（2026-08-07）。** 用户明确不安装 UE Editor；地图问题已用
+> SLAMScene + 动态砖块方案临时解决（live 验证通过），本 prompt 中的
+> UE 静态地图步骤不再执行。详见
+> `docs/decisions/2026-08-07-no-ue-editor.md`。后续 live 直接走
+> `scripts\start_predicted_course_two_uav.bat`，不要询问是否安装 UE。
+
 请继续开发以下工程，直接在 `main` 分支工作：
 
 `D:\PX4PSP\RflySimAPIs\8.RflySimVision\3.CustExps\e13.RobotCom26Adv\future_aircraft_sim`

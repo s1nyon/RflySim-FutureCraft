@@ -65,6 +65,19 @@ AUTO.LAND。修复：flight runner 的 watchdog 阈值改为
 后续 AUTO.LAND 期间 watchdog 反复记 `land/mode_loss`（281 次）只是状态
 噪声，不影响安全。
 
+## 2026-08-07 复测（lidar_only）：起飞通过，导航 planner_commands=0
+
+实例 `px4-7535c751ee1c7e3f`（run `stage7-20260807T084232Z-2599`），
+传感器 bridge 切换为 `--sensor-mode lidar_only` 后：
+
+- readiness 快速通过；双机 OFFBOARD + arming + **起飞高度确认全部通过**
+  （`takeoff_altitude_confirmed: uav1/uav2 = true`），stale-odom 误判不再出现；
+- 导航阶段失败：`planned navigation not confirmed for uav1 within 45.0s;
+  last_distance=2.601m planner_commands=0`——与 08-02 隧道问题同源：
+  ego-swarm 收到 goal 后没有产生 `/planning/pos_cmd`；
+- 下一轮 live 优先排查 `planner_commands=0`：goal 是否被 planner 接受、
+  odom/cloud 输入是否正常、`traj_start_trigger`/方式位是否满足。
+
 ## 下次继续顺序
 
 1. 清理旧 Stage 7 ROS 节点并启动全新双机实例。
