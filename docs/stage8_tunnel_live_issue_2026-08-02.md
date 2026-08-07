@@ -53,3 +53,23 @@ UAV2 异常升高的直接输入来源尚未确认。下一次不要先改航线
 5. 修复并验证 `planner_commands=0` 后，再逐段增加隧道 waypoint。
 6. 任一车辆高度异常、丢失 OFFBOARD、里程计过期或失去定位时立即停止任务并降落；不得强制继续穿隧道。
 
+## 工具进展（2026-08-07）
+
+只读控制链取证记录器已实现并通过离线验证：
+
+- `future_aircraft_ws/src/multi_uav_mission/scripts/stage8_control_chain_recorder.py`
+  订阅完整链路
+  `planning/pos_cmd -> mavros/setpoint_raw/local` 与
+  `slam/odometry_raw -> mavros/odometry/out -> mavros/odometry/in ->
+  mavros/local_position/odom`，外加 `mavros/state` 模式切换；
+- 输出 run-scoped 的 `$STAGE7_RUN_DIR/stage8_control_chain.jsonl` 与
+  `$STAGE7_RUN_DIR/stage8_control_chain_summary.json`；摘要按层统计 z 的
+  min/max/越界计数与 planner 指令条数（用于定位 `planner_commands=0`）；
+- 每条 JSONL 同时记录 `receive_wall_time / receive_monotonic /
+  header.stamp`；setpoint 的 z 越界统计只在 `IGNORE_PZ` 未置位时计为有效指令；
+- 记录器只订阅、不发布，不调用 service，不 arm；watchdog 决策与 flight
+  event 记录保留现有实现，摘要只引用其文件路径；
+- 入口：`scripts\run_stage8_control_chain_recorder.bat`（`--dry-run` 可离线验收）。
+
+下次 live 时在“D435i no-arm probe → topic probe”之后启动记录器，再进入
+no-arm planner 检查与单机悬停，即可回答“坏值最先在哪一层出现”。

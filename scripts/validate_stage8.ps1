@@ -9,6 +9,9 @@ $lidarProbe = Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\s
 $cloud = Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\narrow_course_cloud_server.py'
 $launch = Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\launch\predicted_narrow_course.launch'
 $spec = Join-Path $projectRoot 'config\maps\predicted_narrow_course_v1.json'
+$recorder = Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\stage8_control_chain_recorder.py'
+$recorderCheck = Join-Path $projectRoot 'tests\stage8_control_chain_recorder_check.py'
+$recorderBat = Join-Path $projectRoot 'scripts\run_stage8_control_chain_recorder.bat'
 
 function Invoke-Checked {
     param(
@@ -64,6 +67,24 @@ try {
         '--dual-launch', (Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\launch\rflysim_ego_swarm_dual.launch')
     )
     Invoke-Checked $python @('tests\stage8_course_launch_check.py', '--project-root', $projectRoot)
+
+    if (-not (Test-Path -LiteralPath $recorder) -or
+        -not (Test-Path -LiteralPath $recorderCheck) -or
+        -not (Test-Path -LiteralPath $recorderBat)) {
+        throw 'Stage 8 control-chain recorder script, test, or launcher is missing'
+    }
+    $recorderText = Get-Content -Raw -LiteralPath $recorder
+    foreach ($banned in @('rospy\.Publisher', 'ServiceProxy', '\.publish\(', 'set_mode', 'arming', 'OFFBOARD', 'allow-arm')) {
+        if ($recorderText -match $banned) {
+            throw "Stage 8 recorder must be read-only (no $banned): $recorder"
+        }
+    }
+    Invoke-Checked $python @(
+        'tests\stage8_control_chain_recorder_check.py',
+        '--recorder-module', $recorder,
+        '--config', (Join-Path $projectRoot 'config\stage7_live_slam_ego_swarm.json')
+    )
+    Invoke-Checked 'cmd.exe' @('/d', '/c', 'scripts\run_stage8_control_chain_recorder.bat', '--dry-run')
 
     Invoke-Checked 'cmd.exe' @('/d', '/c', 'scripts\generate_predicted_narrow_course.bat', '--dry-run')
     Invoke-Checked 'cmd.exe' @('/d', '/c', 'scripts\start_predicted_course_two_uav.bat', '--dry-run')

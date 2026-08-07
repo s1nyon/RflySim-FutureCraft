@@ -97,6 +97,18 @@ Latest Stage 8 live evidence, 2026-08-02:
   `planner_depth_topic`, `mavros_setpoint_topic`). This covers the transport
   half of the D435i pending live items; wall-geometry consistency is still a
   live-only check.
+- New read-only `stage8_control_chain_recorder.py`: subscribes to
+  `/uav*/planning/pos_cmd`, `/uav*/mavros/setpoint_raw/local`,
+  `/uav*/slam/odometry_raw`, `/uav*/mavros/odometry/out`,
+  `/uav*/mavros/odometry/in`, `/uav*/mavros/local_position/odom`, and
+  `/uav*/mavros/state`; writes run-scoped
+  `$STAGE7_RUN_DIR/stage8_control_chain.jsonl` plus
+  `stage8_control_chain_summary.json`. Every event carries
+  `receive_wall_time`, `receive_monotonic`, and `header.stamp`; setpoint z is
+  only counted as commanded when `IGNORE_PZ` is unset. It never publishes,
+  never calls services, and never arms; watchdog and flight-event recording
+  stay with their existing implementations. Launch with
+  `scripts\run_stage8_control_chain_recorder.bat`.
 - **D435i sensor parity (commit `39742ab`)**: both UAV sensor configs now carry
   Mid360 + D435i RGB/depth + down camera, matching the real FS-310/28comsim
   payload. `rflysim_fastlio_dual.launch` relays `/rflysim/sensor*` camera
