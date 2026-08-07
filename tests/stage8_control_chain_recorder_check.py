@@ -138,6 +138,9 @@ def main() -> int:
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         assert summary["backend"] == "dry-run"
         assert summary["run_id"] == "stage8-dry-run"
+        assert summary["geofence_z"] == [-0.5, 2.0], (
+            "recorder default geofence must match the course z floor"
+        )
         assert set(summary["uavs"].keys()) == {"uav1", "uav2"}
         for uav_id, uav_summary in summary["uavs"].items():
             assert uav_summary["planner_command_count"] == 0

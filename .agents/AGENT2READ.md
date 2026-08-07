@@ -124,6 +124,10 @@ Latest Stage 8 live evidence, 2026-08-02:
   `$STAGE7_RUN_DIR/topic_probe_report.json`. Only the run metadata
   `logs/stage7_live/current_run.env` stays flat, so historical evidence can
   never be confused with the current instance.
+- `run_stage8_control_chain_recorder.bat` must source the 28com_uav workspace
+  for `quadrotor_msgs` (added 2026-08-07; validate_stage8.ps1 enforces it).
+  The recorder's default geofence z is `[-0.5, 2.0]`, matching the course
+  watchdog, so idle ground samples at z~-0.1 are not flagged as outside.
 - **D435i sensor parity (commit `39742ab`)**: both UAV sensor configs now carry
   Mid360 + D435i RGB/depth + down camera, matching the real FS-310/28comsim
   payload. `rflysim_fastlio_dual.launch` relays `/rflysim/sensor*` camera

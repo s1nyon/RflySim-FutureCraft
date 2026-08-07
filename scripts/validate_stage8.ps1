@@ -84,6 +84,10 @@ try {
         '--recorder-module', $recorder,
         '--config', (Join-Path $projectRoot 'config\stage7_live_slam_ego_swarm.json')
     )
+    $recorderBatText = Get-Content -Raw -LiteralPath $recorderBat
+    if ($recorderBatText -notmatch 'REF_28COM_UAV_WSL_DIR%/devel/setup\.bash') {
+        throw 'run_stage8_control_chain_recorder.bat must source the 28com_uav workspace for quadrotor_msgs'
+    }
     Invoke-Checked 'cmd.exe' @('/d', '/c', 'scripts\run_stage8_control_chain_recorder.bat', '--dry-run')
 
     Invoke-Checked 'cmd.exe' @('/d', '/c', 'scripts\generate_predicted_narrow_course.bat', '--dry-run')

@@ -389,7 +389,7 @@ def main(argv=None):
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--simulation-instance-id", default=None)
     parser.add_argument("--watchdog-dir", type=Path, default=None)
-    parser.add_argument("--min-z", type=float, default=0.0)
+    parser.add_argument("--min-z", type=float, default=-0.5)
     parser.add_argument("--max-z", type=float, default=2.0)
     args = parser.parse_args(argv)
     if args.duration_s <= 0:
