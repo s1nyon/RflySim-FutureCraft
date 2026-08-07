@@ -77,6 +77,7 @@ powershell -ExecutionPolicy Bypass -File scripts\validate_stage8.ps1
 - 动态实体赛道以 RflySim LiDAR 可见性与几何净空验收，不作为 CopterSim 地形。
 - Stage 8 控制链取证使用只读记录器 `scripts\run_stage8_control_chain_recorder.bat`（只订阅不发布，不 arm），输出
   `$STAGE7_RUN_DIR/stage8_control_chain.jsonl` 与 `stage8_control_chain_summary.json`，用于定位 planner/setpoint/FAST-LIO/MAVROS/PX4 各层 z 异常。
+- Stage 7/8 实时产物按 run 隔离：flight_report.json、mission_events.jsonl、executor_trace.json、score_summary.json、runner/executor/watchdog/keepalive 日志及 topic probe 报告都写入 `$STAGE7_RUN_DIR`；run 元数据 `current_run.env` 仍固定在 `logs/stage7_live/`。
 
 ## 赛道
 

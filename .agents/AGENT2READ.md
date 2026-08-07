@@ -116,6 +116,14 @@ Latest Stage 8 live evidence, 2026-08-02:
   never calls services, and never arms; watchdog and flight-event recording
   stay with their existing implementations. Launch with
   `scripts\run_stage8_control_chain_recorder.bat`.
+- Flight artifacts are now run-scoped:
+  `stage7_live_slam_ego_swarm_flight.sh` writes plan, smoke report, flight
+  report, mission events, executor trace, score summary, executor/runner
+  logs, and watchdog/keepalive outputs under `$STAGE7_RUN_DIR`;
+  `run_stage7_topic_probe.bat` writes
+  `$STAGE7_RUN_DIR/topic_probe_report.json`. Only the run metadata
+  `logs/stage7_live/current_run.env` stays flat, so historical evidence can
+  never be confused with the current instance.
 - **D435i sensor parity (commit `39742ab`)**: both UAV sensor configs now carry
   Mid360 + D435i RGB/depth + down camera, matching the real FS-310/28comsim
   payload. `rflysim_fastlio_dual.launch` relays `/rflysim/sensor*` camera
@@ -215,7 +223,7 @@ Stage 7's minimum dual-UAV live loop is accepted. Continue from this baseline in
 
 1. Repeat the complete run 3–5 times on fresh simulation instances and record clean-run rate, duration, minimum separation, collisions, OFFBOARD losses, and timeouts.
 2. Increase route length and wall clearance incrementally, retaining a failed offline regression before each defect fix.
-3. Move flight artifacts fully under their run directory so historical evidence cannot be confused with the current instance.
+3. Move flight artifacts fully under their run directory so historical evidence cannot be confused with the current instance. (completed 2026-08-07)
 4. Reconnect target perception and behavior-tree mission logic only after the live loop is repeatable.
 
 Every simulator restart requires a new run id and simulation instance id. Historical readiness reports remain evidence only and must never authorize a later flight. Simulation flight still requires the explicit `--allow-arm --simulation-only` gates; real aircraft remain manual-arm.

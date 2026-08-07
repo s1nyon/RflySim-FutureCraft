@@ -374,6 +374,15 @@ if (Test-Path -LiteralPath $flightRunnerPath) {
     if ($flightRunner -notmatch 'stage7_flight_report\.py') {
         $contractErrors += 'stage7_live_slam_ego_swarm_flight.sh must write a flight report after executor success or failure'
     }
+    if ($flightRunner -notmatch 'OUTPUT_DIR="\$STAGE7_RUN_DIR"') {
+        $contractErrors += 'arm-capable runner must write flight artifacts under the current run directory'
+    }
+    if ($flightRunner -notmatch 'CURRENT_RUN_FILE="\$PROJECT_DIR/logs/stage7_live/current_run\.env"') {
+        $contractErrors += 'arm-capable runner must keep run metadata at logs/stage7_live/current_run.env'
+    }
+    if ($flightRunner -match 'OUTPUT_DIR="\$PROJECT_DIR/logs/stage7_live"') {
+        $contractErrors += 'arm-capable runner must not write flight artifacts to the flat logs/stage7_live directory'
+    }
 }
 
 $egoRunnerPath = Join-Path $ProjectRoot 'scripts/wsl/stage7_live_ego_swarm_dual.sh'
@@ -403,6 +412,9 @@ if (Test-Path -LiteralPath $topicProbeRunnerPath) {
     }
     if ($topicProbeRunner -notmatch 'STAGE7_READINESS_MAX_AGE_SEC:-120') {
         $contractErrors += 'topic probe runner must use the same 120-second readiness window as the ego-swarm runner'
+    }
+    if ($topicProbeRunner -notmatch '\$STAGE7_RUN_DIR/topic_probe_report\.json') {
+        $contractErrors += 'topic probe runner must write its report under the current run directory'
     }
 }
 
