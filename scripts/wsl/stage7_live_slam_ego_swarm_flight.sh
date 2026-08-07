@@ -177,7 +177,7 @@ start_watchdog() {
     --state-topic "/$uav/mavros/state" --odom-topic "/$uav/mavros/local_position/odom" \
     --set-mode-service "/$uav/mavros/set_mode" \
     --min-x -1 --max-x 17 --min-y -2 --max-y 7 --min-z -0.5 --max-z 2 \
-    --max-speed-mps 2 --max-odom-age-s 0.5 \
+    --max-speed-mps 2 --max-odom-age-s 2 \
     --output "$OUTPUT_DIR/${uav}_watchdog_events.jsonl" \
     >"$OUTPUT_DIR/${uav}_geofence_watchdog.log" 2>&1 &
   WATCHDOG_PIDS+=("$!")

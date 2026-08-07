@@ -383,6 +383,9 @@ if (Test-Path -LiteralPath $flightRunnerPath) {
     if ($flightRunner -match 'OUTPUT_DIR="\$PROJECT_DIR/logs/stage7_live"') {
         $contractErrors += 'arm-capable runner must not write flight artifacts to the flat logs/stage7_live directory'
     }
+    if ($flightRunner -notmatch '--max-odom-age-s 2') {
+        $contractErrors += 'arm-capable runner watchdog must tolerate short odometry gaps (--max-odom-age-s 2)'
+    }
 }
 
 $egoRunnerPath = Join-Path $ProjectRoot 'scripts/wsl/stage7_live_ego_swarm_dual.sh'

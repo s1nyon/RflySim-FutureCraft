@@ -128,6 +128,12 @@ Latest Stage 8 live evidence, 2026-08-02:
   for `quadrotor_msgs` (added 2026-08-07; validate_stage8.ps1 enforces it).
   The recorder's default geofence z is `[-0.5, 2.0]`, matching the course
   watchdog, so idle ground samples at z~-0.1 are not flagged as outside.
+- Live flight 2026-08-07 (instance `px4-c50420f823fe4489`) reached OFFBOARD
+  + arming on both UAVs but aborted at takeoff: the geofence watchdog fired
+  `land/stale_odom` on a single 0.52 s odometry gap (> 0.5 s threshold) right
+  when the takeoff setpoint was published, so altitude never left the ground.
+  The flight runner's watchdog now uses `--max-odom-age-s 2`;
+  validate_stage7.ps1 enforces it. A 2 s odom loss is still an immediate land.
 - **D435i sensor parity (commit `39742ab`)**: both UAV sensor configs now carry
   Mid360 + D435i RGB/depth + down camera, matching the real FS-310/28comsim
   payload. `rflysim_fastlio_dual.launch` relays `/rflysim/sensor*` camera

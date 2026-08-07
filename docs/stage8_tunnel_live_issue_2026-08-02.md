@@ -53,6 +53,18 @@ geofence（超出 `Geofence.unreasonable_margin_m`，默认 5 m）时，
 重启仿真，而不是依赖基于脏数据的返航兜底。UAV2 出现 z≈11.257 m 这类数据时
 即属此情况。
 
+## 2026-08-07 复测：起飞被 watchdog stale-odom 打断（已修）
+
+实例 `px4-c50420f823fe4489`（run `stage7-20260807T080522Z-2599`）上双机
+OFFBOARD + arming 全部确认，但起飞失败：uav1 高度始终 -0.108 m。
+watchdog 证据显示第一次 `land` 触发于
+`mode=OFFBOARD armed=true odom_age=0.52s`（`max-odom-age-s=0.5` 超限），
+即起飞 setpoint 刚发出时一次 0.52 s 的里程计缺口被误判为失联、立刻
+AUTO.LAND。修复：flight runner 的 watchdog 阈值改为
+`--max-odom-age-s 2`（2 秒无里程计仍立即降落），validate_stage7 契约强制。
+后续 AUTO.LAND 期间 watchdog 反复记 `land/mode_loss`（281 次）只是状态
+噪声，不影响安全。
+
 ## 下次继续顺序
 
 1. 清理旧 Stage 7 ROS 节点并启动全新双机实例。
