@@ -22,6 +22,11 @@ This file is the machine-oriented operating guide for the repository. Any agent 
 - Keep Stage 5 `mission_events.jsonl` compatibility intact.
 - Simulation arming is acceptable in this project when `--simulation-only`, `--allow-arm`, and `simulation_arm_policy.allow_arm=true` all agree.
 - Never assume real-hardware arming is allowed; real aircraft must remain manual-arm by default.
+- If a UAV's reported xyz position is wildly unreasonable (non-finite, or beyond
+  the course geofence by more than `Geofence.unreasonable_margin_m`), the
+  geofence watchdog returns `no_autoland` / `unreasonable_position` and never
+  requests AUTO.LAND. The correct response is to fix the code and restart the
+  simulation; do not rely on a garbage-state auto-return.
 - If a task changes an interface, update both this file and the root `README.md`.
 
 ## Environment Map
@@ -74,7 +79,9 @@ Latest Stage 8 live evidence, 2026-08-02:
   `stage7_flight_report.py` embeds it under `report.provenance`.
 - `course_geofence_watchdog.py` writes structured JSONL decisions
   (`--output`, every state change) with an explicit `reason`
-  (`outside_x|outside_y|outside_z|mode_loss|stale_odom|max_speed|disarmed|ok`);
+  (`outside_x|outside_y|outside_z|mode_loss|stale_odom|max_speed|
+  unreasonable_position|disarmed|ok`; `unreasonable_position` yields decision
+  `no_autoland` instead of `land`);
   `watchdog_decision_with_reason` is the canonical decision API.
 - `stage7_topic_probe.py` replaced the fake-positive goal check with a real
   subscriber-count check and added planner-command message-flow measurement.

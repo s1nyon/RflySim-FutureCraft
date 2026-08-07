@@ -91,6 +91,7 @@ def main(argv=None):
     set_mode = rospy.ServiceProxy(args.set_mode_service, SetMode)
     rate = rospy.Rate(args.rate_hz)
     landed = False
+    no_autoland_triggered = False
     last_state_key = None
     decision_log = open(args.output, "a", encoding="utf-8") if args.output else None
     while not rospy.is_shutdown():
@@ -143,6 +144,12 @@ def main(argv=None):
                 rospy.logerr("course geofence violated; requesting AUTO.LAND")
                 set_mode(custom_mode="AUTO.LAND")
                 landed = True
+            if decision == "no_autoland" and not no_autoland_triggered:
+                rospy.logerr(
+                    "unreasonable position data detected; skipping AUTO.LAND "
+                    "and waiting for operator restart after code fix"
+                )
+                no_autoland_triggered = True
         rate.sleep()
     if decision_log is not None:
         decision_log.close()

@@ -44,6 +44,15 @@ UAV2 异常升高的直接输入来源尚未确认。下一次不要先改航线
 5. 两个 watchdog 的实时输入、决策和 `AUTO.LAND` 服务返回值；
 6. EGO-Swarm 为什么在 UAV1 导航验证期间出现 `planner_commands=0`。
 
+## 开发约束（2026-08-07 补充）
+
+位置数据离谱时不做自动返航：当无人机 xyz 位置出现非有限值或远超赛道
+geofence（超出 `Geofence.unreasonable_margin_m`，默认 5 m）时，
+`course_geofence_watchdog.py` 判定为 `no_autoland` / `unreasonable_position`
+并**跳过 AUTO.LAND 请求**，只记录事件等待操作员处理。正确做法是修好代码后
+重启仿真，而不是依赖基于脏数据的返航兜底。UAV2 出现 z≈11.257 m 这类数据时
+即属此情况。
+
 ## 下次继续顺序
 
 1. 清理旧 Stage 7 ROS 节点并启动全新双机实例。

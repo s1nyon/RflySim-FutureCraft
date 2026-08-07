@@ -21,12 +21,13 @@ class Geofence:
     max_z: float
     max_speed_mps: float = 2.0
     max_odom_age_s: float = 0.5
+    unreasonable_margin_m: float = 5.0
 
     def __post_init__(self):
         if not self.min_x < self.max_x or not self.min_y < self.max_y or not self.min_z < self.max_z:
             raise ValueError("geofence bounds must be ordered")
-        if self.max_speed_mps <= 0.0 or self.max_odom_age_s <= 0.0:
-            raise ValueError("geofence limits must be positive")
+        if self.max_speed_mps <= 0.0 or self.max_odom_age_s <= 0.0 or self.unreasonable_margin_m <= 0.0:
+            raise ValueError("geofence limits and unreasonable margin must be positive")
 
 
 def _point(point):
@@ -72,6 +73,17 @@ def watchdog_decision_with_reason(
         validate_point(position, fence)
     except GeofenceViolation:
         x, y, z = (float(value) for value in position)
+        if not all(math.isfinite(value) for value in (x, y, z)):
+            return "no_autoland", "unreasonable_position"
+        if (
+            x < fence.min_x - fence.unreasonable_margin_m
+            or x > fence.max_x + fence.unreasonable_margin_m
+            or y < fence.min_y - fence.unreasonable_margin_m
+            or y > fence.max_y + fence.unreasonable_margin_m
+            or z < fence.min_z - fence.unreasonable_margin_m
+            or z > fence.max_z + fence.unreasonable_margin_m
+        ):
+            return "no_autoland", "unreasonable_position"
         if x < fence.min_x or x > fence.max_x:
             return "land", "outside_x"
         if y < fence.min_y or y > fence.max_y:

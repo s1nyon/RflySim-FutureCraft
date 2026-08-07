@@ -44,7 +44,19 @@ def main() -> int:
         raise AssertionError("out-of-bounds segment was accepted")
 
     assert module.watchdog_decision((5.0, 0.0, 1.0), fence, armed=True, mode="OFFBOARD", odom_age_s=0.1, speed_mps=0.2) == "continue"
+    # Wildly unreasonable positions must not trigger AUTO.LAND.
+    assert module.watchdog_decision((5.0, 0.0, 20.0), fence, armed=True, mode="OFFBOARD", odom_age_s=0.1, speed_mps=0.2) == "no_autoland"
+    assert module.watchdog_decision((50.0, 0.0, 1.0), fence, armed=True, mode="OFFBOARD", odom_age_s=0.1, speed_mps=0.2) == "no_autoland"
+    assert module.watchdog_decision((5.0, 30.0, 1.0), fence, armed=True, mode="OFFBOARD", odom_age_s=0.1, speed_mps=0.2) == "no_autoland"
+    # Slightly outside the geofence stays a normal land trigger.
     assert module.watchdog_decision((10.2, 0.0, 1.0), fence, armed=True, mode="OFFBOARD", odom_age_s=0.1, speed_mps=0.2) == "land"
+    # The unreasonable margin is configurable per fence.
+    wide = module.Geofence(
+        min_x=0.0, max_x=10.0, min_y=-2.0, max_y=2.0, min_z=0.2, max_z=2.0,
+        unreasonable_margin_m=20.0,
+    )
+    assert module.watchdog_decision((25.0, 0.0, 1.0), wide, armed=True, mode="OFFBOARD", odom_age_s=0.1, speed_mps=0.2) == "land"
+    assert module.watchdog_decision((50.0, 0.0, 1.0), wide, armed=True, mode="OFFBOARD", odom_age_s=0.1, speed_mps=0.2) == "no_autoland"
     assert module.watchdog_decision(
         (5.0, 0.0, 1.0),
         fence,

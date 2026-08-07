@@ -14,6 +14,7 @@
 - 多机命名空间固定为 `/uav1`、`/uav2`。
 - 仿真解锁仅允许 `--allow-arm --simulation-only`；真实飞机保持人工 arm。
 - 每次重启仿真视为新实例；no-arm readiness 五项门禁通过前不得启动规划或飞行。
+- 位置数据离谱（xyz 远超地图或非有限值）时不执行 AUTO.LAND 自动返航：watchdog 判定为 `unreasonable_position` 并跳过降落请求，应修好代码后重启仿真，不得依赖返航兜底。
 - 传感器配置 JSON 必须是无注释纯 JSON（桥接脚本用 `json.loads` 校验）。
 - 双机 FAST-LIO 坐标系相互独立：ego-swarm 轨迹广播不参与防撞决策，机间防撞依赖感知。
 - 改动须同步更新 README / AGENT2READ / docs；提交到 `main` 分支并推送 GitHub。

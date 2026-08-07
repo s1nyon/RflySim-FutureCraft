@@ -44,6 +44,14 @@ def main() -> int:
     )
     assert (decision, reason) == ("land", "outside_z")
     decision, reason = module.watchdog_decision_with_reason(
+        (5.0, 0.0, 11.257), fence, armed=True, mode="OFFBOARD", odom_age_s=0.1, speed_mps=0.2
+    )
+    assert (decision, reason) == ("no_autoland", "unreasonable_position")
+    decision, reason = module.watchdog_decision_with_reason(
+        (float("nan"), 0.0, 1.0), fence, armed=True, mode="OFFBOARD", odom_age_s=0.1, speed_mps=0.2
+    )
+    assert (decision, reason) == ("no_autoland", "unreasonable_position")
+    decision, reason = module.watchdog_decision_with_reason(
         (-5.0, 0.0, 1.0), fence, armed=True, mode="OFFBOARD", odom_age_s=0.1, speed_mps=0.2
     )
     assert (decision, reason) == ("land", "outside_x")
