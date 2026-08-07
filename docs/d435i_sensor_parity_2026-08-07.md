@@ -138,13 +138,22 @@ watchdog 误判失联打断起飞；深度帧率也只有约 2–3 Hz（远低�
 
 - **live 飞行链默认 `lidar_only`**（只加载 Mid360），配置契约与 D435i
   文件保留，`--sensor-mode full` 显式加载全部传感器（供后续视觉任务）；
-- 切换后双机起飞已恢复（takeoff 确认通过），导航阶段 `planner_commands=0`
-  是下一个待解决问题，与 D435i 无关；
+- 切换后双机起飞已恢复（takeoff 确认通过）；
+- 导航阶段 `planner_commands=0` 已被单独取证定位（与 D435i 无关）：
+  `stage7_live_slam_ego_swarm_flight.sh` 未 source ego-planner-swarm devel，
+  28com_uav devel 与 EGO 发布端的 `quadrotor_msgs/PositionCommand` md5 不一致
+  （`44d620d9…` vs `4712f060…`），ROS 丢弃连接导致 bridge/executor 收不到
+  pos_cmd。修复：flight runner 与 stage8 recorder 在 28com_uav 之后、project
+  overlay 之前 source `$EGO_SWARM_WSL_DIR/devel/setup.bash`（已离线验证 md5
+  对齐，live 复测待做）；
 - D435i 深度 30 Hz、几何一致性等 live 验证全部延后到 `full` 模式，
   不阻塞主飞行链。
 
 待下次仿真启动后完成（live）：
 
+0. 先复测主飞行链：fresh instance → readiness → ego-swarm → 双机短导航，
+   确认 `/uav*/planning/pos_cmd` 无 md5 drop、executor 收到 planner commands
+   （验证 `planner_commands=0` 修复）；
 1. no-arm 实跑 `scripts\run_stage7_topic_probe.bat`，确认 transport probe
    （唯一 publisher、约 30 Hz、mono16/640x480、时间戳单调、非全零）真实通过；
 2. 检查深度图像与 SLAMScene 赛道墙体/天花板的几何距离一致性（transport probe
