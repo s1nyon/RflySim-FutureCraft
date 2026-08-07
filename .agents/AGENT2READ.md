@@ -75,7 +75,19 @@ vision / task logic / behavior tree
 - 最新 live run（`stage7-20260807T084232Z-2599`）在 `lidar_only` 下双机 OFFBOARD/arming/takeoff 全部成功，导航阶段失败 `planner_commands=0`；
 - `planner_commands=0` 根因已在 2026-08-07 取证：**EGO 发布端（ego-planner-swarm devel）与 Python 消费端（28com_uav devel）的 `quadrotor_msgs/PositionCommand` md5 不一致**（`4712f060…` vs `44d620d9…`），ROS 直接丢弃连接，setpoint bridge/executor 收不到 planner 指令。修复：flight runner 与 stage8 recorder 在 28com_uav 之后、project overlay 之前 source ego-planner-swarm devel；live 复测待做。
 - 2026-08-07 晚间状态更新：上述修复曾被短暂 revert（`5067c8a`），随后按用户决定重新落地（runner/recorder 的 source 顺序与 `tests/stage7_quadrotor_msgs_overlay_check.py` 静态回归检查重新加入代码），并已完成 fresh-instance live 复测（run `stage7-20260807T124153Z-22785`，实例 `px4-7e4ed24fa0881265`）：双机 OFFBOARD/arming/takeoff 成功，UAV1 导航确认 `planner_commands=190/383/116`（不再为 0），`ego_swarm_dual.log` 无任何 md5/Dropping connection。**`planner_commands=0` 的 md5 根因已 live 验证修复**。
-- 当前剩余 live 阻塞（新观察，与 md5 无关）：同一 run 中 UAV1 导航进行到第 4 个 goal 时 `/uav1/mavros/local_position/odom` 短暂断流，executor 超时判失败并 AUTO.LAND/disarm；断流为瞬态（降落后 odom 恢复 fresh，watchdog 记录 odom_age≈0.02s），`uav1_geofence_watchdog.log` 有一条 geofence AUTO.LAND 请求。这属于已知的“odom 断流”类问题（长时间仿真/负载下偶发），与 D435i 全载荷问题同族但本次出现在 `lidar_only` 模式，需要单独取证，不能与已修复的 md5 问题混为一谈。
+- 当前剩余 live 阻塞（新观察，与 md5 无关）：同一 run 中 UAV1 导航进行到第 4 个 goal（`(7.9,4.7)`）时 executor 的 `/uav1/mavros/local_position/odom` 订阅在 45s 内收不到消息（`wait_for_message` 超时），executor 判失败并 AUTO.LAND/disarm；随后 UAV 快速下降触发 geofence watchdog AUTO.LAND 请求（`uav1_geofence_watchdog.log`）。
+ 取证要点（run `stage7-20260807T124153Z-22785`，master.log 与 watchdog 事件）：
+  - **odom 流本身未断**：watchdog 事件全程 `odom_age_s` 恒 <0.034s（30Hz 连续），UAV1 实际飞到了 (7.88,4.63) 才因失败被降落；
+  - executor 前 3 段导航确认成功（距离 0.293/0.298/0.300 m，`planner_commands=190/383/116`），证明 odom/pos_cmd 连接在 seq 12/14/16 正常；
+  - master.log 显示 executor 从 seq 18 起以 ~60-70 次/秒的 +SUB/-SUB（odom 与 pos_cmd 交替）空转近 58s，即 `wait_for_message` 每次都在订阅连接建立窗口内收不到消息而立即超时；
+  - 同窗 watchdog 与 planner 连接均正常 → 这是 executor 进程订阅连接层的失效（rospy `wait_for_message` 反复新建/销毁 subscriber 的已知低效模式在长时连接后出现问题），不是 odom 发布端/MAVLink 流问题。
+  待办：复飞复现（第二次 cold-start 复飞被 readiness 10s topic 超时挡下，见下），或对 executor 改为持久订阅/缓冲 odom 后验证。
+
+## 2.2 验证流程观察（2026-08-07 复飞时发现）
+
+- `stage7_live_fastlio_dual.sh` 的 readiness `READINESS_TOPIC_TIMEOUT_SEC` 默认 10s。**cold-start**（上一轮 fastlio roslaunch 已清理、FAST-LIO 从零起）时，`/uav1/mavros/odometry/out`（odom_frame_relay）需要 lidar bridge → adapter → FAST-LIO 初始化后才开始输出，实测冷启动下 10s 不够，readiness 会 `timeout exceeded while waiting for message on topic /uav1/mavros/odometry/out` 失败（run `stage7-20260807T125936Z-13072`）。
+- 此前多次成功是因为复用上一轮已运行的 fastlio/relay 链路（topic 已热）或时序恰好够。复飞前如清理了旧 fastlio roslaunch，应把 `STAGE7_READINESS_TOPIC_TIMEOUT_SEC` 提高到 30-60s，或等 `/uav1/slam/odometry_raw` 出现后再跑 readiness。
+- 非交互会话中若同时存在自动编排与手动启动，会出现两个 `rflysim_ego_swarm_dual.launch` 互相以 “new node registered with same name” 挤掉对方（ROS 同名节点注册冲突），表现为 executor 报 `planner goal topic has no subscribers`。启动前必须确认只有一个 stage7 runner 实例。
 
 因此当前工作模型必须是：
 
