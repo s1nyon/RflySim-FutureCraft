@@ -145,9 +145,10 @@ watchdog 误判失联打断起飞；深度帧率也只有约 2–3 Hz（远低�
   （`44d620d9…` vs `4712f060…`），ROS 丢弃连接导致 bridge/executor 收不到
   pos_cmd。修复：flight runner 与 stage8 recorder 在 28com_uav 之后、project
   overlay 之前 source `$EGO_SWARM_WSL_DIR/devel/setup.bash`（2026-08-07 晚间
-  曾短暂 revert 后按用户决定重新落地，重新离线验证：WSL 实测 md5=`4712f060…`
-  对齐、validate_stage7/8 PASS；live 复测待做，需在交互式桌面会话启动 GUI
-  仿真器）；
+  曾短暂 revert 后按用户决定重新落地；已 live 验证：run
+  `stage7-20260807T124153Z-22785` 中 UAV1 导航 `planner_commands=190/383/116`、
+  ego 日志无 md5 drop。同一 run 出现一次 `local_position/odom` 瞬态断流导致
+  任务中止，属独立待取证问题）；
 - D435i 深度 30 Hz、几何一致性等 live 验证全部延后到 `full` 模式，
   不阻塞主飞行链。
 

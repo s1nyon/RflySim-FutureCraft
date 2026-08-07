@@ -74,7 +74,8 @@ vision / task logic / behavior tree
 - 该回归已按阶段策略隔离：`lidar_only` 模式下双机起飞已恢复；D435i 全载荷导致的 UE4 渲染过载/odom 断流问题已有项目侧最小修复（sensor-mode 切换，见 docs/d435i_sensor_parity_2026-08-07.md）；
 - 最新 live run（`stage7-20260807T084232Z-2599`）在 `lidar_only` 下双机 OFFBOARD/arming/takeoff 全部成功，导航阶段失败 `planner_commands=0`；
 - `planner_commands=0` 根因已在 2026-08-07 取证：**EGO 发布端（ego-planner-swarm devel）与 Python 消费端（28com_uav devel）的 `quadrotor_msgs/PositionCommand` md5 不一致**（`4712f060…` vs `44d620d9…`），ROS 直接丢弃连接，setpoint bridge/executor 收不到 planner 指令。修复：flight runner 与 stage8 recorder 在 28com_uav 之后、project overlay 之前 source ego-planner-swarm devel；live 复测待做。
-- 2026-08-07 晚间状态更新：上述修复曾被短暂 revert（`5067c8a`），随后按用户决定重新落地（runner/recorder 的 source 顺序与 `tests/stage7_quadrotor_msgs_overlay_check.py` 静态回归检查重新加入代码）；重新验证结果为 WSL 实测 Python 侧 md5=`4712f060…`（与 EGO 发布端一致）、`validate_stage7.ps1` / `validate_stage8.ps1` PASS。fresh-instance live 复测仍未做：agent 沙箱会话无法启动 RflySim3D/CopterSim/QGC 等 GUI 仿真进程，复测必须在交互式桌面会话中执行。
+- 2026-08-07 晚间状态更新：上述修复曾被短暂 revert（`5067c8a`），随后按用户决定重新落地（runner/recorder 的 source 顺序与 `tests/stage7_quadrotor_msgs_overlay_check.py` 静态回归检查重新加入代码），并已完成 fresh-instance live 复测（run `stage7-20260807T124153Z-22785`，实例 `px4-7e4ed24fa0881265`）：双机 OFFBOARD/arming/takeoff 成功，UAV1 导航确认 `planner_commands=190/383/116`（不再为 0），`ego_swarm_dual.log` 无任何 md5/Dropping connection。**`planner_commands=0` 的 md5 根因已 live 验证修复**。
+- 当前剩余 live 阻塞（新观察，与 md5 无关）：同一 run 中 UAV1 导航进行到第 4 个 goal 时 `/uav1/mavros/local_position/odom` 短暂断流，executor 超时判失败并 AUTO.LAND/disarm；断流为瞬态（降落后 odom 恢复 fresh，watchdog 记录 odom_age≈0.02s），`uav1_geofence_watchdog.log` 有一条 geofence AUTO.LAND 请求。这属于已知的“odom 断流”类问题（长时间仿真/负载下偶发），与 D435i 全载荷问题同族但本次出现在 `lidar_only` 模式，需要单独取证，不能与已修复的 md5 问题混为一谈。
 
 因此当前工作模型必须是：
 
@@ -1396,7 +1397,9 @@ Motion
 - 验证：WSL 实测修复后 Python 侧 md5=`4712f060…`（与 EGO 一致），`multi_uav_mission` 仍可解析；
   `validate_stage7.ps1` / `validate_stage8.ps1` 通过；新增 `tests/stage7_quadrotor_msgs_overlay_check.py` 静态回归保护；
 - 2026-08-07 晚间复验记录：修复曾短暂 revert（`5067c8a`）后按用户决定重新落地；重新验证 `tests/stage7_quadrotor_msgs_overlay_check.py` PASS、WSL 实测 28com-only=`44d620d9…` / 28com+ego+project=`4712f060…`（`rosmsg md5` 与 genpy 均一致），`validate_stage7.ps1` / `validate_stage8.ps1` PASS。
-- 待办：fresh-instance live 复测（readiness → topic probe → 双机短导航），确认 pos_cmd 到达 bridge 且 executor 收到 planner commands。注意：live 复测需在**交互式桌面会话**中启动 RflySim3D/CopterSim/QGC；agent 沙箱会话无法创建这些 GUI 进程。
+- live 复测（2026-08-07 晚间，run `stage7-20260807T124153Z-22785`）：readiness 五项 PASS → 双机 OFFBOARD/arming/takeoff 成功 → UAV1 导航确认 `planner_commands=190/383/116`、`navigation_confirmed=true`，`ego_swarm_dual.log` 中 md5/Dropping connection 计数为 0。**该故障已由 live 证据关闭。**
+- 遗留观察：同一 run 导航中段 `/uav1/mavros/local_position/odom` 出现瞬态断流导致 executor 判失败（详见 2.1 当前状态），需另行取证。
+- 操作经验（2026-08-07 晚间，供后续 Agent 参考）：从 agent 会话经 `nohup` 多次启动 fastlio/ego 脚本时，曾出现重复 roslaunch 实例竞争（`new node registered with same name`）导致 planner 节点重启、`/planning/goal` 短暂无订阅者；再次出现此症状时先清理所有 `rflysim_ego_swarm_dual.launch`/`rflysim_fastlio_dual.launch` 相关进程再重试，避免同一时刻多个 planner 实例。
 
 ---
 
