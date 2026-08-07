@@ -104,6 +104,13 @@ Latest Stage 8 live evidence, 2026-08-02:
   `planner_depth_topic`, `mavros_setpoint_topic`). This covers the transport
   half of the D435i pending live items; wall-geometry consistency is still a
   live-only check.
+- Sensor bridges now default to `--sensor-mode lidar_only`
+  (`rflysim_sensor_bridge.py` loads only the requested SeqID into the SDK;
+  `stage7_live_fastlio_dual.sh` passes it explicitly). The 4-sensor D435i
+  payload overloaded the UE4 renderer and caused multi-second odometry gaps
+  that aborted takeoff (0.52 s / 2.04 s stale-odom watchdog fires). `full`
+  mode loads all sensors for vision work; the topic probe marks depth checks
+  `skipped_lidar_only` in lidar-only runs and enforces them in full mode.
 - New read-only `stage8_control_chain_recorder.py`: subscribes to
   `/uav*/planning/pos_cmd`, `/uav*/mavros/setpoint_raw/local`,
   `/uav*/slam/odometry_raw`, `/uav*/mavros/odometry/out`,

@@ -112,6 +112,23 @@ RGB 与深度没有生效。根因是 RflySim `VisionCaptureApi.jsonLoad` 的格
 另外本次 probe 首跑还暴露两个流程问题（非代码问题）：ego-swarm 中途掉线导致
 planner 层失败；readiness 超过 120 秒过期导致 flight_gate 拒绝。
 
+### 2026-08-07 追加：live 链路改为 lidar_only（飞行稳定性修复）
+
+复测飞行时双机均能 OFFBOARD + arming，但起飞窗内 odom 出现秒级断流
+（第一次 0.52 s、第二次 2.04 s），watchdog 失联保护把起飞打断，高度始终
+贴地。对照昨天成功 run（bridge 只加载 1 个传感器）与今天的 4 传感器载荷，
+根因是 D435i RGB+深度同时灌入 UE4 渲染后机器负载过高，传感器/odom 流
+间歇停摆。修复：
+
+- `rflysim_sensor_bridge.py` 新增 `--sensor-mode {lidar_only,full}`，
+  默认 `lidar_only`：只把匹配 `--sensor-seq-id` 的传感器交给 SDK，UE4 只
+  流 lidar，恢复稳定 10 Hz；`full` 模式加载全部传感器（配置契约不变，
+  供后续视觉任务使用）。identity 携带 `sensor_mode`。
+- `stage7_live_fastlio_dual.sh` 显式传 `--sensor-mode lidar_only`；
+  `stage7_topic_probe.py` 在 lidar_only 模式下把深度检查标记为
+  `skipped_lidar_only`（不阻塞链路），full 模式下仍硬检查。
+- 深度 30 Hz / 几何一致性 live 验证移至 `full` 模式待办。
+
 待下次仿真启动后完成（live）：
 
 1. no-arm 实跑 `scripts\run_stage7_topic_probe.bat`，确认 transport probe

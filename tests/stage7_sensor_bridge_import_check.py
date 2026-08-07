@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -52,6 +53,7 @@ def main() -> int:
         raw_imu_topic="/uav2/rflysim/imu_raw",
         identity_topic="/uav2/rflysim/sensor_identity",
         process_start_marker="run-1:uav2:bridge",
+        sensor_mode="lidar_only",
     )
     identity = bridge.build_identity(identity_args, sensor, "127.0.0.1")
     assert identity["copter_id"] == 2
@@ -59,6 +61,11 @@ def main() -> int:
     assert identity["udp_port"] == 10009
     assert identity["raw_lidar_topic"] == "/rflysim/sensor10/mid360_lidar"
     assert identity["process_start_marker"] == "run-1:uav2:bridge"
+    assert identity["sensor_mode"] == "lidar_only"
+
+    # lidar-only runtime must hand the SDK a config with only the matching sensor.
+    filtered = bridge.filtered_sensor_config(args.config, sensor)
+    assert [entry["SeqID"] for entry in filtered["VisionSensors"]] == [10]
 
     with expect_failure("TargetCopter"):
         bridge.validate_sensor_config(args.config, 1, 10, 10009)
@@ -84,8 +91,7 @@ def main() -> int:
 
         def jsonLoad(self, change_mode, config_path):
             assert change_mode == 1
-            assert config_path == str(args.config)
-            events.append("json_load")
+            events.append(("json_load", config_path))
 
         def sendReqToUE4(self, window_id, target_ip):
             assert (window_id, target_ip) == (0, "127.0.0.1")
@@ -113,6 +119,7 @@ def main() -> int:
         identity_topic="/uav2/rflysim/sensor_identity",
         process_start_marker="run-1:uav2:bridge",
         imu_rate_hz=200,
+        sensor_mode="lidar_only",
     )
 
     def fake_publish_identity(value, topic):
@@ -128,9 +135,58 @@ def main() -> int:
         bridge_factory=FakeVisionBridge,
         identity_publisher=fake_publish_identity,
     )
+    json_loads = [
+        event[1]
+        for event in events
+        if isinstance(event, tuple) and event[0] == "json_load"
+    ]
+    assert len(json_loads) == 1, events
+    loaded = json.loads(Path(json_loads[0]).read_text(encoding="utf-8"))
+    assert [entry["SeqID"] for entry in loaded["VisionSensors"]] == [10]
     assert events.index("sdk_ros_init") < events.index("publish_identity"), events
     bridge.stop_bridge(bridge_handle)
     assert events[-1] == "stop_bridge", events
+
+    # full mode must hand the SDK the complete sensor config.
+    full_events = []
+
+    class FullBridge:
+        def __init__(self, target_ip):
+            full_events.append("init")
+
+        def jsonLoad(self, change_mode, config_path):
+            full_events.append(config_path)
+
+        def sendReqToUE4(self, window_id, target_ip):
+            pass
+
+        def startImgCap(self):
+            pass
+
+        def sendImuReqCopterSim(self, copter_id, target_ip, rate_hz):
+            pass
+
+        def stopRun(self):
+            full_events.append("stop")
+
+    class FullRequester:
+        def getSimIpID(self, copter_id):
+            return "127.0.0.1"
+
+        def sendReSimIP(self, copter_id):
+            pass
+
+    full_start_args = argparse.Namespace(**{**vars(start_args), "sensor_mode": "full"})
+    _, _, full_bridge = bridge.start_bridge(
+        full_start_args,
+        sensor,
+        requester_factory=FullRequester,
+        bridge_factory=FullBridge,
+        identity_publisher=lambda value, topic: object(),
+    )
+    assert full_events[1] == str(args.config), full_events
+    bridge.stop_bridge(full_bridge)
+    assert full_events[-1] == "stop", full_events
 
     bridge.add_sdk_paths(args.psp_path)
     assert sdk_root in sys.path, "RflySimSDK root must be on sys.path for ctrl.* imports"

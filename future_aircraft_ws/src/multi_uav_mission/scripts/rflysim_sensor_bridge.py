@@ -5,6 +5,7 @@ import argparse
 import json
 import signal
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -49,6 +50,11 @@ def validate_sensor_config(config_path: Path, copter_id: int, sensor_seq_id: int
     return sensor
 
 
+def filtered_sensor_config(config_path: Path, sensor: dict) -> dict:
+    """Return an SDK-loadable config containing only the selected sensor."""
+    return {"VisionSensors": [sensor]}
+
+
 def build_identity(args, sensor: dict, target_ip: str) -> dict:
     """Build the declarative bridge identity published before sensor requests."""
     return {
@@ -60,6 +66,7 @@ def build_identity(args, sensor: dict, target_ip: str) -> dict:
         "raw_lidar_topic": args.raw_lidar_topic,
         "runtime_probe_required": True,
         "sensor_seq_id": sensor["SeqID"],
+        "sensor_mode": args.sensor_mode,
         "target_ip": target_ip,
         "udp_port": args.udp_port,
     }
@@ -105,7 +112,16 @@ def start_bridge(
     identity = build_identity(args, sensor, target_ip)
     identity_handle = identity_publisher(identity, args.identity_topic)
     if args.config:
-        bridge.jsonLoad(args.change_mode, str(args.config))
+        if args.sensor_mode == "lidar_only":
+            filtered = filtered_sensor_config(args.config, sensor)
+            with tempfile.NamedTemporaryFile(
+                "w", suffix=".json", encoding="utf-8", delete=False
+            ) as stream:
+                json.dump(filtered, stream)
+                config_path = stream.name
+            bridge.jsonLoad(args.change_mode, config_path)
+        else:
+            bridge.jsonLoad(args.change_mode, str(args.config))
     else:
         bridge.jsonLoad(args.change_mode)
     bridge.sendReqToUE4(0, target_ip)
@@ -136,6 +152,12 @@ def main(argv=None):
         "--identity-topic",
         default="/rflysim/sensor_identity",
         help="Latched bridge identity topic",
+    )
+    parser.add_argument(
+        "--sensor-mode",
+        choices=("lidar_only", "full"),
+        default="lidar_only",
+        help="lidar_only loads only the requested sensor into the SDK; full loads all sensors",
     )
     parser.add_argument(
         "--process-start-marker",

@@ -105,6 +105,7 @@ nohup env ROS_NAMESPACE=/uav1 python3 \
   --raw-imu-topic /uav1/rflysim/imu_raw \
   --identity-topic /uav1/rflysim/sensor_identity \
   --process-start-marker "$RUN_ID:uav1:bridge" \
+  --sensor-mode lidar_only \
   --imu-rate-hz 200 \
   --keepalive \
   __name:=rflysim_sensor_bridge \
@@ -122,6 +123,7 @@ nohup env ROS_NAMESPACE=/uav2 python3 \
   --raw-imu-topic /uav2/rflysim/imu_raw \
   --identity-topic /uav2/rflysim/sensor_identity \
   --process-start-marker "$RUN_ID:uav2:bridge" \
+  --sensor-mode lidar_only \
   --imu-rate-hz 200 \
   --keepalive \
   __name:=rflysim_sensor_bridge \

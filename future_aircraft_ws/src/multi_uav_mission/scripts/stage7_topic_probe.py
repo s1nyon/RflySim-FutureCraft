@@ -114,6 +114,16 @@ def summarize_message_flow(sample_times, now):
     }
 
 
+def depth_check_skipped(check, sensor_mode):
+    """Depth transport checks are optional when the bridge runs lidar-only."""
+    if sensor_mode == "lidar_only" and check.get("name") in (
+        "depth_publisher_count",
+        "depth_flow",
+    ):
+        return True
+    return False
+
+
 def evaluate_saved_readiness(report, run_id, simulation_instance_id, max_age_sec, now):
     from stage7_sensor_readiness import validate_report
 
@@ -237,6 +247,7 @@ def build_report(
             run_id=run_id,
             simulation_instance_id=simulation_instance_id,
             readiness_max_age_s=readiness_max_age_s,
+            config=config,
         )
     )
     uav_reports = []
@@ -392,6 +403,7 @@ class RosChecker:
         run_id,
         simulation_instance_id,
         readiness_max_age_s,
+        config=None,
     ):
         try:
             import rospy
@@ -404,9 +416,57 @@ class RosChecker:
         self.run_id = run_id
         self.simulation_instance_id = simulation_instance_id
         self.readiness_max_age_s = float(readiness_max_age_s)
+        self.config = config
+        self._sensor_modes = {}
         if not rospy.core.is_initialized():
             rospy.init_node("future_aircraft_stage7_topic_probe", anonymous=True)
         self._verify_ros_master()
+
+    def _sensor_mode_for(self, check):
+        parts = [part for part in str(check.get("target", "")).split("/") if part]
+        if not parts:
+            return "lidar_only"
+        namespace = "/" + parts[0]
+        if namespace not in self._sensor_modes:
+            self._sensor_modes[namespace] = self._fetch_sensor_mode(namespace)
+        return self._sensor_modes[namespace]
+
+    def _fetch_sensor_mode(self, namespace):
+        from std_msgs.msg import String
+
+        if self.config is None:
+            return "lidar_only"
+        uav = next(
+            (
+                uav
+                for uav in self.config.get("uavs", [])
+                if uav.get("namespace") == namespace
+            ),
+            None,
+        )
+        if uav is None:
+            return "lidar_only"
+        bridge = next(
+            (
+                bridge
+                for bridge in self.config.get("fast_lio", {}).get("bridges", [])
+                if bridge.get("uav_id") == uav.get("uav_id")
+            ),
+            None,
+        )
+        if bridge is None:
+            return "lidar_only"
+        topic = bridge.get("identity_topic")
+        if not topic:
+            return "lidar_only"
+        try:
+            message = self.rospy.wait_for_message(
+                topic, String, timeout=min(3.0, self.timeout_s)
+            )
+            identity = json.loads(message.data)
+            return identity.get("sensor_mode", "lidar_only")
+        except Exception:
+            return "lidar_only"
 
     def _verify_ros_master(self):
         previous_timeout = socket.getdefaulttimeout()
@@ -421,6 +481,14 @@ class RosChecker:
 
     def evaluate(self, check):
         kind = check["kind"]
+        if kind in ("topic_publisher_count", "depth_image_flow") and depth_check_skipped(
+            check, self._sensor_mode_for(check)
+        ):
+            result = dict(check)
+            result["status"] = "skipped_lidar_only"
+            result["ready"] = True
+            result["detail"] = "depth not loaded in lidar_only bridge mode"
+            return result
         if kind == "topic_message":
             return self._wait_for_message(check)
         if kind == "topic_advertised":

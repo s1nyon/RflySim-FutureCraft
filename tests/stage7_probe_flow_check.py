@@ -145,6 +145,22 @@ def main() -> int:
     assert empty_depth["any_nonzero_sample"] is False
     assert empty_depth["encoding"] is None
 
+    # In lidar-only runtime the optional depth checks must be skipped,
+    # while the lidar transport checks stay active.
+    assert probe.depth_check_skipped(
+        {"kind": "topic_publisher_count", "name": "depth_publisher_count"},
+        "lidar_only",
+    ) is True
+    assert probe.depth_check_skipped(
+        {"kind": "depth_image_flow", "name": "depth_flow"}, "lidar_only"
+    ) is True
+    assert probe.depth_check_skipped(
+        {"kind": "depth_image_flow", "name": "depth_flow"}, "full"
+    ) is False
+    assert probe.depth_check_skipped(
+        {"kind": "topic_message", "name": "raw_lidar"}, "lidar_only"
+    ) is False
+
     with tempfile.TemporaryDirectory() as temp_dir:
         report_path = Path(temp_dir) / "probe.json"
         exit_code = probe.main(

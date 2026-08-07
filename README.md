@@ -72,6 +72,7 @@ powershell -ExecutionPolicy Bypass -File scripts\validate_stage8.ps1
 - 每次重启仿真视为新实例，readiness 报告携带 run-id 与 simulation-instance-id，跨实例一律拒绝。
 - no-arm 门禁五项：identity、schema、freshness、isolation、stationary_stability。
 - 位置数据离谱（xyz 远超地图或非有限值）时不自动返航/降落：watchdog 判定为 `unreasonable_position` 并跳过 AUTO.LAND，应修好代码后重启仿真，不得依赖返航兜底。
+- 传感器 bridge 默认 `lidar_only`（只加载 Mid360，保持 10 Hz 稳定）；D435i RGB/深度需显式 `--sensor-mode full` 才加载（视觉任务用），避免多传感器渲染拖垮飞行链路。
 - 双机联调前先通过 Stage 2.1 单机 MAVLink 回程检查（`scripts\run_stage2_1_mavlink_check.bat`）。
 - MAVLink 端口约定：`16540/17540`、`16541/17541` 仅用于 CopterSim/PX4；MAVROS 使用专用链路 `/uav1: udp://:14601@127.0.0.1:14600`、`/uav2: udp://:14611@127.0.0.1:14610`。
 - 动态实体赛道以 RflySim LiDAR 可见性与几何净空验收，不作为 CopterSim 地形。
