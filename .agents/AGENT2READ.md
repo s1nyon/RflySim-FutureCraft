@@ -252,6 +252,13 @@ config, ego-swarm wiring, odometry, or the live run flow.
 
 ### Sensor stack: 28comsim parity and the "no D435i" question
 
+- RflySim `VisionCaptureApi.jsonLoad` has its own format contract that plain
+  `json.loads` cannot catch: 16-entry `otherParams` requires `EularOrQuat`
+  plus 4-entry `SensorAngQuat` (28com's RGB uses this new-protocol shape),
+  while 8-entry `otherParams` must NOT set `EularOrQuat`. A live sensor-bridge
+  run rejected the D435i RGB/depth with `Json data format is wrong!` and
+  loaded only lidar + down camera until both configs were fixed.
+  `stage7_dual_sensor_config_check.py::validate_sdk_loadable` now enforces it.
 - The real FS-310/28comsim `UAV_demo` carries D435i (RGB + depth), a down-facing
   monocular camera, and Mid360/IMU. Its simulation `Config.json` only has
   mid360 + front RGB + down RGB: **there is no TypeID 2 depth in 28com's

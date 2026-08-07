@@ -33,6 +33,7 @@ def validate(stage7, sensor_configs, sensor_paths):
         assert Path(bridge["config"]).resolve() == sensor_paths[uav_id].resolve(), "config"
         sensors = sensor_configs[uav_id]["VisionSensors"]
         assert len(sensors) >= 4, "VisionSensors"
+        validate_sdk_loadable(sensors)
         assert len({sensor["SeqID"] for sensor in sensors}) == len(sensors), "unique SeqID"
         assert len({sensor["SendProtocol"][5] for sensor in sensors}) == len(sensors), "unique UDP port"
         lidar_sensors = [sensor for sensor in sensors if sensor["TypeID"] == 23]
@@ -66,6 +67,21 @@ def validate(stage7, sensor_configs, sensor_paths):
         assert len(bottom) == 1, "downward camera"
         for sensor in sensors:
             assert sensor["TargetCopter"] == bridge["copter_id"], "sensor copter binding"
+
+
+def validate_sdk_loadable(sensors):
+    """Mirror VisionCaptureApi.jsonLoad format rules for every sensor entry."""
+    for sensor in sensors:
+        assert len(sensor["SendProtocol"]) == 8, "SendProtocol must have 8 entries"
+        assert len(sensor["SensorPosXYZ"]) == 3, "SensorPosXYZ must have 3 entries"
+        assert len(sensor["SensorAngEular"]) == 3, "SensorAngEular must have 3 entries"
+        params = sensor["otherParams"]
+        assert len(params) in (8, 16), "otherParams must have 8 or 16 entries"
+        if len(params) == 16:
+            assert "EularOrQuat" in sensor, "16-dim otherParams requires EularOrQuat"
+            assert len(sensor["SensorAngQuat"]) == 4, "EularOrQuat requires SensorAngQuat[4]"
+        else:
+            assert "EularOrQuat" not in sensor, "8-dim otherParams must not set EularOrQuat"
 
 
 def assert_rejected(label, callback):
@@ -121,6 +137,22 @@ def run_regression_cases(stage7, sensor_configs, sensor_paths):
     assert_rejected(
         "D435i depth pose mismatch",
         lambda: validate(stage7, wrong_depth_pose, sensor_paths),
+    )
+
+    missing_new_protocol_keys = deepcopy(sensor_configs)
+    missing_new_protocol_keys["uav1"]["VisionSensors"] = [
+        {
+            key: value
+            for key, value in sensor.items()
+            if key not in ("EularOrQuat", "SensorAngQuat")
+        }
+        if len(sensor.get("otherParams", [])) == 16
+        else sensor
+        for sensor in missing_new_protocol_keys["uav1"]["VisionSensors"]
+    ]
+    assert_rejected(
+        "16-dim otherParams without EularOrQuat/SensorAngQuat",
+        lambda: validate(stage7, missing_new_protocol_keys, sensor_paths),
     )
 
     invalid_period = deepcopy(stage7)

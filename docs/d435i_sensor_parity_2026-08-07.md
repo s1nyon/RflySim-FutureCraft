@@ -75,6 +75,22 @@ EGO-Planner 的 grid_map 有两个独立输入：
 赛道墙体/天花板几何一致**。几何一致性仍属 live 待办，本次提交不得被描述为
 “D435i live 验证通过”。
 
+### 2026-08-07 追加：SDK jsonLoad 格式修正（live 发现）
+
+首次 live 启动时 `run_live_fastlio_dual.bat` 的 bridge 日志出现两次
+`Json data format is wrong!`，SDK 只加载了 2 个传感器（lidar + 下视），
+RGB 与深度没有生效。根因是 RflySim `VisionCaptureApi.jsonLoad` 的格式契约：
+
+- `otherParams` 为 16 维时必须带 `EularOrQuat` 与 4 维 `SensorAngQuat`
+  （28com 的 RGB 即此新协议格式）；
+- 8 维 `otherParams` 不能带 `EularOrQuat`（否则会被当作新协议继续校验并失败）。
+
+本项目 UAV1/UAV2 的 D435i RGB（SeqID 1/11）与深度（SeqID 3/13）此前只写了
+16 维 `otherParams`、漏了 `EularOrQuat`/`SensorAngQuat`，离线 `json.loads`
+不会发现，只有 SDK 实际解析才会暴露。已按 28com 格式补齐两个配置文件；
+`tests/stage7_dual_sensor_config_check.py` 新增 `validate_sdk_loadable`
+契约，16 维 otherParams 缺键会被回归测试拒绝。
+
 待下次仿真启动后完成（live）：
 
 1. no-arm 实跑 `scripts\run_stage7_topic_probe.bat`，确认 transport probe
