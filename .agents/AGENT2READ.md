@@ -105,9 +105,23 @@ vision / task logic / behavior tree
   per-topic message timeout（10 s）分离；不再需要为提高冷启动而放大
   消息超时。
 - 离线验证：`validate_stage6c/6d/7/8.ps1` 全部 PASS。
-- 待办：fresh-instance lidar_only live 阶梯（cold-start readiness → 双机
-  takeoff → 短导航 → 完整双机错时穿隧道）→ 至少 3 次 fresh-instance
-  PBL-1 重复。
+- **live 验证（2026-08-08，交互式桌面 Session 1）**：executor 持久订阅修复
+  已通过完整 PBL-1 双机错时穿隧道验收。
+  - run `stage7-20260807T133813Z-2617`：双机 14 段导航全部确认（UAV1/UAV2
+    各 7 段，误差 0.293/0.296 m），41.5 s，`success=true`，
+    `planner_commands` 正常（UAV1 最高 677），无 md5/Dropping connection，
+    无 mission_failed，无 OFFBOARD loss；导航窗口 master 日志零
+    `+SUB/-SUB` churn（executor 每 topic 仅一次持久订阅）。
+  - 重复验证：run `stage7-20260807T134731Z-2508`、`stage7-20260807T141751Z-3219`
+    同样完整成功（各 14 段确认、41.5 s、零失败）。
+  - run `stage7-20260807T135425Z-2510` 失败：UAV2 第 2 段 goal 45 s 未确认
+    （`planner_commands=0`，last_distance=2.596 m）。取证：executor 持久订阅
+    正常创建且导航窗口零 churn；UAV2 planner（drone 1）持续 REPLAN/EXEC，
+    但 `/uav2/planning/pos_cmd` 在该窗口无消息 → 属 **EGO 侧 UAV2
+    traj_server 未发布 pos_cmd** 的偶发（非 executor subscriber 回归），
+    与 2026-08-02 类历史 EGO 偶发同族，后续若再现需单列取证。
+  - 结论：P0 executor subscriber 修复 live 验证通过；PBL-1 3/4 fresh-instance
+    干净通过（1 次 EGO 侧偶发失败）。
 - live 复测环境阻塞（2026-08-08 尝试）：agent 沙箱会话运行在 Windows
   Session 0（services），RflySim3D（UE4）在该会话无法创建渲染窗口
   （`CreateSwapChainForHwnd failed 887A0022`，DXGI_ERROR_INVALID_CALL），
@@ -117,6 +131,14 @@ vision / task logic / behavior tree
   短导航 → 完整穿隧道 → 3 次 fresh-instance 重复。同一会话早前（19:37 /
   20:26）RflySim3D 可启动，说明桌面可用性在会话期间发生变化，属于环境
   限制而非代码回归。
+- 操作经验（2026-08-08）：通过计划任务
+  `\FutureAircraftSim_LiveStack_Session1`（InteractiveToken）可在 Session 1
+  启动 RflySim3D/CopterSim/QGC 完整 GUI 栈；多次运行会堆积重复的
+  `start_rflysim_sitl_two`/`start_wsl_mavros_two` cmd 窗口与 WSL 实例，
+  再次启动前应先清理（任务 `MultipleInstancesPolicy=IgnoreNew` 不阻止
+  不同启动尝试）。若 sensor bridge 报 `Failed to initialize time` 或
+  `Unable to register with master node`，先确认 roscore/MAVROS 层已就绪
+  再启动 fastlio runner；PX4 socket 残留不等于 SITL 存活。
 
 因此当前工作模型必须是：
 
