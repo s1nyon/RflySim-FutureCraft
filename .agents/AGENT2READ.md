@@ -75,13 +75,9 @@ vision / task logic / behavior tree
 - 最新 live run（`stage7-20260807T084232Z-2599`）在 `lidar_only` 下双机 OFFBOARD/arming/takeoff 全部成功，导航阶段失败 `planner_commands=0`；
 - `planner_commands=0` 根因已在 2026-08-07 取证：**EGO 发布端（ego-planner-swarm devel）与 Python 消费端（28com_uav devel）的 `quadrotor_msgs/PositionCommand` md5 不一致**（`4712f060…` vs `44d620d9…`），ROS 直接丢弃连接，setpoint bridge/executor 收不到 planner 指令。修复：flight runner 与 stage8 recorder 在 28com_uav 之后、project overlay 之前 source ego-planner-swarm devel；live 复测待做。
 - 2026-08-07 晚间状态更新：上述修复曾被短暂 revert（`5067c8a`），随后按用户决定重新落地（runner/recorder 的 source 顺序与 `tests/stage7_quadrotor_msgs_overlay_check.py` 静态回归检查重新加入代码），并已完成 fresh-instance live 复测（run `stage7-20260807T124153Z-22785`，实例 `px4-7e4ed24fa0881265`）：双机 OFFBOARD/arming/takeoff 成功，UAV1 导航确认 `planner_commands=190/383/116`（不再为 0），`ego_swarm_dual.log` 无任何 md5/Dropping connection。**`planner_commands=0` 的 md5 根因已 live 验证修复**。
-- 当前剩余 live 阻塞（新观察，与 md5 无关）：同一 run 中 UAV1 导航进行到第 4 个 goal（`(7.9,4.7)`）时 executor 的 `/uav1/mavros/local_position/odom` 订阅在 45s 内收不到消息（`wait_for_message` 超时），executor 判失败并 AUTO.LAND/disarm；随后 UAV 快速下降触发 geofence watchdog AUTO.LAND 请求（`uav1_geofence_watchdog.log`）。
- 取证要点（run `stage7-20260807T124153Z-22785`，master.log 与 watchdog 事件）：
-  - **odom 流本身未断**：watchdog 事件全程 `odom_age_s` 恒 <0.034s（30Hz 连续），UAV1 实际飞到了 (7.88,4.63) 才因失败被降落；
-  - executor 前 3 段导航确认成功（距离 0.293/0.298/0.300 m，`planner_commands=190/383/116`），证明 odom/pos_cmd 连接在 seq 12/14/16 正常；
-  - master.log 显示 executor 从 seq 18 起以 ~60-70 次/秒的 +SUB/-SUB（odom 与 pos_cmd 交替）空转近 58s，即 `wait_for_message` 每次都在订阅连接建立窗口内收不到消息而立即超时；
-  - 同窗 watchdog 与 planner 连接均正常 → 这是 executor 进程订阅连接层的失效（rospy `wait_for_message` 反复新建/销毁 subscriber 的已知低效模式在长时连接后出现问题），不是 odom 发布端/MAVLink 流问题。
-  待办：复飞复现（第二次 cold-start 复飞被 readiness 10s topic 超时挡下，见下），或对 executor 改为持久订阅/缓冲 odom 后验证。
+- executor 长航段导航 subscriber 失效（`wait_for_message` 反复新建/销毁订阅）已根因定位并修复
+  （持久 `rospy.Subscriber` + 内存缓存），2026-08-08 已 live 验证通过：PBL-1 3/4 fresh-instance
+  干净成功（详见 §2.3）。该问题**已从 Current Blocker 移到 Historical/Resolved**，不再驱动任务优先级。
 
 ## 2.2 验证流程观察（2026-08-07 复飞时发现）
 
@@ -140,25 +136,56 @@ vision / task logic / behavior tree
   `Unable to register with master node`，先确认 roscore/MAVROS 层已就绪
   再启动 fastlio runner；PX4 socket 残留不等于 SITL 存活。
 
+## 2.3.1 P0 Safe Live Stack Lifecycle（2026-08-08，当前最高优先级）
+
+- 背景：2026-08-08 00:41 后 AI 使用 `scripts/cleanup_sim_stack.ps1` /
+  `scripts/restart_live_stack.ps1`（名称强杀 GUI + WSL 整链 SIGKILL + `wsl --shutdown` +
+  计划任务循环）做 fresh-instance 验证，00:57 左右触发蓝屏；事故后走标准入口，
+  PBL-1 双机完整飞行再次成功。00:41 后出现的 instance changed / odom 未发布 / arming 失败
+  是硬重启导致的实例/进程状态污染与系统不稳定，**不是飞行算法回归**。
+- 已实现（offline 全部验证通过）：
+  - 两个危险脚本替换为 **fail-fast hazard stub**（HAZARD-DISABLED，恒 exit 1），
+    静态契约（`tests/lifecycle_banned_command_check.py`）禁止 `wsl --shutdown`、
+    `pkill -9`、`taskkill /F`、名称扫杀 `Stop-Process -Force`、`schtasks /delete` 越界；
+  - `AGENTS.md` §5.1 Live Lifecycle Red-Zone；
+  - `scripts/lifecycle/*`：`stack_id` + `logs/live_stack/<stack_id>/stack_manifest.json`
+    （PID + start-time + command-line 指纹，PID 复用保护）、只读 `inspect`
+    （owned alive/exited、stale、unknown fail-closed、端口、ROS/MAVROS）、
+    `graceful stop`（manifest-only：INT/close → TERM → 重验证后 KILL 并记录原因；
+    禁止 WSL distribution 级 shutdown 与全局 pkill）、`health gate`
+    （GUI_READY/ROSCORE_READY/MAVROS_UAV1_CONNECTED/MAVROS_UAV2_CONNECTED/COURSE_READY）、
+    `fresh_instance` 固定序列（inspect → graceful stop → verify clean → start new →
+    health gate → readiness → flight；stop/clean 失败时禁止自动 force retry）；
+  - Session-1 启动链显式健康状态：`stage2_two_mavros.sh` 写 health.json，
+    `start_wsl_mavros_two.bat` 轮询并 fail closed，`start_predicted_course_two_uav.bat`
+    写 GUI_READY/COURSE_READY；
+  - 入口：`scripts/live_stack_start.ps1` / `live_stack_inspect.ps1` /
+    `live_stack_stop.ps1` / `live_stack_fresh_instance.ps1`（默认 DryRun；`-Execute` 需批准）；
+  - 离线回归：`tests/lifecycle_*.py` + `scripts/validate_lifecycle.ps1` 全部 PASS；
+    现有 Stage 2/6D/7/8 验证未回归。
+- 状态：**live 尚未执行**。第一次涉及真实宿主机进程停止/计划任务修改的 live 操作前，
+  必须先展示 DryRun 输出与设计并获得用户批准；随后用户在场监督 1 次完整周期
+  （start → readiness → flight → graceful stop → verify clean），再做 3 次 fresh-instance
+  （稳定后 5 次），每次记录 `startup_success` / `flight_success` / `shutdown_clean`。
+
 因此当前工作模型必须是：
 
 ```text
 GOOD BASELINE
-双机定位 + OFFBOARD + EGO-Swarm + 错时穿隧道
+PBL-1 双机定位 + OFFBOARD + EGO-Swarm + 错时穿隧道（fresh-instance 可重复）
         ↓
-CURRENT BLOCKER
-executor 长航段导航 subscriber 失效（odom/planner command 收不到）
+CURRENT TOP PRIORITY（P0）
+Safe Live Stack Lifecycle：启动/停止/fresh-instance 可控、可证明、不系统级扫杀
         ↓
 FIX
-持久 Subscriber + 内存缓存（禁止循环 wait_for_message）
+stack_id + manifest ownership + 只读 inspect + graceful stop + health gate
+（offline 验证通过；live 验证待用户批准后进行）
 ```
 
 而不是：
 
 ```text
-Stage 8 从未成功
-→ EGO-Swarm 仍不可用
-→ 重新设计整条飞行链
+Stage 8 从未成功 → EGO-Swarm 仍不可用 → 重新设计整条飞行链
 ```
 
 后者是错误心智模型。
@@ -792,10 +819,18 @@ ODOMETRY    = 2
 
 不得复用上一次 readiness 去授权下一次飞行。
 
-典型顺序：
+所有启动/停止/fresh-instance 一律走 manifest 化安全入口（P0 Lifecycle，见 §2.3.1）：
+
+```powershell
+scripts\live_stack_start.ps1 -DryRun              # 查看计划；-Execute 需用户批准
+scripts\live_stack_inspect.ps1 -Manifest logs\live_stack\<stack_id>\stack_manifest.json
+scripts\live_stack_stop.ps1 -Manifest <path> -DryRun   # 或 -Execute
+scripts\live_stack_fresh_instance.ps1 -DryRun
+```
+
+典型飞行顺序：
 
 ```bat
-scripts\start_predicted_course_two_uav.bat
 scripts\run_live_fastlio_dual.bat
 scripts\run_live_ego_swarm_dual.bat
 scripts\run_stage7_topic_probe.bat
@@ -803,6 +838,10 @@ scripts\run_live_slam_ego_swarm_flight.bat --allow-arm --simulation-only
 ```
 
 如果只做基础双机而非 course，可以按任务选择对应 `start_two_uav.bat` 等入口，但 safety gates 不变。
+
+**禁止恢复 `scripts\cleanup_sim_stack.ps1` / `scripts\restart_live_stack.ps1` 的旧逻辑**
+（已封禁为 fail-fast hazard stub）；禁止 `wsl --shutdown`、全局 pkill、
+名称扫杀强杀等 Red-Zone 操作（见 AGENTS.md §5.1）。
 
 ## 12.1 no-arm readiness
 
@@ -848,6 +887,23 @@ scripts\run_stage8_control_chain_recorder.bat
 ```
 
 它应保持只读：订阅、记录、不发布、不 arm。
+
+## 12.4 fresh-instance 定义（P0）
+
+fresh-instance 必须是：
+
+```text
+inspect
+→ graceful stop owned stack（manifest-only）
+→ verify clean（owned alive=0 且无 unknown/stale）
+→ start new stack（新 stack_id / 新 simulation_instance_id）
+→ health gate（GUI/ROSCORE/MAVROS_UAV1/MAVROS_UAV2/COURSE 全 ready）
+→ readiness（Stage 7 no-arm）
+→ flight
+```
+
+不得再等同于“硬杀整个环境”。如果 stop/clean 验证失败，**禁止自动 retry force cleanup**，
+直接停止并向用户报告。每次 run 记录 `startup_success` / `flight_success` / `shutdown_clean`。
 
 ---
 

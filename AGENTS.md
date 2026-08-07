@@ -29,9 +29,13 @@
 - 该飞行链是当前 **PBL-1（Protected Baseline 1）**，后续新功能不得无声破坏它。
 - 2026-08-07 引入 D435i 多传感器载荷后出现“飞机无法正常起飞”的集成回归，已按阶段策略隔离：
   `lidar_only` 模式（默认）下双机起飞已恢复；`full` 模式仍属视觉侧待办，不得默认用于飞行。
-- 最新 live run（`stage7-20260807T084232Z-2599`）中 `planner_commands=0` 已根因定位为
-  `quadrotor_msgs/PositionCommand` md5 不一致（EGO 发布端 vs 28com_uav devel），
-  修复（flight runner/recorder 先 source ego-planner-swarm devel）已离线验证，live 复测待做。
+- `planner_commands=0`（`quadrotor_msgs/PositionCommand` md5 不一致）已定位并修复：
+  flight runner/recorder 在 28com_uav 之后、project overlay 之前 source ego-planner-swarm devel；
+  live 已复验（2026-08-07 晚 fresh-instance，以及 2026-08-08 PBL-1 3/4 fresh-instance 干净通过），
+  不再作为当前 blocker。
+- **当前最高优先级是 P0 Safe Live Stack Lifecycle**：live 仿真的启动、停止和 fresh-instance
+  重复验证必须可控、可证明、不通过系统级扫杀破坏宿主机。
+  设计见 `docs/2026-08-08-live-stack-lifecycle-design.md`，最新状态见 `.agents/AGENT2READ.md` §2.3。
 - 仓库中旧的 `planner_commands=0` 无条件结论、2026-08-02 Stage 8 失败等记录属于历史诊断证据；
   除非 fresh live evidence 再次证明它们仍存在，否则不得把它们直接当作当前 blocker。
 
@@ -98,6 +102,36 @@ Agent 可以自主运行仿真 arming/flight，但必须同时满足：
 - Agent 不得自行放宽真机安全门。
 - 不得把仿真权限推导成真机权限。
 
+### 5.1 Live Lifecycle Red-Zone
+
+**未经用户明确授权，Agent 不得执行以下任何操作：**
+
+1. `wsl --shutdown`（WSL distribution 级关机）；
+2. 按进程名称大范围 `pkill -9 -f` / `pkill -9 -x`；
+3. `taskkill /F /IM` 式名称扫杀；
+4. 名称匹配后批量 `Stop-Process -Force`；
+5. 为 fresh-instance 自动循环硬重启（cleanup → 立刻拉起整套栈）；
+6. 删除/重建宿主机计划任务作为普通 retry 手段。
+
+Agent 允许停止的进程必须能证明由**当前项目、当前 stack instance** 启动并拥有：
+必须同时满足 PID + 进程 start-time + command-line 指纹与
+`logs/live_stack/<stack_id>/stack_manifest.json` 中的 owned 记录一致（PID 复用保护）。
+
+所有 live 启动/停止/fresh-instance 一律走 manifest 化安全入口：
+
+```powershell
+scripts\live_stack_start.ps1 -DryRun            # 或 -Execute（需用户批准）
+scripts\live_stack_inspect.ps1 -Manifest <path> # 只读
+scripts\live_stack_stop.ps1 -Manifest <path> -DryRun   # 或 -Execute
+scripts\live_stack_fresh_instance.ps1 -DryRun
+```
+
+`scripts\cleanup_sim_stack.ps1` 与 `scripts\restart_live_stack.ps1` 已封禁为
+**fail-fast hazard stub**（HAZARD-DISABLED，恒 exit 1），任何 Agent 不得恢复其旧逻辑。
+
+遇到 unknown / stale / 端口被未知进程占用时 **fail closed**：只报告，不自动 kill；
+stop/clean 验证失败时禁止自动 force retry，直接停止并向用户报告。
+
 ---
 
 ## 6. 修改权限
@@ -149,6 +183,7 @@ Agent 可以自主运行仿真 arming/flight，但必须同时满足：
 
 默认验证顺序：
 
+0. `scripts\validate_lifecycle.ps1`（涉及 live 生命周期/启动链/停止相关改动时）
 1. 与改动直接相关的 focused test
 2. `scripts\validate_stage6c.ps1`
 3. `scripts\validate_stage6d.ps1`
@@ -172,12 +207,23 @@ Agent 可以自主运行仿真 arming/flight，但必须同时满足：
 典型顺序：
 
 ```bat
-scripts\start_predicted_course_two_uav.bat
+scripts\live_stack_fresh_instance.ps1 -DryRun      # 先看完整序列与 inspect
+scripts\live_stack_start.ps1 -Execute              # 新 stack_id + manifest + 健康门
+scripts\live_stack_inspect.ps1 -Manifest logs\live_stack\<stack_id>\stack_manifest.json
 scripts\run_live_fastlio_dual.bat
 scripts\run_live_ego_swarm_dual.bat
 scripts\run_stage7_topic_probe.bat
 scripts\run_live_slam_ego_swarm_flight.bat --allow-arm --simulation-only
 ```
+
+栈启动链（`start_predicted_course_two_uav.bat` → `start_wsl_mavros_two.bat` →
+`stage2_two_mavros.sh`）现在显式产出健康状态
+（`GUI_READY` / `ROSCORE_READY` / `MAVROS_UAV1_CONNECTED` / `MAVROS_UAV2_CONNECTED` /
+`COURSE_READY`），任一失败 fail closed，不再依赖窗口是否出现。
+
+停机：`scripts\live_stack_stop.ps1 -Manifest <path> -DryRun` → 确认后 `-Execute`。
+
+禁止恢复旧的 `cleanup_sim_stack.ps1` / `restart_live_stack.ps1` 逻辑。
 
 只读控制链取证：
 

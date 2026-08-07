@@ -79,6 +79,21 @@ if [[ ! -f "$REF_28COM_UAV_WSL_DIR/devel/setup.bash" ]]; then
 fi
 
 mkdir -p "$LOG_DIR"
+
+HEALTH_DIR="${STACK_HEALTH_DIR:-}"
+STACK_ID="${STACK_ID:-unknown}"
+HEALTH_PROBE="$PROJECT_ROOT/scripts/lifecycle/health_probe.py"
+
+write_health() {
+  local name="$1" ready="$2" detail="$3"
+  if [[ -z "$HEALTH_DIR" ]]; then
+    return 0
+  fi
+  mkdir -p "$HEALTH_DIR"
+  python3 "$HEALTH_PROBE" write --health-dir "$HEALTH_DIR" --stack-id "$STACK_ID" \
+    --status "$name" --ready "$ready" --detail "$detail" >/dev/null 2>&1 || true
+}
+
 source /opt/ros/noetic/setup.bash
 source "$REF_28COM_UAV_WSL_DIR/devel/setup.bash"
 export ROS_MASTER_URI
@@ -92,9 +107,11 @@ if ! timeout 3s rostopic list >/dev/null 2>&1; then
 fi
 
 if ! timeout 5s rostopic list >/dev/null 2>&1; then
+  write_health ROSCORE_READY false "roscore unavailable at $ROS_MASTER_URI"
   echo "[ERROR] ROS master is still unavailable at $ROS_MASTER_URI" >&2
   exit 1
 fi
+write_health ROSCORE_READY true "roscore responding at $ROS_MASTER_URI"
 
 start_px4_mavros_link 1 14600 14601
 start_px4_mavros_link 2 14610 14611
@@ -103,6 +120,35 @@ start_one uav1 udp://:14601@127.0.0.1:14600 1
 sleep 3
 start_one uav2 udp://:14611@127.0.0.1:14610 2
 sleep 2
+
+# Explicit health status instead of relying on window appearance.
+uav1_ok=false
+uav2_ok=false
+for _attempt in $(seq 1 12); do
+  if [[ "$uav1_ok" != true ]] && timeout 5s rostopic echo -n 1 /uav1/mavros/state 2>/dev/null | grep -q 'connected: True'; then
+    uav1_ok=true
+  fi
+  if [[ "$uav2_ok" != true ]] && timeout 5s rostopic echo -n 1 /uav2/mavros/state 2>/dev/null | grep -q 'connected: True'; then
+    uav2_ok=true
+  fi
+  if [[ "$uav1_ok" == true && "$uav2_ok" == true ]]; then
+    break
+  fi
+  sleep 5
+done
+write_health MAVROS_UAV1_CONNECTED "$uav1_ok" "uav1 mavros state connected=$uav1_ok"
+write_health MAVROS_UAV2_CONNECTED "$uav2_ok" "uav2 mavros state connected=$uav2_ok"
+
+course_ok=false
+for _attempt in $(seq 1 24); do
+  course_info="$(timeout 5s rostopic info /predicted_narrow_course/global_cloud 2>/dev/null || true)"
+  if [[ "$course_info" == *"Publishers:"* && "$course_info" != *"Publishers: None"* ]]; then
+    course_ok=true
+    break
+  fi
+  sleep 5
+done
+write_health COURSE_READY "$course_ok" "predicted narrow course cloud publisher=$course_ok"
 
 echo "[INFO] Stage 2 dual MAVROS headless launch started."
 echo "[INFO] Keeping this WSL session alive. Close this window to stop roscore and MAVROS."

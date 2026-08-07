@@ -1,7 +1,8 @@
 # 2026-08-08：live 栈硬清理脚本隐患与蓝屏事件记录
 
 > 状态：**Hazard / Historical Incident**（危险操作记录，不是当前 blocker）
-> 相关文件：`scripts/cleanup_sim_stack.ps1`、`scripts/restart_live_stack.ps1`（均为**未提交**的 untracked 文件）
+> 相关文件：`scripts/cleanup_sim_stack.ps1`、`scripts/restart_live_stack.ps1`
+> （2026-08-08 曾为 untracked；现已提交并**替换为 fail-fast hazard stub**，见 §7）
 > 触发背景：2026-08-08 00:41 之后 AI 为做“fresh-instance 重复验证”编写了这两个脚本，并在 00:41–00:57 之间反复硬重启整套仿真栈，最终于 00:57 左右触发系统蓝屏（重启时间 00:58:24）。
 
 ---
@@ -78,9 +79,11 @@ schtasks /delete /tn "\FutureAircraftSim_LiveStack_Session1" /f
 
 2. **字面量目录 `$STAGE7_RUN_DIR/`**
    仓库根目录出现一个名字就是 `$STAGE7_RUN_DIR` 的空目录（变量未展开的产物，untracked）。说明某条命令在 Windows 侧把 `$STAGE7_RUN_DIR` 当成了普通字符串；相关脚本引用 `$STAGE7_RUN_DIR` 时应改用 `%STAGE7_RUN_DIR%`（bat）或先展开再拼路径。
+   → **2026-08-08 已删除**（定向 `git clean`，目录为空）。
 
 3. **杂散文件 `pos_cmd`**
    仓库根目录 `pos_cmd`（94 字节）内容是某脚本 dry-run 输出 `[DRY-RUN] 5. run stage8_ego_chain_analyzer.py ...`，属于重定向误写，应删除。
+   → **2026-08-08 已删除**。
 
 4. **`.ros/log` 超 1GB**
    roscore 启动时提示 `disk usage in log directory [/root/.ros/log] is over 1GB`，长时间不清理会影响 WSL 磁盘与启动速度（可 `rosclean` 或手动归档，操作前先确认没有正在运行的必要日志）。
@@ -101,12 +104,55 @@ schtasks /delete /tn "\FutureAircraftSim_LiveStack_Session1" /f
 
 **结论**：飞行链路本身没有回归；00:41 之后出现的“instance changed / uav2 odom 未发布 / uav2 arming 失败”是反复硬重启（cleanup 脚本 + `wsl --shutdown`）导致的实例/进程状态污染与系统不稳定，不是代码回归。未提交的 `stage7_run_context.sh`（`pgrep -x px4` 哈希）在本次 fresh instance 下工作正常（readiness 与 flight 的 instance id 一致）。
 
+> 注：`stage7_run_context.sh` 的 `pgrep -x px4` 修改随后已**提交**（commit `8c74d51`）。
+
 ---
 
 ## 6. 建议处理
 
 1. 删除/归档 `scripts/cleanup_sim_stack.ps1`、`scripts/restart_live_stack.ps1`（或改为“只优雅关停、不 `wsl --shutdown`”的评审版）。
+   → **2026-08-08 已完成**：两个脚本替换为 fail-fast hazard stub（HAZARD-DISABLED，恒 exit 1），
+   新的 manifest 化生命周期入口见 §7。
 2. 删除 `$STAGE7_RUN_DIR/` 与 `pos_cmd`。
+   → **2026-08-08 已完成**。
 3. ~~经用户确认后删除今晚 23:59 会自动触发的计划任务~~ → **已完成（2026-08-08）**。
 4. 决定 `scripts/wsl/stage7_run_context.sh` 的未提交修改是保留（本次实测可用）还是回退。
+   → **2026-08-08 已完成**：保留并提交（`8c74d51`）。
 5. 排查 `start_wsl_mavros_two.bat` 在 Session 1 计划任务下 roscore/MAVROS 静默不启动的问题。
+   → **2026-08-08 已完成（offline）**：启动链显式产出健康状态并 fail closed（见 §7）；
+   live 复验待用户批准后进行。
+
+---
+
+## 7. P0 处置结果（2026-08-08，Safe Live Stack Lifecycle）
+
+设计文档：`docs/2026-08-08-live-stack-lifecycle-design.md`。
+
+- **封禁**：`scripts/cleanup_sim_stack.ps1`、`scripts/restart_live_stack.ps1` 已替换为
+  fail-fast hazard stub（`HAZARD-DISABLED`，恒 exit 1）；静态契约
+  `tests/lifecycle_banned_command_check.py` 禁止 `wsl --shutdown`、`pkill -9`、
+  `taskkill /F`、名称扫杀 `Stop-Process -Force`、`schtasks /delete` 越界；
+- **Red-Zone**：`AGENTS.md` §5.1（未经明确授权不得执行上述操作；
+  可停进程必须为 manifest 证明的当前 stack owned 进程，PID + start-time + command-line 验证）；
+- **Ownership**：`scripts/lifecycle/stack_manifest.py` +
+  `stack_ownership.py` + `stack_record.py`，每次启动创建唯一 `stack_id` 与
+  `logs/live_stack/<stack_id>/stack_manifest.json`（Windows/WSL owned PID + start-time +
+  command-line 指纹、simulation_instance_id、ROS master、launcher/任务身份）；
+- **Inspect**：`stack_inspect.py`（只读，owned alive/exited、stale/PID-reuse、
+  unknown fail-closed、端口占用、ROS/MAVROS 状态）；
+- **Graceful stop**：`stack_stop.py`（manifest-only；INT/close → TERM →
+  重验证后 KILL 并记录原因；禁止 WSL distribution 级 shutdown 与全局 pkill）；
+- **Health gate**：`health_gate.py` + `health_probe.py`；启动链显式产出
+  `GUI_READY` / `ROSCORE_READY` / `MAVROS_UAV1_CONNECTED` / `MAVROS_UAV2_CONNECTED` /
+  `COURSE_READY`，任一失败 fail closed；
+- **Fresh-instance**：`fresh_instance.py` + `live_stack_fresh_instance.ps1`
+  （inspect → graceful stop → verify clean → start new → health → readiness → flight；
+  失败禁止自动 force retry）；
+- **入口**：`live_stack_start.ps1` / `live_stack_inspect.ps1` /
+  `live_stack_stop.ps1` / `live_stack_fresh_instance.ps1`（默认 DryRun，`-Execute` 需批准）；
+- **离线验证**：`scripts/validate_lifecycle.ps1` 全部 PASS；Stage 2/6D/7/8 现有验证未回归。
+
+**live 状态**：尚未执行。第一次涉及真实宿主机进程停止/计划任务修改的 live 操作前，
+先展示 DryRun 输出与设计并获得用户批准；随后用户在场监督 1 次完整周期，
+再做 3 次（稳定后 5 次）fresh-instance，每次记录
+`startup_success` / `flight_success` / `shutdown_clean`。
