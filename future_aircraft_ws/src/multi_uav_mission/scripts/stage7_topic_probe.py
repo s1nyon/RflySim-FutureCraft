@@ -211,6 +211,10 @@ def validate_config(config):
         for field, value in uav.items():
             if field == "uav_id" or not isinstance(value, str) or not value.startswith("/"):
                 continue
+            if field == "planner_bspline_topic":
+                # EGO-Swarm publishes bspline on a global /drone_X_planning
+                # topic that is not bound to the UAV namespace.
+                continue
             if field == "namespace":
                 if value != namespace:
                     raise ValueError(f"uavs[{index}].namespace mismatch: {value}")

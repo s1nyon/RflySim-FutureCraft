@@ -143,6 +143,9 @@ def main() -> int:
         )
         assert set(summary["uavs"].keys()) == {"uav1", "uav2"}
         for uav_id, uav_summary in summary["uavs"].items():
+            assert uav_summary["goal_event_count"] == 0
+            assert uav_summary["trigger_event_count"] == 0
+            assert uav_summary["bspline_event_count"] == 0
             assert uav_summary["planner_command_count"] == 0
             assert uav_summary["setpoint_target_count"] == 0
             assert uav_summary["setpoint_z_commanded"]["count"] == 0

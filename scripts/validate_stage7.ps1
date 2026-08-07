@@ -160,6 +160,10 @@ if (Test-Path -LiteralPath $configPath) {
         if ($uav.mavros_setpoint_topic -ne $expectedSetpoint[$uavId]) {
             $contractErrors += "${uavId}.mavros_setpoint_topic must be $($expectedSetpoint[$uavId])"
         }
+        $expectedDroneId = @{ uav1 = 0; uav2 = 1 }[$uavId]
+        if ($uav.planner_bspline_topic -ne "/drone_${expectedDroneId}_planning/bspline") {
+            $contractErrors += "${uavId}.planner_bspline_topic must be /drone_${expectedDroneId}_planning/bspline"
+        }
         foreach ($field in @(
             'slam_namespace',
             'slam_odom_topic',
@@ -168,6 +172,7 @@ if (Test-Path -LiteralPath $configPath) {
             'planner_cloud_topic',
             'planner_cmd_topic',
             'planner_goal_topic',
+            'planner_trigger_topic',
             'mavros_state_topic',
             'mavros_setpoint_topic',
             'mavros_set_mode_service',

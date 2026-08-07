@@ -12,6 +12,8 @@ $spec = Join-Path $projectRoot 'config\maps\predicted_narrow_course_v1.json'
 $recorder = Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\stage8_control_chain_recorder.py'
 $recorderCheck = Join-Path $projectRoot 'tests\stage8_control_chain_recorder_check.py'
 $recorderBat = Join-Path $projectRoot 'scripts\run_stage8_control_chain_recorder.bat'
+$egoChainAnalyzer = Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\stage8_ego_chain_analyzer.py'
+$egoChainAnalyzerCheck = Join-Path $projectRoot 'tests\stage8_ego_chain_analyzer_check.py'
 
 function Invoke-Checked {
     param(
@@ -84,6 +86,14 @@ try {
         '--recorder-module', $recorder,
         '--config', (Join-Path $projectRoot 'config\stage7_live_slam_ego_swarm.json')
     )
+    if (-not (Test-Path -LiteralPath $egoChainAnalyzer) -or
+        -not (Test-Path -LiteralPath $egoChainAnalyzerCheck)) {
+        throw 'Stage 8 EGO chain analyzer script or test is missing'
+    }
+    Invoke-Checked $python @(
+        'tests\stage8_ego_chain_analyzer_check.py',
+        '--analyzer-module', $egoChainAnalyzer
+    )
     $recorderBatText = Get-Content -Raw -LiteralPath $recorderBat
     if ($recorderBatText -notmatch 'REF_28COM_UAV_WSL_DIR%/devel/setup\.bash') {
         throw 'run_stage8_control_chain_recorder.bat must source the 28com_uav workspace for quadrotor_msgs'
@@ -93,6 +103,9 @@ try {
     $recorderProjectIndex = $recorderBatText.IndexOf('%FUTURE_AIRCRAFT_SIM_WSL_DIR%/future_aircraft_ws/devel/setup.bash')
     if ($recorderEgoIndex -lt 0 -or $recorderEgoIndex -lt $recorder28Index -or $recorderProjectIndex -lt $recorderEgoIndex) {
         throw 'run_stage8_control_chain_recorder.bat must source ego-planner-swarm after 28com_uav and before the project overlay so quadrotor_msgs matches the planner publisher'
+    }
+    if ($recorderBatText -notmatch 'stage8_ego_chain_analyzer\.py') {
+        throw 'run_stage8_control_chain_recorder.bat must run stage8_ego_chain_analyzer.py after recording'
     }
     Invoke-Checked 'cmd.exe' @('/d', '/c', 'scripts\run_stage8_control_chain_recorder.bat', '--dry-run')
 

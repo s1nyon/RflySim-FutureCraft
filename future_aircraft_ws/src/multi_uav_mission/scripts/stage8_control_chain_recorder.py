@@ -124,6 +124,15 @@ class UavRecorder:
         self.min_z = float(min_z)
         self.max_z = float(max_z)
         self.topics = {
+            "goal": uav["planner_goal_topic"],
+            "trigger": uav.get(
+                "planner_trigger_topic",
+                f"{uav['namespace']}/planning/traj_start_trigger",
+            ),
+            "bspline": uav.get(
+                "planner_bspline_topic",
+                f"/drone_{uav.get('planner_drone_id', 0)}_planning/bspline",
+            ),
             "planner": uav["planner_cmd_topic"],
             "setpoint": uav["mavros_setpoint_topic"],
             "slam_raw": f"{uav['slam_namespace']}/odometry_raw",
@@ -135,6 +144,9 @@ class UavRecorder:
         self.channels = {
             name: Channel()
             for name in (
+                "goal",
+                "trigger",
+                "bspline",
                 "planner",
                 "setpoint",
                 "slam_raw",
@@ -158,6 +170,9 @@ class UavRecorder:
     def summary(self):
         setpoint_channel = self.channels["setpoint"]
         return {
+            "goal_event_count": self.channels["goal"].count,
+            "trigger_event_count": self.channels["trigger"].count,
+            "bspline_event_count": self.channels["bspline"].count,
             "planner_command_count": self.channels["planner"].count,
             "planner_z": self.z_summary("planner"),
             "setpoint_target_count": setpoint_channel.count,
@@ -218,6 +233,7 @@ def validate_config(config):
             "namespace",
             "slam_namespace",
             "planner_cmd_topic",
+            "planner_goal_topic",
             "mavros_setpoint_topic",
             "slam_odom_topic",
             "mavros_feedback_odom_topic",
@@ -231,7 +247,10 @@ def run_ros(config, args, log_file, recorder_map):
     import rospy
     from mavros_msgs.msg import PositionTarget, State
     from nav_msgs.msg import Odometry
+    from geometry_msgs.msg import PoseStamped
     from quadrotor_msgs.msg import PositionCommand
+    from std_msgs.msg import Bool
+    from traj_utils.msg import Bspline
 
     rospy.init_node(
         "future_aircraft_stage8_control_chain_recorder", anonymous=True
@@ -337,8 +356,75 @@ def run_ros(config, args, log_file, recorder_map):
             ),
         )
 
+    def on_goal(message, recorder):
+        recorder.channels["goal"].add()
+        write_event(
+            recorder,
+            control_event(
+                "planner_goal",
+                recorder.uav_id,
+                time.time(),
+                time.monotonic(),
+                header_stamp=stamp_secs(message.header.stamp),
+                frame_id=str(message.header.frame_id),
+                position=rounded_position(message.pose.position),
+                orientation=[
+                    round(float(message.pose.orientation.x), 6),
+                    round(float(message.pose.orientation.y), 6),
+                    round(float(message.pose.orientation.z), 6),
+                    round(float(message.pose.orientation.w), 6),
+                ],
+            ),
+        )
+
+    def on_trigger(message, recorder):
+        recorder.channels["trigger"].add()
+        write_event(
+            recorder,
+            control_event(
+                "traj_start_trigger",
+                recorder.uav_id,
+                time.time(),
+                time.monotonic(),
+                data=bool(message.data),
+            ),
+        )
+
+    def on_bspline(message, recorder):
+        recorder.channels["bspline"].add()
+        write_event(
+            recorder,
+            control_event(
+                "bspline",
+                recorder.uav_id,
+                time.time(),
+                time.monotonic(),
+                header_stamp=stamp_secs(message.header.stamp),
+                order=int(getattr(message, "order", 0)),
+                size=len(getattr(message, "pos_pts", [])),
+            ),
+        )
+
     for uav in config["uavs"]:
         recorder = recorder_map[uav["uav_id"]]
+        rospy.Subscriber(
+            recorder.topics["goal"],
+            PoseStamped,
+            lambda message, r=recorder: on_goal(message, r),
+            queue_size=20,
+        )
+        rospy.Subscriber(
+            recorder.topics["trigger"],
+            Bool,
+            lambda message, r=recorder: on_trigger(message, r),
+            queue_size=20,
+        )
+        rospy.Subscriber(
+            recorder.topics["bspline"],
+            Bspline,
+            lambda message, r=recorder: on_bspline(message, r),
+            queue_size=20,
+        )
         rospy.Subscriber(
             recorder.topics["planner"],
             PositionCommand,
