@@ -108,6 +108,15 @@ vision / task logic / behavior tree
 - 待办：fresh-instance lidar_only live 阶梯（cold-start readiness → 双机
   takeoff → 短导航 → 完整双机错时穿隧道）→ 至少 3 次 fresh-instance
   PBL-1 重复。
+- live 复测环境阻塞（2026-08-08 尝试）：agent 沙箱会话运行在 Windows
+  Session 0（services），RflySim3D（UE4）在该会话无法创建渲染窗口
+  （`CreateSwapChainForHwnd failed 887A0022`，DXGI_ERROR_INVALID_CALL），
+  进程启动后约 1 分钟退出；CopterSim/QGC 可启动但无法替代 RflySim3D 的
+  LiDAR 渲染流。完整 live 阶梯必须在**交互式桌面会话**（console Session 1）
+  中执行：cold-start readiness（含新增 odom relay 等待）→ 双机 takeoff →
+  短导航 → 完整穿隧道 → 3 次 fresh-instance 重复。同一会话早前（19:37 /
+  20:26）RflySim3D 可启动，说明桌面可用性在会话期间发生变化，属于环境
+  限制而非代码回归。
 
 因此当前工作模型必须是：
 
