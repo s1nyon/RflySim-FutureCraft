@@ -84,6 +84,9 @@ schtasks /delete /tn "\FutureAircraftSim_LiveStack_Session1" /f
 3. **杂散文件 `pos_cmd`**
    仓库根目录 `pos_cmd`（94 字节）内容是某脚本 dry-run 输出 `[DRY-RUN] 5. run stage8_ego_chain_analyzer.py ...`，属于重定向误写，应删除。
    → **2026-08-08 已删除**。
+   根因（2026-08-08 定位）：`scripts/run_stage8_control_chain_recorder.bat --dry-run` 的
+   echo 文本含未转义的 `->`，cmd 把 `>` 当成重定向，落盘出 `pos_cmd`；
+   已改为 `-^>`（commit `8e777b1`），validate_stage8 复跑不再生成该文件。
 
 4. **`.ros/log` 超 1GB**
    roscore 启动时提示 `disk usage in log directory [/root/.ros/log] is over 1GB`，长时间不清理会影响 WSL 磁盘与启动速度（可 `rosclean` 或手动归档，操作前先确认没有正在运行的必要日志）。

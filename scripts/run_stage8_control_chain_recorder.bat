@@ -9,7 +9,7 @@ if /I "%~1"=="--dry-run" (
   echo [DRY-RUN] 2. load current run context and require a fresh simulation instance
   echo [DRY-RUN] 3. subscribe read-only: planner goal/traj_start_trigger/bspline/pos_cmd, setpoint_raw/local, slam odometry_raw, odometry/out, odometry/in, local_position/odom, mavros/state
   echo [DRY-RUN] 4. write stage8_control_chain.jsonl + stage8_control_chain_summary.json under $STAGE7_RUN_DIR
-  echo [DRY-RUN] 5. run stage8_ego_chain_analyzer.py to produce per-goal chain segments (goal -> trigger -> bspline -> pos_cmd)
+  echo [DRY-RUN] 5. run stage8_ego_chain_analyzer.py to produce per-goal chain segments (goal -^> trigger -^> bspline -^> pos_cmd)
   echo [DRY-RUN] 6. no Publisher, ServiceProxy, arming, set_mode, or setpoint publishing
   exit /b 0
 )
