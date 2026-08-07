@@ -91,6 +91,27 @@ RGB 与深度没有生效。根因是 RflySim `VisionCaptureApi.jsonLoad` 的格
 `tests/stage7_dual_sensor_config_check.py` 新增 `validate_sdk_loadable`
 契约，16 维 otherParams 缺键会被回归测试拒绝。
 
+### 2026-08-07 追加：live transport 实测（深度帧率不达标）
+
+新仿真实例 `px4-a289b8bc70d45c16`（run
+`stage7-20260807T063728Z-2686`）上 readiness 五项门禁全部通过
+（双机 17408 点/帧，`armed=false`），ego-swarm/FAST-LIO 正常；
+`stage7_topic_probe.py` 首次真实执行 D435i 深度检查，结果：
+
+- `/uav1/rflysim/sensor3/img_depth` 与 `/uav2/rflysim/sensor13/img_depth`
+  publisher 唯一（relay 各 1 个）、encoding=mono16、640x480、至少一帧非全零
+  ——transport 检查基本通过；
+- 但帧率实测约 **1.8 / 2.2 Hz**（relayed 话题），远低于配置的 30 Hz，
+  `depth_image_flow` 的 20–45 Hz 硬检查失败；
+- 尚未区分：原始话题 `/rflysim/sensor3/img_depth` 与 relay 话题的帧率差、
+  是否渲染负载（双机 4 传感器 640x480@30Hz + lidar）或 RflySim 深度输出
+  本身限制导致。
+
+结论：深度传输链路已真实打通（有数据、格式正确），但 30 Hz 帧率契约未达成，
+不能宣称 D435i live 验证通过；下次 live 先对比 raw/relay 帧率再定验收标准。
+另外本次 probe 首跑还暴露两个流程问题（非代码问题）：ego-swarm 中途掉线导致
+planner 层失败；readiness 超过 120 秒过期导致 flight_gate 拒绝。
+
 待下次仿真启动后完成（live）：
 
 1. no-arm 实跑 `scripts\run_stage7_topic_probe.bat`，确认 transport probe

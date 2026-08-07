@@ -146,6 +146,12 @@ Latest D435i work, 2026-08-07 (offline only, live validation pending):
   `stage7_topic_probe.py` and passes offline. Live no-arm verification of the
   depth topics, depth wall-geometry consistency, and of ego-swarm depth fusion
   still has to be run on the next simulation restart.
+- First live probe run (instance `px4-a289b8bc70d45c16`, run
+  `stage7-20260807T063728Z-2686`): readiness five gates passed and the depth
+  transport checks (unique publisher, mono16, 640x480, non-zero) passed, but
+  the relayed depth topics measured only ~1.8/2.2 Hz instead of the configured
+  30 Hz, so `depth_image_flow` failed its rate gate. Raw-vs-relay rate
+  comparison and wall-geometry consistency are still open live items.
 
 Validated offline stages:
 
@@ -340,8 +346,10 @@ config, ego-swarm wiring, odometry, or the live run flow.
 1. No-arm: run `scripts\run_stage7_topic_probe.bat`; the new
    `depth_publisher_count` and `depth_flow` checks must pass for
    `/uav1/rflysim/sensor3/img_depth` and `/uav2/rflysim/sensor13/img_depth`
-   (transport half). Confirm depth values match the course walls/ceiling
-   geometry (live-only; the transport probe cannot prove it).
+   (transport half; note the first live probe measured ~2 Hz, below the
+   20-45 Hz gate — compare raw vs relayed rate before accepting).
+   Confirm depth values match the course walls/ceiling geometry (live-only;
+   the transport probe cannot prove it).
 2. ego-swarm log shows depth fusion actually triggering
    (`depthOdomCallback` / `flag_use_depth_fusion`).
 3. Compare occupancy/trajectory in the narrow tunnel with depth fusion on vs
