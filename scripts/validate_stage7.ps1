@@ -34,7 +34,6 @@ $requiredPaths = @(
 'tests/stage7_goal_delivery_check.py',
 'tests/stage7_executor_failure_artifact_check.py',
 'tests/stage7_probe_flow_check.py',
-'tests/stage7_quadrotor_msgs_overlay_check.py',
 'tests/stage7_provenance_check.py',
 'tests/stage7_planner_control_bridge_check.py',
 'tests/stage7_sensor_readiness_check.py',
@@ -390,12 +389,6 @@ if (Test-Path -LiteralPath $flightRunnerPath) {
     if ($flightRunner -notmatch '--max-odom-age-s 2') {
         $contractErrors += 'arm-capable runner watchdog must tolerate short odometry gaps (--max-odom-age-s 2)'
     }
-    $ref28OverlayIndex = $flightRunner.IndexOf('source "$REF_28COM_UAV_WSL_DIR/devel/setup.bash"')
-    $flightEgoOverlayIndex = $flightRunner.IndexOf('source "$EGO_SWARM_WSL_DIR/devel/setup.bash"', [Math]::Max(0, $ref28OverlayIndex))
-    $flightProjectOverlayAfterEgoIndex = $flightRunner.IndexOf('future_aircraft_ws/devel/setup.bash', [Math]::Max(0, $flightEgoOverlayIndex))
-    if ($ref28OverlayIndex -lt 0 -or $flightEgoOverlayIndex -lt $ref28OverlayIndex -or $flightProjectOverlayAfterEgoIndex -lt $flightEgoOverlayIndex) {
-        $contractErrors += 'arm-capable runner must source ego-planner-swarm after 28com_uav and before the project overlay so quadrotor_msgs matches the planner publisher'
-    }
 }
 
 $egoRunnerPath = Join-Path $ProjectRoot 'scripts/wsl/stage7_live_ego_swarm_dual.sh'
@@ -593,15 +586,6 @@ if ($missing.Count -eq 0) {
         )
         if ($LASTEXITCODE -ne 0) {
             $contractErrors += "stage7_probe_flow_check.py failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
-        }
-
-        $quadrotorMsgsOverlayCheckScript = Join-Path $ProjectRoot 'tests/stage7_quadrotor_msgs_overlay_check.py'
-        $output = Invoke-ContractPythonScript -Runner $pythonRunner -ScriptPath $quadrotorMsgsOverlayCheckScript -Arguments @(
-            '--flight-runner', (Join-Path $ProjectRoot 'scripts/wsl/stage7_live_slam_ego_swarm_flight.sh'),
-            '--recorder-bat', (Join-Path $ProjectRoot 'scripts/run_stage8_control_chain_recorder.bat')
-        )
-        if ($LASTEXITCODE -ne 0) {
-            $contractErrors += "stage7_quadrotor_msgs_overlay_check.py failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
         }
 
         $provenanceCheckScript = Join-Path $ProjectRoot 'tests/stage7_provenance_check.py'

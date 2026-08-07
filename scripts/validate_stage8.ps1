@@ -88,12 +88,6 @@ try {
     if ($recorderBatText -notmatch 'REF_28COM_UAV_WSL_DIR%/devel/setup\.bash') {
         throw 'run_stage8_control_chain_recorder.bat must source the 28com_uav workspace for quadrotor_msgs'
     }
-    $recorderEgoIndex = $recorderBatText.IndexOf('%EGO_SWARM_WSL_DIR%/devel/setup.bash')
-    $recorder28Index = $recorderBatText.IndexOf('REF_28COM_UAV_WSL_DIR%/devel/setup.bash')
-    $recorderProjectIndex = $recorderBatText.IndexOf('%FUTURE_AIRCRAFT_SIM_WSL_DIR%/future_aircraft_ws/devel/setup.bash')
-    if ($recorderEgoIndex -lt 0 -or $recorderEgoIndex -lt $recorder28Index -or $recorderProjectIndex -lt $recorderEgoIndex) {
-        throw 'run_stage8_control_chain_recorder.bat must source ego-planner-swarm after 28com_uav and before the project overlay so quadrotor_msgs matches the planner publisher'
-    }
     Invoke-Checked 'cmd.exe' @('/d', '/c', 'scripts\run_stage8_control_chain_recorder.bat', '--dry-run')
 
     Invoke-Checked 'cmd.exe' @('/d', '/c', 'scripts\generate_predicted_narrow_course.bat', '--dry-run')

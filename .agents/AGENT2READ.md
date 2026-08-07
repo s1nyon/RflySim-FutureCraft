@@ -1,2012 +1,413 @@
-# Future Aircraft Sim — Agent Engineering Handbook
-
-> 适用仓库：`s1nyon/RflySim-FutureCraft`
->
-> 角色：本文件是本仓库面向开发 Agent 的**详细权威工程手册**。根目录 `AGENTS.md` 保存硬规则，本文件解释当前工程事实、架构、决策依据、调试方法和开发路线。涉及 RflySim/PX4/MAVROS/WSL 工具链细节时，同时读取 `.agents/RFLYSIM_TOOLCHAIN_REFERENCE.md`，不要在本文件里凭经验重建外部工具链约定。
->
-> 状态基准：2026-08-07，结合仓库当前 `main` 与用户对最新 live 状态的明确确认整理。
-
----
-
-## 0. Agent 进入仓库后的 5 分钟规则
-
-第一次进入任务时，不要马上改代码。先回答下面五个问题：
-
-1. **当前任务属于哪一层？**
-   - simulator / sensor bridge / localization / MAVROS/PX4 / planner / mission / vision / tooling / docs
-2. **它是否可能破坏当前 Protected Baseline？**
-3. **最近一次可信的 live evidence 是哪个 run / 哪个 simulation instance？**
-4. **当前看到的“问题”是 current regression，还是历史文档里的旧问题？**
-5. **最小能够证明/反驳当前假设的实验是什么？**
-
-如果这五个问题还答不出来，优先读取证据，不要开始“试参数”。
-
----
-
-# 1. Project Mission
-
-本项目面向未来飞行器创新大赛的双无人机室内协同任务，目标是在 RflySim 仿真环境中建立可逐步迁移到真实 FS-310 平台的完整能力链。
-
-核心目标不是单独把某个算法“跑起来”，而是建立可重复、可诊断、可扩展的系统能力：
-
-```text
-RflySim environment
-    ↓
-Mid360 / D435i / IMU / down camera
-    ↓
-per-UAV sensor isolation
-    ↓
-Faster-LIO localization
-    ↓
-MAVROS / PX4 external odometry & flight state
-    ↓
-EGO-Swarm local planning
-    ↓
-setpoint bridge
-    ↓
-PX4 OFFBOARD control
-    ↓
-dual-UAV mission execution
-    ↓
-vision / task logic / behavior tree
-```
-
-当前工程的长期方向是：
-
-- 双机能在狭窄环境中稳定、平滑、自主运动；
-- 视觉能够识别比赛目标并提供任务信息；
-- 比赛细则和地图公布后，将运动能力和视觉能力组合为完整任务系统；
-- 仿真中验证过的接口、坐标、控制和感知约定尽量保持真实硬件可迁移性。
-
----
-
-# 2. Current Truth — 当前唯一有效工程状态
-
-这是本文件最重要的一节。
-
-## 2.1 User-confirmed latest state（最高优先级）
-
-截至 2026-08-07，用户已明确确认：
-
-- 2026-08-07 的双机仿真结果本身**非常好**；
-- 双机穿隧道能力不应再被视为“尚未攻克”；
-- 之后因为引入 D435i 多传感器载荷，当前工程出现了新的集成回归；
-- 该回归已按阶段策略隔离：`lidar_only` 模式下双机起飞已恢复；D435i 全载荷导致的 UE4 渲染过载/odom 断流问题已有项目侧最小修复（sensor-mode 切换，见 docs/d435i_sensor_parity_2026-08-07.md）；
-- 最新 live run（`stage7-20260807T084232Z-2599`）在 `lidar_only` 下双机 OFFBOARD/arming/takeoff 全部成功，导航阶段失败 `planner_commands=0`；
-- `planner_commands=0` 根因已在 2026-08-07 取证：**EGO 发布端（ego-planner-swarm devel）与 Python 消费端（28com_uav devel）的 `quadrotor_msgs/PositionCommand` md5 不一致**（`4712f060…` vs `44d620d9…`），ROS 直接丢弃连接，setpoint bridge/executor 收不到 planner 指令。修复：flight runner 与 stage8 recorder 在 28com_uav 之后、project overlay 之前 source ego-planner-swarm devel；live 复测待做。
-
-因此当前工作模型必须是：
-
-```text
-GOOD BASELINE
-双机定位 + OFFBOARD + EGO-Swarm + 错时穿隧道
-        ↓
-NEW FEATURE
-D435i RGB / Depth / down camera integration
-        ↓
-CURRENT REGRESSION
-飞机无法正常起飞
-```
-
-而不是：
-
-```text
-Stage 8 从未成功
-→ EGO-Swarm 仍不可用
-→ 重新设计整条飞行链
-```
-
-后者是错误心智模型。
-
-## 2.2 当前 Protected Baseline
-
-定义：
-
-### PBL-1 — lidar-only 双机飞行基线
-
-PBL-1 包含：
-
-- 双 UAV RflySim/PX4/MAVROS 启动；
-- 两机独立传感器链；
-- Faster-LIO 工作；
-- OFFBOARD / arming / takeoff；
-- EGO-Swarm 局部规划；
-- 双机错时完整穿越当前窄通道/隧道路线；
-- 无碰撞或不可接受的控制异常；
-- 感知式机间避碰机制不被破坏。
-
-**PBL-1 是受保护资产。**
-
-D435i、视觉、行为树、后续群体协同增强都必须在不无声破坏 PBL-1 的前提下演进。
-
-## 2.3 当前回归的初始责任假设
-
-当前“加入 D435i 后无法起飞”应首先视为以下层面的集成回归候选：
-
-1. 多传感器渲染/仿真负载；
-2. RflySim `VisionCaptureApi` sensor loading；
-3. sensor bridge 进程生命周期；
-4. topic relay / namespace；
-5. depth/RGB 帧率、timestamp 或 transport；
-6. odometry freshness 受到资源竞争影响；
-7. readiness / watchdog 在起飞窗口被 stale odom 触发；
-8. full mode 引入后启动时序变化。
-
-只有证据排除这些层后，才升级调查 EGO/Faster-LIO/PX4 核心。
-
-## 2.4 仓库当前存在 documentation debt
-
-当前 `README.md` 和旧 `.agents/AGENT2READ.md` 同时保留了：
-
-- “双机错时穿隧道全程成功”；
-- 后续 `planner_commands=0` / Stage 8 blocker 的旧记录。
-
-这些记录在时间线上都有意义，但把它们同时写在 Current State 会让 Agent 误判。
-
-本 handbook 的规则是：
-
-- 历史失败保留为 diagnosis knowledge；
-- 最新成功/回归才进入 Current Truth；
-- 已被后续结果 supersede 的故障不得继续驱动任务优先级。
-
----
-
-# 3. Truth Priority — 信息冲突时听谁的
-
-当用户描述、README、docs、代码注释、历史日志相互矛盾时，按以下优先级处理：
-
-1. **当前 fresh live evidence**
-2. **当前 run-scoped artifacts**
-3. **用户明确确认的最新工程状态**
-4. **当前代码 / launch / config 的实际行为**
-5. **当前离线测试结果**
-6. **README / handbook Current State**
-7. **历史 incident docs / 旧日志 / 旧 TODO**
-8. **推测、经验和“看起来应该”**
-
-注意：第 1 和第 3 有时顺序会互换。
-
-- 如果 fresh live 是用户刚刚跑的、证据明确，则 live evidence 优先。
-- 如果仓库里的所谓 “latest live” 实际是较早 run，而用户明确告诉你之后又跑出了新结果，则用户确认的更新状态 supersede 旧 run。
-
-## 3.1 不允许的错误
-
-禁止：
-
-- 看到旧 `planner_commands=0` 就自动开始修 planner；
-- 看到一份 readiness PASS 就用于另一个 simulation instance；
-- 看到 README TODO 就默认该 TODO 仍未完成；
-- 把离线通过当 live 通过；
-- 把“曾经成功一次”自动等同“当前改动没有回归”。
-
----
-
-# 4. System Architecture
-
-## 4.1 仿真与飞控
-
-主要组件：
-
-- RflySim3D
-- CopterSim
-- PX4 SITL
-- MAVROS
-- WSL / ROS1 Noetic
-
-典型多机命名空间：
-
-```text
-/uav1/...
-/uav2/...
-```
-
-MAVROS 使用独立链路，不复用 CopterSim/PX4 的 Rfly SIL 端口。
-
-当前约定：
-
-```text
-UAV1 MAVROS: udp://:14601@127.0.0.1:14600
-UAV2 MAVROS: udp://:14611@127.0.0.1:14610
-```
-
-Rfly SIL/CopterSim 相关端口（如 `16540/17540`、`16541/17541`）不要拿来给 MAVROS 复用。
-
-## 4.2 传感器层
-
-每机主要能力：
-
-- Mid360 LiDAR + IMU
-- D435i RGB
-- D435i Depth
-- down-facing camera
-
-当前 sensor config：
-
-- `config/rflysim_sensor_uav1.json`
-- `config/rflysim_sensor_uav2.json`
-
-RflySim `VisionCaptureApi` 对 `SeqID`/`TypeID` 发布绝对 topic，因此项目需要显式 namespace relay。
-
-重要类型：
-
-```text
-TypeID 1  -> RGB image
-TypeID 2  -> depth image
-TypeID 23 -> Mid360 lidar
-```
-
-## 4.3 Localization
-
-当前定位使用 Faster-LIO。
-
-每机有独立 local frame / origin。
-
-FAST-LIO 原始数据和项目 normalization/relay 的关键区分见后续 Coordinate Model。
-
-## 4.4 Planning
-
-局部规划使用项目外部算法仓库：
-
-```text
-external/ego-planner-swarm
-```
-
-项目侧 integration 位于：
-
-```text
-future_aircraft_ws/src/multi_uav_mission/
-```
-
-主要负责：
-
-- topic/namespace 适配；
-- goal/mission 入口；
-- setpoint bridge；
-- planner readiness / probe；
-- route / course contract；
-- 双机 mission orchestration；
-- run-scoped evidence。
-
-## 4.5 Mission & task layer
-
-任务层已经有：
-
-- behavior tree runner
-- target provider abstraction
-- simulation vision provider
-- mission executor
-- flight plan
-- score/report artifacts
-
-但当前阶段不要让视觉/行为树成为 PBL-1 的启动前提。
-
----
-
-# 5. Repository Map
-
-## 5.1 根目录
-
-```text
-AGENTS.md                  强制硬规则
-README.md                  面向人的项目概览
-.agents/                   Agent handbook / toolchain notes
-config/                    JSON 配置、地图和阶段契约
-scripts/                   Windows 启动、验证、WSL wrapper
-future_aircraft_ws/src/    项目 ROS1 源码
-external/                  独立算法仓库（谨慎修改）
-tests/                     离线 contract / regression tests
-docs/                      设计、事故记录、决策
-logs/                      live run evidence（运行生成）
-generated/                 deterministic course artifacts（运行生成）
-```
-
-## 5.2 `multi_uav_mission` 关键 launch
-
-```text
-future_aircraft_ws/src/multi_uav_mission/launch/
-├── predicted_narrow_course.launch
-├── rflysim_ego_swarm_dual.launch
-├── rflysim_ego_swarm_single.launch
-├── rflysim_fastlio_dual.launch
-└── rflysim_mavros_px4.launch
-```
-
-## 5.3 `multi_uav_mission/scripts` 关键模块
-
-飞行/任务：
-
-```text
-mission_executor.py
-stage7_flight_plan.py
-ego_swarm_adapter.py
-ego_swarm_setpoint_bridge.py
-mavros_setpoint_keepalive.py
-behavior_tree_runner.py
-```
-
-定位/坐标/契约：
-
-```text
-odom_frame_relay.py
-odom_tf_contract_check.py
-rflysim_pointcloud_adapter.py
-rflysim_cloud_contract.py
-```
-
-传感器：
-
-```text
-rflysim_sensor_bridge.py
-stage7_sensor_readiness.py
-stage7_topic_probe.py
-```
-
-安全/诊断：
-
-```text
-course_geofence.py
-course_geofence_watchdog.py
-stage8_control_chain_recorder.py
-stage8_dynamic_lidar_probe.py
-check_swarm_obstacle.py
-flight_event_recorder.py
-```
-
-证据/报告：
-
-```text
-stage7_run_artifacts.py
-stage7_flight_report.py
-score_summary.py
-```
-
-视觉/目标：
-
-```text
-target_provider.py
-sim_vision_target_provider.py
-```
-
----
-
-# 6. Protected Baseline Model
-
-以后不要只用 “Stage 7 / Stage 8 完成了吗” 描述能力。
-
-使用 **PBL — Protected Baseline** 管理已经验证过的系统能力。
-
-## 6.1 PBL 的意义
-
-一个能力进入 PBL 后：
-
-- 后续 feature 默认不得改变其行为；
-- 任何可能影响它的改动必须做 regression validation；
-- 发现回归时首先 diff 新 feature；
-- 不允许以“新功能更先进”为理由接受旧能力退化，除非用户明确同意 tradeoff。
-
-## 6.2 当前 PBL-1
-
-```text
-PBL-1 = lidar_only dual-UAV tunnel-flight baseline
-```
-
-必须保护：
-
-- sensor isolation
-- Faster-LIO stability
-- MAVROS connection
-- odom freshness
-- OFFBOARD entry
-- arming
-- takeoff
-- EGO planning
-- setpoint bridge
-- staggered dual route
-- geofence/watchdog semantics
-- perception-based collision avoidance
-
-## 6.3 如何升级 PBL
-
-D435i 修复后可以形成：
-
-```text
-PBL-2 = PBL-1 + RGB enabled without flight regression
-PBL-3 = PBL-2 + depth transport enabled without planner dependency
-PBL-4 = PBL-3 + validated depth-to-EGO fusion
-```
-
-不要跳级。
-
----
-
-# 7. D435i Development Policy
-
-用户选择的路线是 **C**：
-
-> RGB/Depth 都要，但当前先完成视觉侧独立能力；后面再把 Depth 正式并入 EGO。
-
-## 7.1 为什么这样分层
-
-EGO 的核心 occupancy map 当前可由 LiDAR cloud 驱动。
-
-D435i Depth 是增强输入，不是 PBL-1 的必要条件。
-
-因此：
-
-- D435i 不应成为“飞机能不能起飞”的硬依赖；
-- 视觉开发应尽量与 flight-critical chain 解耦；
-- Depth→EGO 必须作为单独 integration milestone 验证。
-
-## 7.2 强制传感器阶梯
-
-### L0 — lidar_only
-
-```text
-Mid360 + IMU
-→ Faster-LIO
-→ EGO cloud map
-→ flight
-```
-
-验收：PBL-1 完整通过。
-
-### L1 — RGB enabled
-
-```text
-L0 + front RGB
-```
-
-要求：
-
-- RGB topic 正常；
-- 不拖垮 odom；
-- 不影响 readiness；
-- 双机仍可完成 PBL-1。
-
-### L2 — RGB + Depth transport
-
-```text
-L1 + depth stream
-```
-
-但：
-
-```text
-Depth NOT required by planner
-```
-
-要求：
-
-- unique publisher；
-- mono16 / expected resolution；
-- timestamps monotonic；
-- frame rate 达到 contract；
-- non-zero depth；
-- 与场景几何大体一致；
-- 不引起 takeoff regression。
-
-### L3 — Depth → EGO
-
-Depth 正式进入 planner map。
-
-要求：
-
-- 证明 depth callback/fusion 真正触发；
-- 对比 cloud-only 与 cloud+depth；
-- 不破坏 Mid360 perception-based UAV avoidance；
-- 不让 depth transport 成为单点故障导致完全不能飞。
-
-## 7.3 当前 D435i 回归的首要检查
-
-如果 full mode 无法起飞，先做：
-
-```text
-A. lidar_only 是否仍能起飞？
-B. RGB only 是否能起飞？
-C. 加 down camera 是否能起飞？
-D. 加 depth transport 后是否失败？
-```
-
-这比一上来调 planner 参数更有信息量。
-
----
-
-# 8. Coordinate Model — 双机坐标系
-
-这是本项目最容易被误解的地方之一。
-
-## 8.1 两机 Faster-LIO 原点独立
-
-当前两架 UAV 各自运行 Faster-LIO。
-
-每台 local frame 的原点与自身起飞/初始化位置相关。
-
-因此：
-
-```text
-uav1 local trajectory coordinates
-!=
-uav2 local trajectory coordinates
-```
-
-即使数值看起来相似，也不能默认可直接相减。
-
-## 8.2 EGO-Swarm swarm trajectory caveat
-
-EGO-Swarm 的 swarm trajectory coordination 通常假设各 UAV 共享可比较的空间坐标。
-
-当前工程中，两机独立 FAST-LIO frame 使跨机 trajectory subtraction / clearance 判断不天然成立。
-
-另外还存在 start-time window 等约束。
-
-因此当前规则：
-
-**不要把 `/broadcast_bspline` / swarm trajectory broadcast 当作当前可靠防撞保证。**
-
-## 8.3 当前机间避碰来源
-
-当前可靠的工程逻辑是：
-
-```text
-other UAV
-    ↓ sensed by local Mid360
-local point cloud / grid map
-    ↓
-EGO collision checking
-    ↓
-replan or EMERGENCY_STOP
-```
-
-`check_swarm_obstacle.py` 是重要验证工具。
-
-## 8.4 未来真正做 swarm coordination 的正确顺序
-
-如果后面要让 swarm trajectory coordination 真正可靠：
-
-1. 先统一/映射 odom frames；
-2. 验证两个 UAV 的 trajectory 都在同一几何 frame；
-3. 再评估 broadcast timing；
-4. 最后才 patch EGO-Swarm swarm logic。
-
-**不要先 patch EGO 的时间窗口来掩盖坐标系不一致。**
-
----
-
-# 9. Odometry / MAVROS Semantics
-
-## 9.1 关键 topic 不要混淆
-
-项目中存在多种 odometry topic：
-
-```text
-/uavX/slam/odometry_raw
-/uavX/mavros/odometry/out
-/uavX/mavros/odometry/in
-/uavX/mavros/local_position/odom
-```
-
-它们方向和用途不同。
-
-不要仅凭名字中的 `in/out` 猜数据方向。
-
-## 9.2 当前 flight-critical odom
-
-watchdog / executor navigation verification / preflight topic wait 以：
-
-```text
-/uavX/mavros/local_position/odom
-```
-
-作为主要飞行位置来源。
-
-FAST-LIO raw odom 保留在：
-
-```text
-/uavX/slam/odometry_raw
-```
-
-## 9.3 TF contract 是硬门
-
-`odom_tf_contract_check.py` 用于验证 MAVROS odom plugin 所需的 TF 关系，并检查日志错误。
-
-不要看到 topic 有消息就认为 external odometry contract 已经正确。
-
-## 9.4 已确认的不要重复“修”
-
-以下属于已知正确约定，除非 fresh evidence 明确反驳，不要随意更改：
-
-```text
-FAST-LIO extrinsic_T=[0,0,0.1]
-```
-
-以及 `/mavros/odometry/in` 某些 ENU-side z 表现本身不等于坐标错误。
-
----
-
-# 10. EGO-Swarm Integration Semantics
-
-## 10.1 Cloud 是主输入
-
-当前 planner map 可由：
-
-```text
-/uavX/slam/cloud_registered
-```
-
-构建。
-
-这也是为什么此前没有真实 depth callback 时 EGO 仍可运行。
-
-## 10.2 Depth 是增强，不是 PBL-1 前提
-
-Depth + odom 可以用于投影/滤波增强。
-
-但本阶段不可把 depth stream availability 变成“没有 depth 就完全不启动 planner”的硬耦合，除非用户后续明确更改架构策略。
-
-## 10.3 `pose_type`
-
-当前 fork 的参数语义必须以源码 `grid_map.h` 为准，而不是网上其他 EGO fork：
-
-```text
-POSE_STAMPED = 1
-ODOMETRY    = 2
-```
-
-当前 integration 使用 ODOMETRY 模式。
-
-## 10.4 外部源码修改原则
-
-如果 bug 看起来在 EGO：
-
-先证明：
-
-- goal 确实到达 planner chain；
-- odom 正常；
-- cloud 正常；
-- FSM state 合理；
-- project wrapper/remap/config 无误；
-- last-known-good 与 current EGO build/params 有实际差异。
-
-只有这时才能建议修改 `external/ego-planner-swarm`。
-
----
-
-# 11. Mission / Route Philosophy
-
-当前穿隧道成功并不意味着最终 route abstraction 已经理想。
-
-## 11.1 当前路线的角色
-
-当前窄通道/隧道路线主要用于：
-
-- 验证飞行链；
-- 验证狭窄环境稳定性；
-- 验证双机错时执行；
-- 建立可重复 regression baseline。
-
-因此现阶段**不要为了“更智能”而破坏已经好用的路线**。
-
-## 11.2 中期目标：减少“写死航点感”
-
-比赛细则和地图尚未完整公布时，中期研发应把能力从：
-
-```text
-密集 waypoint 序列
-```
-
-逐渐抽象为：
-
-```text
-任务级 goal
-+ corridor / gate / region constraints
-+ EGO local replanning
-```
-
-方向是让上层告诉 UAV：
-
-- 穿哪个门；
-- 进入哪个区域；
-- 保持哪种队形/先后关系；
-
-而不是逐厘米告诉 planner 怎么走。
-
-## 11.3 什么时候允许优化路线抽象
-
-满足以下条件后再做：
-
-- D435i 回归已隔离；
-- PBL-1 可重复；
-- route abstraction 有独立 test；
-- 能随时 fallback 到已验证路线比较。
-
----
-
-# 12. Live Run Lifecycle
-
-每次仿真重启都视为**新 simulation instance**。
-
-不得复用上一次 readiness 去授权下一次飞行。
-
-典型顺序：
-
-```bat
-scripts\start_predicted_course_two_uav.bat
-scripts\run_live_fastlio_dual.bat
-scripts\run_live_ego_swarm_dual.bat
-scripts\run_stage7_topic_probe.bat
-scripts\run_live_slam_ego_swarm_flight.bat --allow-arm --simulation-only
-```
-
-如果只做基础双机而非 course，可以按任务选择对应 `start_two_uav.bat` 等入口，但 safety gates 不变。
-
-## 12.1 no-arm readiness
-
-`run_live_fastlio_dual.bat` 产生 run-scoped readiness evidence。
-
-核心门：
-
-- identity
-- schema
-- freshness
-- isolation
-- stationary_stability
-
-五项未全部通过，不进入规划/飞行阶段。
-
-## 12.2 topic probe
-
-`run_stage7_topic_probe.bat` 是只读诊断入口。
-
-优先用它判断：
-
-- sensor bridge
-- Faster-LIO
-- MAVROS
-- EGO-Swarm
-- flight gate
-
-哪一层失效。
-
-## 12.3 control chain recorder
-
-如果出现：
-
-- planner 输出异常；
-- setpoint z 异常；
-- OFFBOARD 丢失；
-- planner 和 PX4 状态互相矛盾；
-
-运行：
-
-```bat
-scripts\run_stage8_control_chain_recorder.bat
-```
-
-它应保持只读：订阅、记录、不发布、不 arm。
-
----
-
-# 13. Regression Debugging Protocol
-
-## 13.1 “最近能跑，现在坏了”时的固定流程
-
-### Step 1 — Freeze the symptom
-
-先写清楚实际症状：
-
-错误示例：
-
-> D435i 把 EGO 弄坏了。
-
-正确示例：
-
-> full sensor mode 下，两机 readiness/odom 在起飞窗口出现 freshness failure，flight runner 未完成正常 takeoff。
-
-描述**观测**，不要把猜测写成结论。
-
-### Step 2 — Identify last-known-good
-
-找：
-
-- last known good commit/config；
-- last known good sensor mode；
-- 对应 run / artifacts；
-- current commit/config。
-
-### Step 3 — Diff
-
-优先比较：
-
-```text
-sensor JSON
-launch XML
-stage7 config
-sensor bridge args
-relay/remap
-topic names
-process count
-resource mode
-watchdog threshold changes
-```
-
-不要先 diff EGO 数千行源码。
-
-### Step 4 — Binary isolate
-
-把新 feature 拆开：
-
-```text
-lidar only
-→ +RGB
-→ +bottom camera
-→ +depth transport
-→ +depth planner fusion
-```
-
-找到最小失败增量。
-
-### Step 5 — Collect evidence
-
-根据层级使用：
-
-- readiness json
-- topic probe
-- control chain recorder
-- MAVROS state
-- odom timestamps
-- sensor receive rate
-- process / CPU / rendering behavior
-- watchdog JSONL
-- runner/executor logs
-
-### Step 6 — Minimal patch
-
-修最小责任层。
-
-### Step 7 — Regression ladder
-
-focused offline → Stage 7/8 → no-arm → flight ladder。
-
----
-
-# 14. Fault Decision Trees
-
-## 14.1 飞机无法起飞
-
-按顺序问：
-
-```text
-[1] Simulator/PX4/MAVROS 都活着吗？
-          ↓ yes
-[2] readiness 五门 PASS 吗？
-          ↓ yes
-[3] /mavros/local_position/odom fresh 吗？
-          ↓ yes
-[4] watchdog 是否先发 land/no_autoland？原因？
-          ↓ no
-[5] OFFBOARD 是否进入？
-          ↓ yes
-[6] arm 是否成功？
-          ↓ yes
-[7] takeoff setpoint 是否发布且持续？
-          ↓ yes
-[8] PX4 是否跟随 setpoint？
-```
-
-如果在 [2]-[4] 已失败，**planner 很可能尚不是主因**。
-
-当前 D435i regression 优先集中在 [2]-[4]。
-
-## 14.2 能起飞，但不导航
-
-再进入：
-
-```text
-mission goal
-→ waypoint/FSM trigger
-→ EGO goal acceptance
-→ planner odom/cloud input
-→ /planning/pos_cmd
-→ setpoint bridge
-→ /mavros/setpoint_raw/local
-→ PX4 response
-```
-
-用 control-chain recorder 定位第一处断点。
-
-## 14.3 `planner_commands=0`
-
-不要把这个数字单独当故障。
-
-先判断：
-
-- UAV 是否已经在 goal tolerance 内？
-- command counter 的统计窗口是什么？
-- planner 是否实际需要输出新的命令？
-- goal 是否未达到而 planner 又真的没有输出？
-
-只有最后一种才是明确 planner-chain failure。
-
-已取证的一种明确 failure（2026-08-07 live run `stage7-20260807T084232Z-2599`）：
-
-- 症状：双机 takeoff 成功，导航阶段 `planner_commands=0`，EGO 日志却显示 `Triggered!` 与 GEN/REPLAN/EXEC 状态循环；
-- 根因：`ego_swarm_dual.log` 出现
-  `Client [...ego_swarm_setpoint_bridge...] wants topic /uav1/planning/pos_cmd to have datatype/md5sum [44d620d9...], but our version has [4712f060...]. Dropping connection.`
-  —— 28com_uav devel 与 ego-planner-swarm devel 的 `quadrotor_msgs/PositionCommand` 定义不同（28com 带 `goal_pos`）；
-- 修复：`stage7_live_slam_ego_swarm_flight.sh` 与 `run_stage8_control_chain_recorder.bat` 在 28com_uav 之后、project overlay 之前 source
-  `$EGO_SWARM_WSL_DIR/devel/setup.bash`，使 Python 侧 md5 与 EGO 发布端一致；
-- 回归保护：`tests/stage7_quadrotor_msgs_overlay_check.py` + `validate_stage7.ps1` / `validate_stage8.ps1` 静态检查 source 顺序。
-
-## 14.4 stale odom
-
-先判断：
-
-- 是 sensor/renderer 负载造成输入间断？
-- Faster-LIO process 是否卡住？
-- relay 是否卡住？
-- MAVROS odom 是否断而 raw odom 正常？
-- timestamp 是否异常而 receive wall time 正常？
-
-不要直接增大 watchdog timeout 把问题藏起来。
-
-允许合理 threshold 修正，但必须有数据支持。
-
-## 14.5 异常高度 / 坐标
-
-先记录：
-
-- raw odom z
-- MAVROS local z
-- planner z
-- setpoint_raw z
-- frame/type mask
-- PX4 mode
-
-不要凭“ENU/NED 应该是正/负”直接改符号。
-
----
-
-# 15. Testing Ladder
-
-测试必须按风险逐级升级。
-
-## T0 — Static/offline
-
-- JSON parse
-- Python import
-- unit/contract tests
-- launch XML parse
-- deterministic course generation
-
-## T1 — Stage validations
-
-与任务相关至少跑：
+# Future Aircraft Sim Agent Handbook
+
+This file is the machine-oriented operating guide for the repository. Any agent working in this workspace should read the files under `.agents/` before making changes, with this document as the primary source of execution rules and current project state. When a task touches the simulation toolchain, also follow [RFLYSIM_TOOLCHAIN_REFERENCE.md](RFLYSIM_TOOLCHAIN_REFERENCE.md) before diagnosing or changing code.
+
+## Repository Purpose
+
+`future_aircraft_sim` is the simulation-side workspace for a multi-UAV indoor navigation and task-execution challenge. The project reuses the existing `28com_uav` ROS1/PX4/MAVROS stack, then layers a simulation-focused mission workflow on top of it.
+
+## Working Rules
+
+- Do not copy or rewrite the original `28com_uav` project into this repository.
+- Keep ROS development inside `future_aircraft_ws`.
+- Keep Windows launch orchestration, environment setup, and run wrappers in `scripts/`, `config/`, and related support files.
+- Preserve the `/uav1` and `/uav2` namespace contract.
+- The watchdog, executor navigation verification, and preflight topic wait use
+  `/uavX/mavros/local_position/odom` (PX4-fused, 28com-parity) as the primary
+  odometry source. `/uavX/mavros/odometry/in` is only a cross-check; FAST-LIO raw
+  odometry stays under `/uavX/slam/odometry_raw`.
+- The MAVROS odometry plugin TF contract is a hard pre-arm gate
+  (`odom_tf_contract_check.py`): it mirrors the four static lookups MAVROS
+  1.20.1 performs per UAV and scans mavros logs for `ODOM: Ex`.
+- Keep Stage 5 `mission_events.jsonl` compatibility intact.
+- Simulation arming is acceptable in this project when `--simulation-only`, `--allow-arm`, and `simulation_arm_policy.allow_arm=true` all agree.
+- Never assume real-hardware arming is allowed; real aircraft must remain manual-arm by default.
+- If a UAV's reported xyz position is wildly unreasonable (non-finite, or beyond
+  the course geofence by more than `Geofence.unreasonable_margin_m`), the
+  geofence watchdog returns `no_autoland` / `unreasonable_position` and never
+  requests AUTO.LAND. The correct response is to fix the code and restart the
+  simulation; do not rely on a garbage-state auto-return.
+- If a task changes an interface, update both this file and the root `README.md`.
+
+## Environment Map
+
+Confirmed local locations under `D:\PX4PSP`:
+
+- `D:\PX4PSP\RflySimAPIs` - RflySim APIs and example material
+- `D:\PX4PSP\RflySim3D` - RflySim3D launcher and assets
+- `D:\PX4PSP\CopterSim` - CopterSim runtime
+- `D:\PX4PSP\Firmware` - PX4 firmware tree used by the simulation stack
+- `D:\PX4PSP\Python38\python.exe` - local Python runtime used by validation and helper scripts
+- `D:\PX4PSP\WinWSL` - Windows-side WSL helper assets
+- `D:\PX4PSP\VcXsrv` - X server bundle used by the WSL launch flow
+
+WSL-side conventions used by the scripts:
+
+- `RFLYSIM_WSL_DISTRO=RflySim-20.04`
+- `PSP_PATH_LINUX=/mnt/d/PX4PSP`
+- `REF_28COM_UAV_WSL_DIR=/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/28com_sim/UAV_demo/28com_uav`
+- `FUTURE_AIRCRAFT_SIM_WSL_DIR=/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/future_aircraft_sim`
+- ROS1 Noetic is sourced from `/opt/ros/noetic/setup.bash` inside that distro
+
+## Current State
+
+Latest Stage 8 live evidence, 2026-08-02:
+
+- The tunnel-flight run `stage7-20260802T102552Z-8563` did **not** pass. Sensor readiness and the layered topic probe passed, but UAV2 was observed armed in `ALTCTL` at approximately 11.257 m and left the effective localization area. The executor later failed UAV1 navigation with `planner_commands=0` and `last_distance=2.596m`.
+- Both simulated vehicles were confirmed disarmed at the end. Do not report tunnel traversal or landing success from this run.
+- Two preceding watchdog defects were reproduced and corrected in the working tree: duplicate ROS node names and an immediate non-OFFBOARD decision during the post-arm state-message race. These corrections pass the focused geofence check and offline Stage 8 validation, but they do not resolve the altitude/planner failure.
+- Read [docs/stage8_tunnel_live_issue_2026-08-02.md](../docs/stage8_tunnel_live_issue_2026-08-02.md) before the next live attempt. Capture actual planner z, MAVROS raw setpoint z/frame/type mask, odometry frame direction, PX4 mode-loss reason, and watchdog decisions before changing the route or relaxing safety bounds.
+
+2026-08-07 interface updates (merged into `main` and pushed to
+`origin/main` on 2026-08-07; all development now happens on `main`):
+
+- **ego-swarm inter-UAV coordination caveat**: the swarm trajectory broadcast
+  (`/broadcast_bspline`, `/drone_*_planning/swarm_trajs`) assumes all UAVs share
+  one coordinate frame and start times within 0.25 s. This project runs each UAV
+  on its own FAST-LIO frame (origin at its takeoff pose), so the received swarm
+  trajectories are NOT valid in the local frame and are often discarded by the
+  time-sync check. Do not rely on `swarm_clearance` for collision avoidance.
+  Inter-UAV collision avoidance must come from perception: each UAV's mid360
+  cloud feeds its grid map, and the planner's collision check triggers replan or
+  emergency stop. Verify with `check_swarm_obstacle.py` before trusting it.
+
+- `mission_executor.py` now writes partial `mission_events.jsonl`,
+  `executor_trace.json`, and `score_summary.json` on every failure path
+  (`mission_failed` event plus completed-action trace), instead of only on success.
+- `stage7_run_artifacts.py` emits `provenance.json` (git_commit, base_map,
+  course_name, course_spec_sha256, simulation_instance_id, ros_master_uri);
+  `stage7_flight_report.py` embeds it under `report.provenance`.
+- `course_geofence_watchdog.py` writes structured JSONL decisions
+  (`--output`, every state change) with an explicit `reason`
+  (`outside_x|outside_y|outside_z|mode_loss|stale_odom|max_speed|
+  unreasonable_position|disarmed|ok`; `unreasonable_position` yields decision
+  `no_autoland` instead of `land`);
+  `watchdog_decision_with_reason` is the canonical decision API.
+- `stage7_topic_probe.py` replaced the fake-positive goal check with a real
+  subscriber-count check and added planner-command message-flow measurement.
+- New `odom_tf_contract_check.py` (Gate B) verifies the namespaced TF frames and
+  the exact MAVROS odom-plugin lookups, and scans mavros logs for `ODOM: Ex`.
+- `rflysim_fastlio_dual.launch` static TF publishers now use `respawn="true"`;
+  `rflysim_ego_swarm_single.launch` no longer publishes global
+  `world/map/base_link/camera_link` static frames that polluted the TF tree.
+- `stage8_dynamic_lidar_probe.py` is SLAMScene-aware: capture takes sensor
+  pose/yaw and wall world-NED coordinates and projects the wall into the LiDAR
+  frame for ROI counting.
+- `stage7_topic_probe.py` now carries the D435i transport contract in its
+  `sensor_bridge` layer: `topic_publisher_count` (exactly one publisher on
+  `/uav*/rflysim/sensor*/img_depth`) and `depth_image_flow` (hard checks for
+  `mono16`, 640x480, 20-45 Hz receive rate, monotonic header stamps, and at
+  least one non-all-zero frame; report includes zero_ratio and depth
+  min/max). `validate_config()` now requires the vision fields
+  (`raw_rgb_topic`, `raw_bottom_topic`, `raw_depth_topic`, `depth_topic`,
+  `sensor_rgb_topic`, `sensor_bottom_topic`, `sensor_depth_topic`,
+  `planner_depth_topic`, `mavros_setpoint_topic`). This covers the transport
+  half of the D435i pending live items; wall-geometry consistency is still a
+  live-only check.
+- Sensor bridges now default to `--sensor-mode lidar_only`
+  (`rflysim_sensor_bridge.py` loads only the requested SeqID into the SDK;
+  `stage7_live_fastlio_dual.sh` passes it explicitly). The 4-sensor D435i
+  payload overloaded the UE4 renderer and caused multi-second odometry gaps
+  that aborted takeoff (0.52 s / 2.04 s stale-odom watchdog fires). `full`
+  mode loads all sensors for vision work; the topic probe marks depth checks
+  `skipped_lidar_only` in lidar-only runs and enforces them in full mode.
+- New read-only `stage8_control_chain_recorder.py`: subscribes to
+  `/uav*/planning/pos_cmd`, `/uav*/mavros/setpoint_raw/local`,
+  `/uav*/slam/odometry_raw`, `/uav*/mavros/odometry/out`,
+  `/uav*/mavros/odometry/in`, `/uav*/mavros/local_position/odom`, and
+  `/uav*/mavros/state`; writes run-scoped
+  `$STAGE7_RUN_DIR/stage8_control_chain.jsonl` plus
+  `stage8_control_chain_summary.json`. Every event carries
+  `receive_wall_time`, `receive_monotonic`, and `header.stamp`; setpoint z is
+  only counted as commanded when `IGNORE_PZ` is unset. It never publishes,
+  never calls services, and never arms; watchdog and flight-event recording
+  stay with their existing implementations. Launch with
+  `scripts\run_stage8_control_chain_recorder.bat`.
+- Flight artifacts are now run-scoped:
+  `stage7_live_slam_ego_swarm_flight.sh` writes plan, smoke report, flight
+  report, mission events, executor trace, score summary, executor/runner
+  logs, and watchdog/keepalive outputs under `$STAGE7_RUN_DIR`;
+  `run_stage7_topic_probe.bat` writes
+  `$STAGE7_RUN_DIR/topic_probe_report.json`. Only the run metadata
+  `logs/stage7_live/current_run.env` stays flat, so historical evidence can
+  never be confused with the current instance.
+- `run_stage8_control_chain_recorder.bat` must source the 28com_uav workspace
+  for `quadrotor_msgs` (added 2026-08-07; validate_stage8.ps1 enforces it).
+  The recorder's default geofence z is `[-0.5, 2.0]`, matching the course
+  watchdog, so idle ground samples at z~-0.1 are not flagged as outside.
+- Live flight 2026-08-07 (instance `px4-c50420f823fe4489`) reached OFFBOARD
+  + arming on both UAVs but aborted at takeoff: the geofence watchdog fired
+  `land/stale_odom` on a single 0.52 s odometry gap (> 0.5 s threshold) right
+  when the takeoff setpoint was published, so altitude never left the ground.
+  The flight runner's watchdog now uses `--max-odom-age-s 2`;
+  validate_stage7.ps1 enforces it. A 2 s odom loss is still an immediate land.
+- **D435i sensor parity (commit `39742ab`)**: both UAV sensor configs now carry
+  Mid360 + D435i RGB/depth + down camera, matching the real FS-310/28comsim
+  payload. `rflysim_fastlio_dual.launch` relays `/rflysim/sensor*` camera
+  topics into `/uav*/rflysim/sensor*`; `rflysim_ego_swarm_dual.launch` feeds
+  the real `img_depth` topic into `grid_map/depth`. Read
+  [docs/d435i_sensor_parity_2026-08-07.md](../docs/d435i_sensor_parity_2026-08-07.md).
+
+Latest live evidence, 2026-08-01 (post-Stage-7 baseline):
+
+- Full dual-UAV flight run `stage7-20260801T101757Z-2497` passed (both UAVs
+  armed in OFFBOARD, takeoff to 1 m, short ego-swarm segment, landing, disarm;
+  min separation 0.85 m).
+- Staggered tunnel traversal succeeded end-to-end: UAV1 led, UAV2 lagged, all
+  seven course segments reached, no collision and no emergency stop.
+- Perception-based collision avoidance verified live: UAV1 was marked as an
+  obstacle in UAV2's grid_map and UAV2 executed `EMERGENCY_STOP` at 0.2 m.
+  Swarm-trajectory coordination is NOT reliable across the two independent
+  FAST-LIO frames and must not be treated as the collision guarantee.
+
+Latest D435i work, 2026-08-07 (offline only, live validation pending):
+
+- `config/rflysim_sensor_uav{1,2}.json` now define per UAV: Mid360 (TypeID 23),
+  D435i RGB (TypeID 1 @[0.1,0.04,0]), down camera (TypeID 1 @[0,0,0.1],
+  pitch -90), D435i depth (TypeID 2 @[0.1,0.04,0], 0.3-12 m).
+- Sensor contract test, bridge import test, and readiness test all pass
+  offline. Launch XML parses. The D435i transport probe (unique publisher,
+  ~30 Hz, mono16/640x480, monotonic stamps, non-zero frames) is now part of
+  `stage7_topic_probe.py` and passes offline. Live no-arm verification of the
+  depth topics, depth wall-geometry consistency, and of ego-swarm depth fusion
+  still has to be run on the next simulation restart.
+- First live probe run (instance `px4-a289b8bc70d45c16`, run
+  `stage7-20260807T063728Z-2686`): readiness five gates passed and the depth
+  transport checks (unique publisher, mono16, 640x480, non-zero) passed, but
+  the relayed depth topics measured only ~1.8/2.2 Hz instead of the configured
+  30 Hz, so `depth_image_flow` failed its rate gate. Raw-vs-relay rate
+  comparison and wall-geometry consistency are still open live items.
+
+Latest live evidence, 2026-08-07 (fresh instance `px4-7535c751ee1c7e3f`):
+
+- Sensor bridges now run `--sensor-mode lidar_only` (SDK loads only the
+  requested SeqID). The 4-sensor D435i payload overloaded the UE4 renderer and
+  caused 0.52–2.04 s odometry gaps that aborted takeoff; with lidar-only the
+  chain is stable and readiness passes in ~40 s on a fresh instance.
+- Flight run `stage7-20260807T084232Z-2599`: OFFBOARD, arming, and takeoff
+  altitude confirmed for BOTH UAVs (takeoff no longer aborted). Navigation
+  still fails with `planner_commands=0` (ego-swarm does not emit `/planning/
+  pos_cmd` after a goal) — this is the same Stage 8 blocker as 08-02 and is
+  the next live item. D435i live integration is paused (full mode later);
+  wall-geometry and 30 Hz depth checks remain pending.
+- UE Editor is NOT installed and must not be proposed again; the map issue is
+  temporarily solved with SLAMScene + dynamic bricks
+  (`scripts\start_predicted_course_two_uav.bat`). See
+  `docs/decisions/2026-08-07-no-ue-editor.md`.
+
+Validated offline stages:
+
+- Stage 0: workspace and launch scaffold
+- Stage 1: single-UAV launch chain
+- Stage 2: dual-UAV namespace launch chain
+- Stage 4: ego-swarm offline adapter contract
+- Stage 5A to Stage 5E: behavior tree, live boundary, executor, smoke checks, and simulation-arm executor
+- Stage 6A: ideal target provider bridge
+- Stage 6B: simulation-vision target provider bridge
+- Stage 6C: live dual-MAVROS smoke runbook
+- Stage 6D / 6E: no-arm live smoke runner and simulation-arm live runner
+- Stage 7: offline dual-sensor isolation, RflySim-to-Ouster cloud adaptation, run-scoped no-arm readiness, ego-swarm, and guarded simulation-arm flight runner contracts
+- Stage 8: project-local predicted narrow-course specification, deterministic Python artifacts, safe RflySim dynamic-object loading, ROS reference cloud, and course-specific dual-UAV launch contracts
+
+Current limits:
+
+- Stage 2.1 is a hard gate before Stage 6D/6E: run `scripts\run_stage2_1_mavlink_check.bat` after the selected single-UAV simulation path is started, inspect `logs/stage2_1_live/mavlink_link_report.json`, and proceed only when `status` is `ready`. The legacy Rfly SIL-port report `px4_to_mavros_return_path_blocked` was resolved for the dual path by creating dedicated MAVROS links; it does not mean Stage 6D or Stage 6E has passed.
+- Offline validation passes for the staged contracts. Live GUI validation has confirmed dual PX4, dual MAVROS and `state.connected: true`; the Stage 6D odometry input is `/uav*/mavros/odometry/in`, sourced from PX4 MAVLink `ODOMETRY` through MAVROS extras, and still requires fresh end-to-end confirmation.
+- Stage 6D dry-run validates the no-arm live runner contract without launching anything.
+- Stage 6E dry-run validates the simulation-arm runner contract; real execution first runs dual-MAVROS smoke checks, then may call `/uav1/mavros/cmd/arming` and `/uav2/mavros/cmd/arming` in simulation only when the checks and all arm gates pass.
+- Stage 7 dry-run/offline validation covers two identified sensor bridges, exact Ouster point fields/timing, normalized per-UAV LiDAR/IMU, run-scoped readiness validation, dual FAST-LIO, dual ego-swarm, and the guarded flight runner. Live sensor/FAST-LIO readiness and the minimum dual ego-swarm flight loop are proven by the 2026-08-01 runs below. The remaining gap is repeatability, longer/obstacle-rich routes, and full mission integration—not first-flight feasibility.
+- `run_live_fastlio_dual.bat` is now the no-arm acceptance entrypoint. It writes `logs/stage7_live/<run-id>/sensor_readiness.json` and `logs/stage7_live/current_run.env`; later planner/flight runners reject missing, stale, cross-run, cross-instance, shared-source, unstable, or armed evidence.
+- Vision integration is still staged through deterministic providers rather than real detector inference.
+- New live-first direction: the Stage 7 FAST-LIO/faster_lio, project-local ego-swarm, and minimal simulation-arm takeoff/flight/landing loop is proven. Prioritize 3–5 fresh-instance repeat runs, longer collision-free routes, and run-scoped artifact cleanup before reconnecting vision, target detection, and behavior-tree mission logic.
+
+## Live Debug Notes, 2026-07-29
+
+The live toolchain investigation reached Stage 2 and was intentionally stopped before completing Stage 6D/6E live validation. Do not report live validation as complete until a fresh run captures Stage 6D no-arm smoke output and, if requested, Stage 6E simulation-arm output.
+
+Confirmed fixes and operating notes from the live debugging session:
+
+- Windows `cmd` launchers must not use nested quoting like `cmd /k "call ""..."""`; that pattern produced Chinese Windows errors equivalent to "The filename, directory name, or volume label syntax is incorrect" and "The command syntax is incorrect." Use `cmd /k call "..."` for generated `.bat` wrappers.
+- `scripts/start_two_uav.bat` should start `start_vcxsrv.bat` before launching RflySim/PX4/MAVROS. VcXsrv is part of the RflySim/WSL GUI path.
+- Avoid `timeout /t` inside these noninteractive orchestration windows. Use PowerShell `Start-Sleep` for boot waits.
+- WSL shell scripts under `scripts/wsl/*.sh` must stay LF-only. `.gitattributes` enforces this with `scripts/wsl/*.sh text eol=lf`.
+- The generated two-UAV SITL wrapper must call WSL as `wsl -d %RFLYSIM_WSL_DISTRO% -e bash -lic "..."` and must preserve the generated `%VehicleNum%`, `%START_INDEX%`, and `%PX4SitlFrame%` variables.
+- `scripts/wsl/stage2_two_mavros.sh` must keep the WSL session alive after starting `roscore` and the two MAVROS launches. Without the final `wait`, `roscore` can start successfully and then shut down when the WSL launch session exits.
+- After the keepalive fix, a live process check showed `roscore`, `rosmaster`, two `roslaunch mavros px4.launch` processes, and two `mavros_node` processes running in WSL. This is evidence for Stage 2 process residency only, not a full mission smoke pass.
+- `Firmware/Tools/sitl_multiple_run_rfly.sh` reserves `16540/17540` and `16541/17541` for the Rfly SIL/CopterSim link. `scripts/wsl/stage2_two_mavros.sh` must create dedicated PX4 MAVLink links before starting MAVROS: `/uav1` uses `udp://:14601@127.0.0.1:14600`, `/uav2` uses `udp://:14611@127.0.0.1:14610`. Reusing the Rfly SIL ports makes MAVROS stay `connected: False`.
+
+Latest live evidence, 2026-07-30:
+
+- `scripts\start_two_uav.bat` successfully started RflySim3D, two CopterSim processes, two PX4 instances, roscore and two MAVROS nodes.
+- After the dedicated-link change, `/uav1/mavros/state` and `/uav2/mavros/state` both reported `connected: True`, `armed: False`, `mode: MANUAL` and `system_status: 3`.
+- The previous Stage 6D no-arm smoke was blocked by missing `/uav1/mavros/local_position/odom` and `/uav2/mavros/local_position/odom`. That MAVROS topic requires `LOCAL_POSITION_NED_COV`, which this PX4 build cannot stream. Stage 6D now waits for `/uav1/mavros/odometry/in` and `/uav2/mavros/odometry/in`, the MAVROS outputs of PX4 `ODOMETRY`; `odometry/out` is the reverse input to PX4. Do not treat connection success as a completed mission smoke until a fresh no-arm report passes.
+
+Latest Stage 7 live evidence, 2026-08-01:
+
+- Full dual-UAV flight run `stage7-20260801T101757Z-2497`, simulation instance `px4-bb8094a4352d452e`, completed successfully after `ce7e0a7` shortened the wall-adjacent navigation segment and made reached-goal verification independent of a future planner command. Both UAVs armed in OFFBOARD, took off to 1 m, completed the short ego-swarm segment, landed, and disarmed. `flight_report.json` recorded `ready: true`, `collision_count: 0`, `offboard_loss_count: 0`, `timeout_count: 0`, minimum separation `0.85 m`, and duration `23.5 s`.
+
+- Run `stage7-20260801T082349Z-6875`, simulation instance `px4-ac4e722ff724856a`, saved `logs/stage7_live/stage7-20260801T082349Z-6875/sensor_readiness.json`.
+- `identity`, `schema`, `freshness`, `isolation`, and `stationary_stability` all passed; both MAVROS states remained `armed: false`, `mode: MANUAL`, and the report returned `ready: true`.
+- Each adapter accepted 17,408 points with the exact 32-byte Ouster field layout. Two independent `run_mapping_online` processes remained active and the FAST-LIO log had no missing-field, fatal, process-died, or segmentation errors.
+- Live corrections are committed as `e169acc` (ROS initialization, bounded startup and lifecycle cleanup) and `7c9e363` (namespaced IMU source remaps). No planner goal, setpoint, OFFBOARD, ego-swarm, or arming command was sent.
+- A later no-arm run `stage7-20260801T090244Z-5522`, simulation instance `px4-2c74476509ac6faa`, again passed identity, schema, freshness, isolation, and stationary stability with both vehicles disarmed. The first ego-swarm launch then failed before `roslaunch` because sourcing the standalone ego workspace hid the project ROS overlay; `9ad9b4c` restores the project overlay with `--extend`, and `46178c0` aligns the read-only topic probe with the ego runner's 120-second readiness window. The successful `stage7-20260801T101757Z-2497` flight supersedes the earlier “requires fresh live run” status.
+
+## Recommended Next Step
+
+Stage 7's minimum dual-UAV live loop is accepted. Continue from this baseline in the following order:
+
+1. Fix the current navigation blocker (`planner_commands=0` after a goal) on a
+   fresh lidar-only instance, then repeat the complete run 3–5 times and
+   record clean-run rate, duration, minimum separation, collisions, OFFBOARD
+   losses, and timeouts.
+2. Increase route length and wall clearance incrementally, retaining a failed offline regression before each defect fix.
+3. Move flight artifacts fully under their run directory so historical evidence cannot be confused with the current instance. (completed 2026-08-07)
+4. Reconnect target perception and behavior-tree mission logic only after the live loop is repeatable.
+
+Every simulator restart requires a new run id and simulation instance id. Historical readiness reports remain evidence only and must never authorize a later flight. Simulation flight still requires the explicit `--allow-arm --simulation-only` gates; real aircraft remain manual-arm.
+
+Current Stage 7 entrypoints:
+
+1. `scripts\start_two_uav.bat`
+2. `scripts\run_live_fastlio_dual.bat`
+3. `scripts\run_live_ego_swarm_dual.bat`
+4. `scripts\run_stage7_topic_probe.bat`
+5. `scripts\run_live_slam_ego_swarm_flight.bat --allow-arm --simulation-only`
+
+Stage 7 intentionally uses `/uav*/mavros/odometry/out` for FAST-LIO external odometry into MAVROS. Stage 6D still observes `/uav*/mavros/odometry/in` from PX4/MAVROS feedback. Keep those directions distinct.
+The raw Stage 7 sources are `/rflysim/sensor0/mid360_lidar` plus `/uav1/rflysim/imu_raw`, and `/rflysim/sensor10/mid360_lidar` plus `/uav2/rflysim/imu_raw`. FAST-LIO consumes only normalized `/uav1/rflysim/{lidar,imu}` and `/uav2/rflysim/{lidar,imu}`.
+`scripts\run_stage7_topic_probe.bat` is read-only and writes `logs/stage7_live/topic_probe_report.json` with `sensor_bridge`, `fast_lio`, `mavros`, `ego_swarm`, and `flight_gate` readiness layers. Run it before the Stage 7 simulation-arm flight runner and use it as the first failure triage artifact.
+
+The Stage 7 planner, topic probe, and flight runner reuse the current readiness `run_id` and `simulation_instance_id`. The flight runner validates that evidence before creating setpoint bridges or requesting OFFBOARD/arming and writes `logs/stage7_live/flight_report.json` on executor success and failure. Keep planner goals isolated on `/uav1/planning/goal` and `/uav2/planning/goal`.
+
+This route intentionally skips object detection, target provider, and behavior-tree mission logic.
+
+Offline validation baseline:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\validate_stage6c.ps1
 powershell -ExecutionPolicy Bypass -File scripts\validate_stage6d.ps1
+powershell -ExecutionPolicy Bypass -File scripts\validate_stage6c.ps1
 powershell -ExecutionPolicy Bypass -File scripts\validate_stage7.ps1
 powershell -ExecutionPolicy Bypass -File scripts\validate_stage8.ps1
 ```
 
-如果只改纯文档，不机械跑 live。
-
-## T2 — no-arm
-
-验证：
-
-- sensor identity
-- isolation
-- odom freshness
-- TF
-- planner inputs
-- D435i transport（按 sensor mode）
-
-## T3 — single UAV
-
-任何可能影响控制/飞行的风险改动，优先单机验证。
-
-## T4 — dual takeoff
-
-两机只验证：
-
-- OFFBOARD
-- arm
-- takeoff
-- stable hover
-- safety watchdog
-
-## T5 — short navigation
-
-短距离 planner/control loop。
-
-## T6 — full PBL route
-
-完整双机错时隧道路线。
-
-## T7 — fresh-instance repeatability
-
-重要 milestone 至少做跨新实例重复。
-
-建议：
-
-- 开发阶段：1 次成功可继续下一级；
-- 宣布 baseline 稳定：至少 3 次 fresh-instance；
-- 关键赛前里程碑：优先 5 次并统计 clean-run rate。
-
----
-
-# 16. Live Evidence Discipline
-
-每次重要 live run 应能回答：
-
-```text
-run_id
-simulation_instance_id
-git_commit
-sensor_mode
-course/base_map
-readiness status
-UAV1 final state
-UAV2 final state
-armed/offboard transitions
-odom freshness failures
-planner timeout/failure
-emergency stop count
-collision count
-minimum separation
-mission completion
-```
-
-## 16.1 Run-scoped artifacts
-
-优先依赖当前 `$STAGE7_RUN_DIR` 下的：
-
-```text
-sensor_readiness.json
-topic_probe_report.json
-flight_report.json
-mission_events.jsonl
-executor_trace.json
-score_summary.json
-stage8_control_chain.jsonl
-stage8_control_chain_summary.json
-watchdog / runner / executor logs
-provenance.json
-```
-
-文件名具体以当前脚本输出为准。
-
-## 16.2 禁止“肉眼通过”替代证据
-
-可以说：
-
-> 画面上飞行很平滑，且 flight_report 记录 ready=true、无 OFFBOARD loss。
-
-不要只说：
-
-> 看起来挺好，所以通过。
-
-视觉观察是证据的一部分，不是唯一 evidence。
-
----
-
-# 17. Safety / Watchdog Policy
-
-## 17.1 safety 不应被新功能随意牺牲
-
-遇到 watchdog abort：
-
-先找 root cause。
-
-禁止默认做法：
-
-- 关 watchdog；
-- 无限增加 threshold；
-- 把 geofence 扩大到失去意义；
-- 忽略 unreasonable position 后强制 LAND。
-
-## 17.2 unreasonable position
-
-位置明显不可相信时：
-
-```text
-no_autoland / unreasonable_position
-```
-
-比对垃圾位置执行自动返航/降落更安全。
-
-该语义不要随意改变。
-
-## 17.3 simulation arming
-
-仅允许：
-
-```text
---simulation-only
---allow-arm
-simulation_arm_policy.allow_arm=true
-current readiness PASS
-```
-
-## 17.4 real hardware
-
-真机仍然：
-
-- manual arm；
-- manual Offboard authorization；
-- Agent 不自主执行危险动作。
-
----
-
-# 18. Modification Boundaries
-
-## 18.1 Green Zone
-
-Agent 可自主：
-
-- Python bugfix
-- project C++ adapter bugfix
-- launch/remap
-- JSON config
-- sensor bridge
-- diagnostics
-- tests
-- mission orchestration
-- docs
-- local commit
-
-前提：遵守 regression ladder。
-
-## 18.2 Yellow Zone
-
-调查可以自主，但修改前先向用户说明：
-
-- 证据；
-- 为什么 project-side patch 不够；
-- 预计影响范围；
-- fallback/rollback；
-- 如何验证 PBL。
-
-范围：
-
-```text
-external/ego-planner-swarm
-Faster-LIO core
-PX4 core / EKF policy
-shared-frame architecture
-large watchdog/geofence redesign
-large-scale mission architecture rewrite
-```
-
-## 18.3 Red Zone
-
-未经明确授权：
-
-- real aircraft arm
-- force push
-- history rewrite
-- destructive reset
-- overwrite external simulator assets broadly
-- modify original 28com project as workaround
-
----
-
-# 19. Git Workflow
-
-标准流程：
-
-```text
-git status
-→ inspect relevant diff/history
-→ edit
-→ focused tests
-→ broader validation
-→ git diff
-→ local commit
-```
-
-Agent 允许本地 commit。
-
-**禁止未经用户许可 push。**
-
-## 19.1 工作区保护
-
-如果看到未知修改：
-
-- 不要自动丢弃；
-- 先判断是否与当前任务相关；
-- 不用 `reset --hard`；
-- 不用 checkout 覆盖整个目录；
-- 自己的 commit 只包含自己任务的修改。
-
-## 19.2 不自动改 main 历史
-
-即便当前开发都在 main，也不意味着 Agent 有权限重写 main 或自动 push。
-
-旧 handbook 中“改完直接 push”的惯例已废止。
-
----
-
-# 20. Current Development Roadmap
-
-D435i 回归修复后，两条线并行。
-
-## 20.1 Motion Track
-
-### M0 — Restore protected baseline after sensor regression
-
-目标：
-
-- lidar_only 始终可运行；
-- D435i 的存在不破坏基础飞行。
-
-### M1 — Repeatability
-
-- fresh-instance 3–5 次；
-- clean-run rate；
-- min separation；
-- OFFBOARD loss；
-- timeout；
-- odom dropout。
-
-### M2 — Smooth narrow-space motion
-
-保持当前成功路线作为 reference，不直接删掉。
-
-实验：
-
-- 更稀疏 task goals；
-- corridor/gate constraints；
-- planner local autonomy；
-- velocity/acceleration continuity；
-- wall clearance。
-
-### M3 — Better dual-UAV coordination
-
-研究：
-
-- stagger timing；
-- role/priority；
-- corridor occupancy coordination；
-- shared/world frame strategy；
-- eventually valid swarm trajectory coordination。
-
-不要把 “EGO-Swarm” 名字本身等同于当前已经完成真正统一坐标的多机 trajectory optimization。
-
-## 20.2 Vision Track
-
-### V0 — RGB stable transport
-
-保证不影响 flight。
-
-### V1 — Detection
-
-目标检测/识别算法独立开发。
-
-### V2 — RGB-D ranging
-
-使用 depth 做目标距离/空间定位。
-
-### V3 — Task perception
-
-二维码、标志物、任务目标等根据比赛细则落地。
-
-### V4 — Depth planning fusion
-
-最后再把 depth 纳入 EGO local map。
-
-## 20.3 Mission Integration
-
-比赛地图/任务细则明确后：
-
-```text
-Motion
-+ Vision
-+ task rules
-+ Behavior Tree / mission executor
-= competition mission system
-```
-
-不要在规则未公布时过度写死高层任务树。
-
----
-
-# 21. What NOT to Optimize Yet
-
-除非当前任务明确需要，暂时不要：
-
-- 换掉 EGO-Swarm；
-- 重写 PX4 控制器；
-- 为未来地图做复杂全局规划系统；
-- 一次性统一所有坐标系；
-- 把 D435i Depth 变成 flight startup 硬依赖；
-- 把视觉、planner、behavior tree 强耦合；
-- 因为“更高级”就删掉已验证 waypoint baseline；
-- 重做 RflySim 地图工具链；
-- 再提出安装 UE Editor。
-
-当前原则：
-
-> 已有能力先稳定，新能力做可逆增量。
-
----
-
-# 22. Historical Incidents — 只作为经验，不作为当前 blocker
-
-以下历史事件有诊断价值，但其状态不得自动继承到现在。
-
-## 22.1 2026-07-29 / 07-30 MAVROS bring-up
-
-经验：
-
-- WSL 启动脚本要保持 session alive；
-- dual MAVROS 要使用 dedicated links；
-- `connected: True` 只说明链路，不说明 mission 可飞；
-- Windows nested quoting / `timeout /t` 等曾导致启动问题。
-
-这些是启动编排知识，不是当前 D435i root cause 的默认结论。
-
-## 22.2 2026-08-01 Stage 7 成功
-
-历史 run 证明：
-
-- dual OFFBOARD/arming/takeoff；
-- short EGO segment；
-- landing/disarm；
-- perception-based inter-UAV obstacle behavior。
-
-它是工程可行性的早期证据。
-
-## 22.3 2026-08-02 Stage 8 failure
-
-曾出现：
-
-- UAV2 异常高度；
-- ALTCTL；
-- `planner_commands=0`；
-- 路线未完成。
-
-保留相关 docs 用于以后如果**相同症状重新出现**时快速复用 diagnostics。
-
-但当前用户已经确认后续双机穿隧道状态非常好，所以该事故不再是 Current Blocker。
-
-## 22.4 2026-08-07 D435i integration lessons
-
-已知有价值的事实：
-
-- RflySim sensor JSON 不只是普通 JSON schema；`VisionCaptureApi` 有额外协议约束；
-- full 多传感器负载曾伴随明显 odom gap；
-- lidar_only 能显著降低传感器/renderer 压力；
-- depth transport 与 planner fusion 必须分开验证；
-- 28com 仿真本身主要依靠 LiDAR cloud 运行 EGO，Depth 不是 cloud planning 的先决条件。
-
-当前回归应优先利用这些经验。
-
-## 22.5 2026-08-07 `planner_commands=0` PositionCommand md5 不匹配（已修复，待 live 复测）
-
-- 症状：`lidar_only` 下双机 takeoff 成功，导航阶段 UAV1 `planner_commands=0`（run `stage7-20260807T084232Z-2599`）；
-- 证据：`ego_swarm_dual.log` 大量 `md5sum [44d620d9...] but our version has [4712f060...] Dropping connection`；
-  实测两个 workspace：28com_uav devel 的 `PositionCommand` md5=`44d620d9…`（含 `goal_pos`），
-  ego-planner-swarm devel 的 md5=`4712f060…`（无 `goal_pos`），EGO 节点发布端与 28com devel 不一致；
-- 根因：`stage7_live_slam_ego_swarm_flight.sh` 只 source 28com_uav devel + project overlay，未 source ego-planner-swarm devel，
-  Python 侧拿到 28com 的消息定义，与 EGO 发布端 md5 不匹配导致连接被 ROS 丢弃；setpoint bridge 与 executor 均收不到 pos_cmd；
-- 修复：flight runner 与 stage8 recorder 在 28com_uav 之后、project overlay 之前 source ego-planner-swarm devel；
-- 验证：WSL 实测修复后 Python 侧 md5=`4712f060…`（与 EGO 一致），`multi_uav_mission` 仍可解析；
-  `validate_stage7.ps1` / `validate_stage8.ps1` 通过；新增 `tests/stage7_quadrotor_msgs_overlay_check.py` 静态回归保护；
-- 待办：fresh-instance live 复测（readiness → topic probe → 双机短导航），确认 pos_cmd 到达 bridge 且 executor 收到 planner commands。
-
----
-
-# 23. D435i Regression Playbook（当前优先）
-
-当任务是“修好今天 D435i 导致无法起飞”时，推荐 Agent 严格按以下顺序。
-
-## Phase A — Prove PBL still exists
-
-1. fresh simulator instance；
-2. `lidar_only`；
-3. readiness；
-4. dual takeoff；
-5. 短 navigation；
-6. 必要时完整 PBL route。
-
-如果 L0 已失败：
-
-- 比较 D435i commit 是否无意修改了 lidar path；
-- 不要假设问题只是 full mode。
-
-## Phase B — Isolate sensor increment
-
-依次：
-
-```text
-L0 lidar only
-L1 lidar + RGB
-L1b lidar + RGB + down camera
-L2 lidar + RGB + down + depth transport
-```
-
-每一级至少检查：
-
-- process alive；
-- odom rate/freshness；
-- renderer/system load signal；
-- readiness；
-- takeoff；
-- sensor topic frequency。
-
-## Phase C — Fix smallest responsible layer
-
-可能修复点：
-
-- bridge 只 load 必需 SeqID；
-- 调整 sensor mode/启动顺序；
-- 避免重复 publisher；
-- 避免不必要 relay/copy；
-- 降低测试阶段 sensor 开销；
-- 修 timestamp / topic contract；
-- 将视觉进程从 flight-critical readiness 解耦。
-
-不要先做：
-
-- EGO source patch；
-- PX4 source patch；
-- FAST-LIO extrinsic 变化；
-- route rewrite。
-
-## Phase D — Restore gradual capability
-
-修复完成后必须证明：
-
-```text
-L0 pass
-L1 pass
-L2 pass
-```
-
-然后再计划 L3 Depth→EGO。
-
----
-
-# 24. Motion Development Playbook
-
-D435i 修复后，若任务回到“让双机飞得更丝滑、不是笨拙密集 waypoint”：
-
-## 24.1 不直接删 baseline route
-
-保留当前 route 作为 regression oracle。
-
-建立新的 experiment mode，与 baseline A/B 比较。
-
-## 24.2 上层只表达必要约束
-
-优先探索：
-
-- tunnel entrance gate；
-- tunnel exit gate；
-- corridor center region；
-- altitude band；
-- UAV priority / time separation；
-- terminal task region。
-
-让 EGO 负责：
-
-- obstacle-aware local trajectory；
-- continuous replanning；
-- velocity/acceleration smoothness；
--局部偏移。
-
-## 24.3 衡量“丝滑”
-
-不要只凭视觉。
-
-建议记录：
-
-- path length；
-- traversal time；
-- velocity peaks；
-- acceleration peaks；
-- jerk proxy；
-- minimum wall clearance；
-- number of replans；
-- emergency stop count；
-- number of high-level goals。
-
-如果减少 waypoint 后安全性明显下降，不要因为“看起来更智能”就接受。
-
----
-
-# 25. Vision Development Playbook
-
-## 25.1 Vision first, planner later
-
-当前优先顺序：
-
-```text
-RGB transport
-→ detector
-→ target output contract
-→ depth ranging
-→ task logic
-→ optional planner fusion
-```
-
-## 25.2 视觉接口保持解耦
-
-优先通过 target provider/interface 将 detector 输出给任务层。
-
-不要让 mission executor 直接依赖某个具体 YOLO 节点内部实现。
-
-## 25.3 Depth 两种用途要分开
-
-```text
-Depth for target ranging
-```
-
-和
-
-```text
-Depth for EGO occupancy fusion
-```
-
-是两项不同功能，必须独立验证。
-
-前者成功不能证明后者成功，反之亦然。
-
----
-
-# 26. Environment / Toolchain Notes
-
-当前开发环境约定来自 RflySim 安装：
-
-Windows 侧常见：
-
-```text
-D:\PX4PSP\RflySimAPIs
-D:\PX4PSP\RflySim3D
-D:\PX4PSP\CopterSim
-D:\PX4PSP\Firmware
-D:\PX4PSP\Python38\python.exe
-D:\PX4PSP\WinWSL
-D:\PX4PSP\VcXsrv
-```
-
-WSL 常见变量：
-
-```text
-RFLYSIM_WSL_DISTRO=RflySim-20.04
-PSP_PATH_LINUX=/mnt/d/PX4PSP
-```
-
-项目路径和 28com reference path 以当前 `config/env_template.bat` / 本机实际环境为准，不要把 handbook 中路径字符串当跨机器绝对真理。
-
-## 26.1 Windows/WSL 脚本历史坑
-
-已知经验：
-
-- `.sh` 保持 LF；
-- 启动 WSL 用 `bash -lic` 以正确 source 环境；
-- 启动 session 需要 `wait` 时不要漏；
-- `cmd /k` nested quoting 要谨慎；
-- 非交互 wrapper 中避免不可靠 `timeout /t`，已有脚本偏向 PowerShell sleep。
-
----
-
-# 27. Course / Map Policy
-
-当前 course 权威几何：
-
-```text
-config/maps/predicted_narrow_course_v1.json
-```
-
-动态 course 用于 RflySim 视觉/LiDAR 场景。
-
-注意：
-
-- dynamic walls 不等同 CopterSim terrain；
-- 验收障碍物优先看 LiDAR visibility / geometric clearance；
-- 不要擅自覆盖 CopterSim 外部地图资产；
-- UE Editor 路线已经明确搁置，不要再次建议安装 UE Editor。
-
----
-
-# 28. Documentation Maintenance
-
-## 28.1 Current vs Historical
-
-文档必须明确分区：
-
-### Current
-
-只保留当前仍然影响开发的事实。
-
-### Historical / Resolved
-
-记录：
-
-- symptom；
-- root cause；
-- fix；
-- reusable lesson；
-- superseded date/evidence。
-
-## 28.2 修复后必须“移动问题”
-
-如果 D435i takeoff regression 修好：
-
-错误做法：
-
-> 在 Current State 继续写“飞机无法起飞”，然后下面再加一句“已经修好”。
-
-正确做法：
-
-- Current State 更新为最新能力；
-- 把无法起飞事件移动到 Historical Incident；
-- 记录原因和验证方式。
-
-## 28.3 README 不应成为事故日志
-
-README 只保留：
-
-- 项目定位；
-- 技术栈；
-- 当前稳定状态；
-- 入口；
-- 关键约束。
-
-详细事故放 docs / handbook historical section。
-
----
-
-# 29. Agent Task Workflow
-
-每次任务建议按以下 template 执行。
-
-## Phase 1 — Understand
-
-```text
-Task goal:
-Current symptom:
-Protected baseline affected?: yes/no
-Relevant layer:
-Last-known-good:
-Current evidence:
-```
-
-## Phase 2 — Hypotheses
-
-列 2–4 个按证据排序的假设。
-
-不要列十几个无优先级猜测。
-
-## Phase 3 — Smallest experiment
-
-每个实验最好只区分一个假设。
-
-## Phase 4 — Patch
-
-只改责任层。
-
-## Phase 5 — Validation
-
-按照 Testing Ladder。
-
-## Phase 6 — Documentation
-
-如果状态、接口、运行方式变了，同步 handbook/README/docs 中相关位置。
-
-## Phase 7 — Handoff
-
-固定输出：
-
-### Changed
-
-具体文件和行为。
-
-### Evidence
-
-问题为何定位在这里。
-
-### Validation
-
-具体测试/run。
-
-### Remaining Risk
-
-未验证内容。
-
-### Next Recommended Step
-
-下一最小动作。
-
----
-
-# 30. Agent Communication Rules
-
-## 30.1 不夸大
-
-如果只离线验证：
-
-写：
-
-> offline contracts pass; live not yet verified.
-
-不要写：
-
-> feature completed.
-
-## 30.2 不隐瞒回归
-
-如果新功能工作但 PBL 失败：
-
-不能宣布任务完成。
-
-## 30.3 明确“证据”和“推测”
-
-推荐用词：
-
-```text
-Observed:
-Evidence suggests:
-Hypothesis:
-Not yet verified:
-```
-
-## 30.4 重大改动先沟通
-
-涉及 Yellow Zone 时，先提交简短设计：
-
-```text
-Problem
-Evidence
-Why project-side fix is insufficient
-Proposed core change
-Risks
-Rollback
-Validation plan
-```
-
-等待用户同意后再动核心算法。
-
----
-
-# 31. Fast Checklists
-
-## 31.1 Before editing
-
-- [ ] 读过 `AGENTS.md`
-- [ ] 读过本 handbook Current Truth
-- [ ] 确认当前任务不是旧 incident
-- [ ] 确认是否影响 PBL-1
-- [ ] 找到最小责任层
-- [ ] 检查工作区已有修改
-
-## 31.2 Before live no-arm
-
-- [ ] fresh simulation instance
-- [ ] run-id 新建
-- [ ] sensor mode 明确
-- [ ] MAVROS links correct
-- [ ] 两机 namespace isolated
-- [ ] readiness artifact path current
-
-## 31.3 Before simulation arm
-
-- [ ] readiness PASS
-- [ ] `--simulation-only`
-- [ ] `--allow-arm`
-- [ ] policy allow_arm=true
-- [ ] current run/instance matched
-- [ ] watchdog running
-- [ ] geofence sane
-- [ ] no real hardware path involved
-
-## 31.4 Before declaring D435i fixed
-
-- [ ] L0 lidar-only pass
-- [ ] L1 RGB pass
-- [ ] L2 depth transport pass
-- [ ] no takeoff regression
-- [ ] no unacceptable odom gaps
-- [ ] fresh-instance repeat
-- [ ] Depth→EGO 未验证时明确写“not yet integrated/validated”
-
-## 31.5 Before local commit
-
-- [ ] focused tests pass
-- [ ] relevant Stage 7/8 validation pass
-- [ ] diff only contains intended changes
-- [ ] docs state not stale
-- [ ] no secrets / generated logs accidentally staged
-- [ ] no push without user permission
-
----
-
-# 32. Key Commands Reference
-
-## Offline
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\validate_stage6c.ps1
-powershell -ExecutionPolicy Bypass -File scripts\validate_stage6d.ps1
-powershell -ExecutionPolicy Bypass -File scripts\validate_stage7.ps1
-powershell -ExecutionPolicy Bypass -File scripts\validate_stage8.ps1
-```
-
-## Course startup
-
-```bat
-scripts\start_predicted_course_two_uav.bat
-```
-
-## Live localization
-
-```bat
-scripts\run_live_fastlio_dual.bat
-```
-
-## Planner
-
-```bat
-scripts\run_live_ego_swarm_dual.bat
-```
-
-## Read-only probe
-
-```bat
-scripts\run_stage7_topic_probe.bat
-```
-
-## Simulation flight
-
-```bat
-scripts\run_live_slam_ego_swarm_flight.bat --allow-arm --simulation-only
-```
-
-## Control-chain recorder
-
-```bat
-scripts\run_stage8_control_chain_recorder.bat
-```
-
-## MAVLink gate when relevant
-
-```bat
-scripts\run_stage2_1_mavlink_check.bat
-```
-
----
-
-# 33. Key Topic Reference
-
-Planner goals:
-
-```text
-/uav1/planning/goal
-/uav2/planning/goal
-```
-
-Planner commands:
-
-```text
-/uav1/planning/pos_cmd
-/uav2/planning/pos_cmd
-```
-
-PX4/MAVROS setpoint inspection:
-
-```text
-/uav1/mavros/setpoint_raw/local
-/uav2/mavros/setpoint_raw/local
-```
-
-Flight state:
-
-```text
-/uav1/mavros/state
-/uav2/mavros/state
-```
-
-Primary flight odom:
-
-```text
-/uav1/mavros/local_position/odom
-/uav2/mavros/local_position/odom
-```
-
-FAST-LIO raw odom:
-
-```text
-/uav1/slam/odometry_raw
-/uav2/slam/odometry_raw
-```
-
-FAST-LIO cloud:
-
-```text
-/uav1/slam/cloud_registered
-/uav2/slam/cloud_registered
-```
-
-D435i topics 具体 SeqID 以 sensor config 为准；当前项目配置中曾使用 UAV1 depth SeqID 3、UAV2 depth SeqID 13。不要把 SeqID 写死到新代码里而忽略 config source of truth。
-
----
-
-# 34. Source-of-Truth Files by Domain
-
-## Course geometry
-
-```text
-config/maps/predicted_narrow_course_v1.json
-```
-
-## Sensor definitions
-
-```text
-config/rflysim_sensor_uav1.json
-config/rflysim_sensor_uav2.json
-```
-
-## Live Stage 7 config
-
-```text
-config/stage7_live_slam_ego_swarm.json
-```
-
-## EGO integration
-
-```text
-future_aircraft_ws/src/multi_uav_mission/launch/rflysim_ego_swarm_dual.launch
-future_aircraft_ws/src/multi_uav_mission/launch/rflysim_ego_swarm_single.launch
-```
-
-## Faster-LIO / sensor relay
-
-```text
-future_aircraft_ws/src/multi_uav_mission/launch/rflysim_fastlio_dual.launch
-future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_sensor_bridge.py
-future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_pointcloud_adapter.py
-```
-
-## Mission flight
-
-```text
-future_aircraft_ws/src/multi_uav_mission/scripts/mission_executor.py
-future_aircraft_ws/src/multi_uav_mission/scripts/stage7_flight_plan.py
-future_aircraft_ws/src/multi_uav_mission/scripts/ego_swarm_setpoint_bridge.py
-```
-
-## Safety
-
-```text
-future_aircraft_ws/src/multi_uav_mission/scripts/course_geofence_watchdog.py
-future_aircraft_ws/src/multi_uav_mission/scripts/odom_tf_contract_check.py
-```
-
-## Diagnostics
-
-```text
-future_aircraft_ws/src/multi_uav_mission/scripts/stage7_topic_probe.py
-future_aircraft_ws/src/multi_uav_mission/scripts/stage8_control_chain_recorder.py
-```
-
----
-
-# 35. Final Engineering Principles
-
-如果只记住十条，就记住这些：
-
-1. **最新 live truth 高于旧故障文档。**
-2. **双机穿隧道是当前受保护基线，不是尚未解决的问题。**
-3. **D435i 当前是集成回归，先隔离新增层。**
-4. **Depth 当前不是 EGO 能运行的必要条件。**
-5. **新功能必须分层接入：L0 → L1 → L2 → L3。**
-6. **先证据、后修改；先最小 patch、后重构。**
-7. **两机 FAST-LIO frame 独立，swarm trajectory broadcast 不等于可靠机间避碰。**
-8. **安全门不能为了“跑通”随便放宽。**
-9. **Agent 可以仿真 flight 和本地 commit，但不能自行真机 arm 或 git push。**
-10. **文档必须及时把已解决问题从 Current 移到 Historical。**
-
-本项目当前最需要的不是更多“聪明代码”，而是让每次能力增加都建立在可重复、可回滚、可证据化的稳定基线上。
+## Stage 8 Predicted Narrow Course
+
+`config/maps/predicted_narrow_course_v1.json` is the only authoritative course geometry. `scripts\generate_predicted_narrow_course.bat` creates the preview, reference points, validation report, and flat `VisionRingBlank` terrain pair under ignored `generated/` output. `scripts\start_predicted_course_two_uav.bat --dry-run` is the side-effect-free launch contract; without `--dry-run` it starts the existing two-UAV chain on `VisionRingBlank` and loads course-owned dynamic IDs `12000..12999`.
+
+The course launcher does not request OFFBOARD or arm. A live map check must proceed through `scripts\run_live_fastlio_dual.bat` and `scripts\run_stage7_topic_probe.bat` before any separately authorized simulation-only flight. Dynamic walls are not CopterSim terrain: accept them through RflySim LiDAR visibility and geometric-clearance evidence, not through terrain-height queries. Never deploy generated terrain files over `CopterSim\external\map` without an explicit user request and an exact-target backup/check.
+
+## Developer Lessons (2026-08-07)
+
+High-value findings from recent development. Read these before touching sensor
+config, ego-swarm wiring, odometry, or the live run flow.
+
+### Sensor stack: 28comsim parity and the "no D435i" question
+
+- RflySim `VisionCaptureApi.jsonLoad` has its own format contract that plain
+  `json.loads` cannot catch: 16-entry `otherParams` requires `EularOrQuat`
+  plus 4-entry `SensorAngQuat` (28com's RGB uses this new-protocol shape),
+  while 8-entry `otherParams` must NOT set `EularOrQuat`. A live sensor-bridge
+  run rejected the D435i RGB/depth with `Json data format is wrong!` and
+  loaded only lidar + down camera until both configs were fixed.
+  `stage7_dual_sensor_config_check.py::validate_sdk_loadable` now enforces it.
+- The real FS-310/28comsim `UAV_demo` carries D435i (RGB + depth), a down-facing
+  monocular camera, and Mid360/IMU. Its simulation `Config.json` only has
+  mid360 + front RGB + down RGB: **there is no TypeID 2 depth in 28com's
+  simulation**. The FS-J310 launch's `depth_topic=/rflysim/sensor1` is dead in
+  simulation (the real topic is `/rflysim/sensor1/img_rgb`), so 28com's
+  simulation also runs EGO-Planner cloud-only. Our previous no-depth setup was
+  therefore 28com-sim parity, not a defect.
+- EGO-Planner's grid map builds from `grid_map/cloud` (required) and uses
+  `grid_map/depth` only as an optional enhancement (projection/filter). A LiDAR
+  cloud is enough to plan. What depth/RGB actually unlock are `drone_detect`
+  (other-UAV detection from depth) and `object_det` (YOLO on RGB). Neither is
+  currently used; inter-UAV avoidance must come from perception
+  (mid360 -> grid_map obstacle marking + `EMERGENCY_STOP`), which is verified.
+- RflySim `VisionCaptureApi` publishes absolute topics per `SeqID` and
+  `TypeID`: TypeID 1 -> `/rflysim/sensor{seq}/img_rgb`, TypeID 2 ->
+  `/rflysim/sensor{seq}/img_depth` (mono16, millimeters), TypeID 23 ->
+  `/rflysim/sensor{seq}/mid360_lidar`. Because topics are absolute, per-UAV
+  namespacing requires explicit `topic_tools` relays (already added in
+  `rflysim_fastlio_dual.launch`).
+- TypeID 2 depth over `SendProtocol=1` (UDP jpeg) is a standard, officially
+  documented combination and works from WSL/Linux; shared memory (protocol 0)
+  is Windows-local only.
+- This repo's sensor config JSONs must be comment-free plain JSON because
+  `rflysim_sensor_bridge.py` validates them with `json.loads`. 28com's
+  commented `Config.json` files only parse because `VisionCaptureApi` is
+  lenient.
+
+### ego-planner-swarm parameter semantics (this fork)
+
+- In `external/ego-planner-swarm`, `grid_map/pose_type` is
+  `POSE_STAMPED = 1`, `ODOMETRY = 2` (verify against `grid_map.h`; other EGO
+  forks may differ). Our launch uses `pose_type=2`, so the depth image is
+  synchronized with `grid_map/odom` via `depthOdomCallback` and
+  `grid_map/pose` is never subscribed. **No separate camera-pose topic is
+  needed.**
+- `md_.cam2body_` is a fixed rotation with no translation: depth projection
+  assumes the camera is at the body origin. The D435i's 0.1/0.04 m mounting
+  offset is ignored by EGO, which is acceptable inside the 0.25 m inflation.
+
+### Odometry and coordinate frames
+
+- The two UAVs run independent FAST-LIO frames (origins differ by the takeoff
+  offset, about 1.4 m). ego-swarm's swarm trajectory cost directly subtracts
+  trajectories, so cross-frame swarm coordination is invalid; the broadcast is
+  also gated by a 0.25 s start-time window, non-periodic publishing, and no
+  broadcast while in `WAIT_TARGET`. Fix path: unify frames first at the odom
+  layer (add takeoff offsets in `odom_frame_relay.py`), then optionally patch
+  `ego-planner-swarm` source (periodic broadcast, wider time window, stale
+  trajectory broadcast) and rebuild.
+- `/mavros/odometry/in` reporting z≈+1 (ENU side) is normal and is NOT evidence
+  of a coordinate-chain error. The real pre-arm gate is the MAVROS odometry
+  plugin's hardcoded `odom_ned`/`base_link_frd` TF lookups and PX4 EKF
+  external-vision fusion flags.
+- FAST-LIO `extrinsic_T=[0,0,0.1]` is the calibrated value matching the lidar
+  mount at `[0,0,-0.1]` (FRD). Do not "fix" it again.
+
+### Live flow and housekeeping
+
+- Simulation arm only with `--allow-arm --simulation-only`; real aircraft stay
+  manual-arm. Every simulator restart is a new `simulation_instance_id`;
+  readiness reports from other runs/instances are always rejected.
+- Stage 7 live order is fixed:
+  `start_two_uav.bat` -> `run_live_fastlio_dual.bat` ->
+  `run_live_ego_swarm_dual.bat` -> `run_stage7_topic_probe.bat` ->
+  `run_live_slam_ego_swarm_flight.bat --allow-arm --simulation-only`.
+- `run_live_fastlio_dual.bat` now also relays RGB/depth/down-camera topics into
+  `/uav*/rflysim/sensor*`; use those names in probes and planner wiring.
+- GitHub push to `s1nyon/RflySim-FutureCraft` failed with `Connection was
+  reset` until git was pointed at the local Clash proxy. Fix (already applied,
+  global): `git config --global http.proxy http://127.0.0.1:7890` and the same
+  for `https.proxy`. Clash for Windows runs on 127.0.0.1:7890 and WinINET is
+  already set to it, but git had no proxy and was trying the blocked
+  `github.com` IP directly. If the GCM "Unable to persist credentials with the
+  'wincredman' credential store" warning appears, it is cosmetic; the push
+  still succeeds.
+
+### Pending live validation (next simulation restart)
+
+1. Fix `planner_commands=0` (navigation phase): goal acceptance, odom/cloud
+   inputs, `traj_start_trigger`, and waypoint generator behavior on a fresh
+   lidar-only run.
+2. After navigation works, re-run the full dual-UAV flight on a fresh
+   instance and record clean-run rate, duration, min separation, collisions,
+   OFFBOARD losses, timeouts.
+3. D435i (full mode) is paused: depth 30 Hz, wall-geometry consistency, and
+   ego-swarm depth fusion checks stay pending; do not run the flight chain in
+   full mode until the lidar-only chain is repeatable.
+
+## File Map
+
+- `config/` - stage contracts, environment templates, and deterministic fixtures.
+- `scripts/` - Windows launchers, validation entry points, and WSL helpers.
+- `future_aircraft_ws/` - ROS1 workspace sources for mission logic and adapters.
+- `tests/fixtures/` - frozen outputs for offline regression checks.
+- `docs/superpowers/` - design notes and implementation plans.
+- `.agents/` - machine-oriented instructions and repository operating notes.
+- `README.md` - human-facing repository overview.
+
+## Sandbox Note
+
+If the Windows sandbox runner is blocked, non-destructive PowerShell commands may be run directly for read-only inspection, offline validation, and local dry-run checks. Simulation live runners can be launched when the user has explicitly accepted simulation arming risk. Anything that can delete, overwrite broadly, change git history, install or download dependencies, or arm real hardware still requires explicit confirmation.
