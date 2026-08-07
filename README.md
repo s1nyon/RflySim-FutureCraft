@@ -19,7 +19,7 @@
 - 双机错时穿隧道全程成功：UAV1 领先、UAV2 落后，7 段全部到达，无碰撞、无急停。
 - 机间防撞以感知为主：UAV1 被 UAV2 的 Mid360 grid_map 标记为障碍，UAV2 在 0.2 m 触发 `EMERGENCY_STOP`。两机 FAST-LIO 坐标系相互独立，ego-swarm 的轨迹广播不参与防撞决策。
 - 仿真传感器载荷已补齐 D435i 并接入 EGO-Swarm 深度融合（离线验证通过，live 验证待下次仿真确认）。深度链路 transport 契约（唯一 publisher、约 30 Hz、mono16/640x480、时间戳单调、非全零）已纳入 `run_stage7_topic_probe.bat` 的 `sensor_bridge` 层；与赛道墙体/天花板几何一致性仍需 live 确认。
-- 2026-08-07 live 复测：传感器 bridge 默认改为 `lidar_only`（只加载 Mid360），双机 OFFBOARD/arming/**起飞高度确认已通过**；当前剩余阻塞点是导航阶段 `planner_commands=0`（ego-swarm 对 goal 无输出）。D435i 多传感器载荷会拖垮 UE4 渲染导致 odom 断流，live 集成暂缓（`--sensor-mode full` 保留给后续视觉任务）。
+- 2026-08-07 live 复测：传感器 bridge 默认改为 `lidar_only`（只加载 Mid360），双机 OFFBOARD/arming/**起飞高度确认已通过**。导航阶段 `planner_commands=0` 已根因定位为 `quadrotor_msgs/PositionCommand` md5 不一致（EGO 发布端 `4712f060…` vs 28com_uav devel `44d620d9…`），修复为 flight runner / stage8 recorder 在 28com_uav 之后、project overlay 之前 source ego-planner-swarm devel；修复已重新落地并离线验证（WSL 实测 md5 对齐、validate_stage7/8 PASS），**fresh-instance live 复测待做**。D435i 多传感器载荷会拖垮 UE4 渲染导致 odom 断流，live 集成暂缓（`--sensor-mode full` 保留给后续视觉任务）。
 - 地图：SLAMScene + 动态砖块方案已 live 验证可用；**不安装 UE Editor**，静态 UE 地图方案搁置（见 `docs/decisions/2026-08-07-no-ue-editor.md`）。
 
 待办：跨新实例的重复运行（3–5 次）、更长航段、目标感知与行为树任务集成、实机迁移。

@@ -144,8 +144,10 @@ watchdog 误判失联打断起飞；深度帧率也只有约 2–3 Hz（远低�
   28com_uav devel 与 EGO 发布端的 `quadrotor_msgs/PositionCommand` md5 不一致
   （`44d620d9…` vs `4712f060…`），ROS 丢弃连接导致 bridge/executor 收不到
   pos_cmd。修复：flight runner 与 stage8 recorder 在 28com_uav 之后、project
-  overlay 之前 source `$EGO_SWARM_WSL_DIR/devel/setup.bash`（已离线验证 md5
-  对齐，live 复测待做）；
+  overlay 之前 source `$EGO_SWARM_WSL_DIR/devel/setup.bash`（2026-08-07 晚间
+  曾短暂 revert 后按用户决定重新落地，重新离线验证：WSL 实测 md5=`4712f060…`
+  对齐、validate_stage7/8 PASS；live 复测待做，需在交互式桌面会话启动 GUI
+  仿真器）；
 - D435i 深度 30 Hz、几何一致性等 live 验证全部延后到 `full` 模式，
   不阻塞主飞行链。
 

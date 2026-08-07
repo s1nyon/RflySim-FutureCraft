@@ -74,6 +74,7 @@ vision / task logic / behavior tree
 - 该回归已按阶段策略隔离：`lidar_only` 模式下双机起飞已恢复；D435i 全载荷导致的 UE4 渲染过载/odom 断流问题已有项目侧最小修复（sensor-mode 切换，见 docs/d435i_sensor_parity_2026-08-07.md）；
 - 最新 live run（`stage7-20260807T084232Z-2599`）在 `lidar_only` 下双机 OFFBOARD/arming/takeoff 全部成功，导航阶段失败 `planner_commands=0`；
 - `planner_commands=0` 根因已在 2026-08-07 取证：**EGO 发布端（ego-planner-swarm devel）与 Python 消费端（28com_uav devel）的 `quadrotor_msgs/PositionCommand` md5 不一致**（`4712f060…` vs `44d620d9…`），ROS 直接丢弃连接，setpoint bridge/executor 收不到 planner 指令。修复：flight runner 与 stage8 recorder 在 28com_uav 之后、project overlay 之前 source ego-planner-swarm devel；live 复测待做。
+- 2026-08-07 晚间状态更新：上述修复曾被短暂 revert（`5067c8a`），随后按用户决定重新落地（runner/recorder 的 source 顺序与 `tests/stage7_quadrotor_msgs_overlay_check.py` 静态回归检查重新加入代码）；重新验证结果为 WSL 实测 Python 侧 md5=`4712f060…`（与 EGO 发布端一致）、`validate_stage7.ps1` / `validate_stage8.ps1` PASS。fresh-instance live 复测仍未做：agent 沙箱会话无法启动 RflySim3D/CopterSim/QGC 等 GUI 仿真进程，复测必须在交互式桌面会话中执行。
 
 因此当前工作模型必须是：
 
@@ -1394,7 +1395,8 @@ Motion
 - 修复：flight runner 与 stage8 recorder 在 28com_uav 之后、project overlay 之前 source ego-planner-swarm devel；
 - 验证：WSL 实测修复后 Python 侧 md5=`4712f060…`（与 EGO 一致），`multi_uav_mission` 仍可解析；
   `validate_stage7.ps1` / `validate_stage8.ps1` 通过；新增 `tests/stage7_quadrotor_msgs_overlay_check.py` 静态回归保护；
-- 待办：fresh-instance live 复测（readiness → topic probe → 双机短导航），确认 pos_cmd 到达 bridge 且 executor 收到 planner commands。
+- 2026-08-07 晚间复验记录：修复曾短暂 revert（`5067c8a`）后按用户决定重新落地；重新验证 `tests/stage7_quadrotor_msgs_overlay_check.py` PASS、WSL 实测 28com-only=`44d620d9…` / 28com+ego+project=`4712f060…`（`rosmsg md5` 与 genpy 均一致），`validate_stage7.ps1` / `validate_stage8.ps1` PASS。
+- 待办：fresh-instance live 复测（readiness → topic probe → 双机短导航），确认 pos_cmd 到达 bridge 且 executor 收到 planner commands。注意：live 复测需在**交互式桌面会话**中启动 RflySim3D/CopterSim/QGC；agent 沙箱会话无法创建这些 GUI 进程。
 
 ---
 
