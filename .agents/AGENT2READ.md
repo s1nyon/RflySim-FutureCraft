@@ -167,7 +167,11 @@ vision / task logic / behavior tree
   双机拓扑 health gate、WSL identity/端口归属/PID 复用硬化全部落地，5 次连续
   fresh start → READY → stop clean 通过（cycle 明细与根因链见
   `docs/2026-08-08-lifecycle-p0-fix-live-validated.md`）。READY 后的
-  FAST-LIO/EGO/飞行链本轮未重验，恢复飞行前需按原测试阶梯重新覆盖。
+  FAST-LIO/EGO/飞行链已随 **PBL-1 full-stack regression（2026-08-08）** 重验：
+  3 次连续 fresh-instance 完整双机飞行全部 success（14/14 导航确认、0 OFFBOARD
+  loss、0 collision、0 emergency），lifecycle 冻结，PBL-1 REGRESSION CLOSED
+  （见 `docs/2026-08-08-pbl1-fullstack-regression-closure.md`）。Smooth Motion M2
+  尚未开始。
 
 ### 2.3.2 P0.1 Lifecycle Safety Hardening（2026-08-08）
 

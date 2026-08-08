@@ -39,6 +39,10 @@
   **2026-08-08 已完成 live 闭环验证**：双 CopterSim 实例化、Stage2 fail-fast、双机拓扑
   health gate、WSL identity/端口归属/PID 复用硬化均已落地；5 次连续 fresh start →
   READY → stop clean 全部通过（证据见 `docs/2026-08-08-lifecycle-p0-fix-live-validated.md`）。
+  **2026-08-08 PBL-1 full-stack regression 已 CLOSED**：3 次连续 fresh-instance 完整
+  双机飞行（FAST-LIO→EGO→OFFBOARD→穿隧道→landing）全部 success，lifecycle 冻结
+  （证据见 `docs/2026-08-08-pbl1-fullstack-regression-closure.md`）。Smooth Motion M2
+  尚未开始。
 - 仓库中旧的 `planner_commands=0` 无条件结论、2026-08-02 Stage 8 失败等记录属于历史诊断证据；
   除非 fresh live evidence 再次证明它们仍存在，否则不得把它们直接当作当前 blocker。
 
