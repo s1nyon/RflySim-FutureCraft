@@ -8,6 +8,39 @@
 
 ---
 
+## 0.0 Competition North Star & Current Truth（第一入口，先读这里）
+
+### North Star
+
+> 构建由 **不少于两架飞行器** 组成的全自主室内协同系统，在正式赛题 2.1
+> （室内狭窄通道环境下多飞行器智能协同导航与作业挑战赛）规定的狭窄、带转弯、含
+> 静态/动态障碍的通道中，于 12 分钟时限内完成：集群自主起飞（20 s 内）→ 双机进入
+> 通道（20 s 内）→ 在线定位与自主避障 → 未知目标搜索与协同作业（彩色标签 / 二维码 /
+> 温度异常点，位置赛前未知）→ 穿越通道 → ArUco 平台精准降落；除启动/急停外不依赖
+> 人工遥控。
+
+正式赛题文件：仓库根目录
+`第十二届中国研究生未来飞行器创新大赛参赛指南.pdf`（赛题 2.1）。
+比赛事实以 PDF 为准；主开发路线见 **`docs/competition-roadmap.md`**。
+
+### Current Truth（2026-08-08）
+
+- **Lifecycle：FROZEN / CLOSED**（P0 修复 + 5× closure + 3× full regression live 通过）。
+- **PBL-1 Full-Stack Baseline：CLOSED**（3× fresh-instance 完整双机飞行 success；
+  但这是 regression baseline，不是比赛 mission strategy）。
+- **Current Phase：Phase 2 — Competition-Grade Narrow-Corridor Navigation（NEXT）**，
+  具体路线见 competition-roadmap。
+- **Frozen Components**：lifecycle（除非真实 regression evidence）；
+  28com 原工程；已验证的 PBL baseline 路线（作为 A/B 参照，不删）。
+- **Active Blocker**：无 P0/P1 级 blocker；下一主缺口是 P2（按比赛几何/障碍验收导航）
+  与 P4（真实视觉感知，当前为 SCAFFOLD）。
+- **Hard Invariants**：见 `docs/competition-roadmap.md` §8——不得把 mock 当视觉、
+  不得把“两 planner 启动”当多机协同、任何 DONE/CLOSED 必须有 live evidence。
+- **Next Recommended Task**：P2 起步 = 建立当前 waypoint baseline 的运动指标，
+  再按比赛几何/静态+动态障碍做窄通道验收（详见 roadmap Phase 2）。
+
+---
+
 ## 0. Agent 进入仓库后的 5 分钟规则
 
 第一次进入任务时，不要马上改代码。先回答下面五个问题：
@@ -170,8 +203,9 @@ vision / task logic / behavior tree
   FAST-LIO/EGO/飞行链已随 **PBL-1 full-stack regression（2026-08-08）** 重验：
   3 次连续 fresh-instance 完整双机飞行全部 success（14/14 导航确认、0 OFFBOARD
   loss、0 collision、0 emergency），lifecycle 冻结，PBL-1 REGRESSION CLOSED
-  （见 `docs/2026-08-08-pbl1-fullstack-regression-closure.md`）。Smooth Motion M2
-  尚未开始。
+  （见 `docs/2026-08-08-pbl1-fullstack-regression-closure.md`）。下一阶段不是
+  "Smooth Motion M2"，而是 **Phase 2 Competition-Grade Narrow-Corridor Navigation**
+  （见 `docs/competition-roadmap.md`）。
 
 ### 2.3.2 P0.1 Lifecycle Safety Hardening（2026-08-08）
 
@@ -192,7 +226,7 @@ vision / task logic / behavior tree
 - **后续启动器登记**：stage7 fastlio/ego/flight 与 stage8 recorder 通过
   `--stack-id`/`--manifest` 接入同一 stack 并创建时登记；
 - **离线回归**：`tests/lifecycle_*.py` 10 项场景 + `validate_lifecycle.ps1` 全 PASS；
-  Stage 2/6D/7/8 未回归；**live 仍未执行**（Red 操作需用户批准，见 AGENTS.md §6）。
+  Stage 2/6D/7/8 未回归；**live 已执行并闭环**（5× closure + 3× full regression）。
 
 ### 2.3.3 spawn_attested ownership（P0.2，live 已部分验证）
 
@@ -219,18 +253,18 @@ vision / task logic / behavior tree
 GOOD BASELINE
 PBL-1 双机定位 + OFFBOARD + EGO-Swarm + 错时穿隧道（fresh-instance 可重复）
         ↓
-CURRENT TOP PRIORITY（P0）
-Safe Live Stack Lifecycle：启动/停止/fresh-instance 可控、可证明、不系统级扫杀
+CURRENT TOP PRIORITY（按比赛能力路线）
+Phase 2 Competition-Grade Narrow-Corridor Navigation
+（比赛几何/静态+动态障碍验收；双机 20 s 进通道语义在 Phase 3）
         ↓
-FIX
-stack_id + manifest ownership + 只读 inspect + graceful stop + health gate
-（offline 验证通过；live 验证待用户批准后进行）
+路线与验收标准见 docs/competition-roadmap.md
 ```
 
 而不是：
 
 ```text
-Stage 8 从未成功 → EGO-Swarm 仍不可用 → 重新设计整条飞行链
+为算法而算法（Smooth Motion / Gate / Look-ahead / EGO tuning 作为目标本身）
+或把 PBL-1 PASS 当作 Competition Ready
 ```
 
 后者是错误心智模型。
@@ -1401,83 +1435,15 @@ Agent 允许本地 commit。
 
 # 20. Current Development Roadmap
 
-D435i 回归修复后，两条线并行。
-
-## 20.1 Motion Track
-
-### M0 — Restore protected baseline after sensor regression
-
-目标：
-
-- lidar_only 始终可运行；
-- D435i 的存在不破坏基础飞行。
-
-### M1 — Repeatability
-
-- fresh-instance 3–5 次；
-- clean-run rate；
-- min separation；
-- OFFBOARD loss；
-- timeout；
-- odom dropout。
-
-### M2 — Smooth narrow-space motion
-
-保持当前成功路线作为 reference，不直接删掉。
-
-实验：
-
-- 更稀疏 task goals；
-- corridor/gate constraints；
-- planner local autonomy；
-- velocity/acceleration continuity；
-- wall clearance。
-
-### M3 — Better dual-UAV coordination
-
-研究：
-
-- stagger timing；
-- role/priority；
-- corridor occupancy coordination；
-- shared/world frame strategy；
-- eventually valid swarm trajectory coordination。
-
-不要把 “EGO-Swarm” 名字本身等同于当前已经完成真正统一坐标的多机 trajectory optimization。
-
-## 20.2 Vision Track
-
-### V0 — RGB stable transport
-
-保证不影响 flight。
-
-### V1 — Detection
-
-目标检测/识别算法独立开发。
-
-### V2 — RGB-D ranging
-
-使用 depth 做目标距离/空间定位。
-
-### V3 — Task perception
-
-二维码、标志物、任务目标等根据比赛细则落地。
-
-### V4 — Depth planning fusion
-
-最后再把 depth 纳入 EGO local map。
-
-## 20.3 Mission Integration
-
-比赛地图/任务细则明确后：
-
-```text
-Motion
-+ Vision
-+ task rules
-+ Behavior Tree / mission executor
-= competition mission system
-```
+> ⚠️ **Historical / superseded（2026-08-08）**：本章旧的 `M0–M3`（Smooth narrow-space
+> motion）、`V0–V4`（Vision Track）与 `Mission Integration` 表述已被
+> **`docs/competition-roadmap.md`**（Competition Capability Roadmap，Phase 0–8）
+> 取代。保留本章仅为追溯历史语义，不作为 Current Truth。
+>
+> 当前路线：Phase 0（Engineering Foundation）与 Phase 1（PBL Baseline）已 CLOSED；
+> 下一阶段是 **Phase 2 — Competition-Grade Narrow-Corridor Navigation**；
+> Gate / Look-ahead / EGO / Vision 都是实现手段而非项目目标；
+> 完整阶段、KPI、验收门与比赛评分对齐见 competition-roadmap。
 
 不要在规则未公布时过度写死高层任务树。
 

@@ -41,8 +41,10 @@
   READY → stop clean 全部通过（证据见 `docs/2026-08-08-lifecycle-p0-fix-live-validated.md`）。
   **2026-08-08 PBL-1 full-stack regression 已 CLOSED**：3 次连续 fresh-instance 完整
   双机飞行（FAST-LIO→EGO→OFFBOARD→穿隧道→landing）全部 success，lifecycle 冻结
-  （证据见 `docs/2026-08-08-pbl1-fullstack-regression-closure.md`）。Smooth Motion M2
-  尚未开始。
+  （证据见 `docs/2026-08-08-pbl1-fullstack-regression-closure.md`）。
+  后续开发路线以正式赛题（赛题 2.1，仓库根目录参赛指南 PDF）为准，见
+  `docs/competition-roadmap.md`（Phase 0–8；下一阶段 Phase 2 窄通道比赛导航，
+  旧的 "Smooth Motion M2" 表述已废弃）。
 - 仓库中旧的 `planner_commands=0` 无条件结论、2026-08-02 Stage 8 失败等记录属于历史诊断证据；
   除非 fresh live evidence 再次证明它们仍存在，否则不得把它们直接当作当前 blocker。
 

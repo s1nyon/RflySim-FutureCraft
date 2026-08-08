@@ -2,6 +2,23 @@
 
 面向未来飞行器创新大赛的双机协同仿真工程。项目以 RflySim、PX4 SITL 和 MAVROS 为底座，在 28com FS-310 无人机链路之上搭建定位、规划、感知与任务执行闭环，目标是把仿真验证过的链路平滑迁移回真实硬件。
 
+## 比赛目标（North Star）
+
+本项目面向正式赛题 **2.1「室内狭窄通道环境下多飞行器智能协同导航与作业挑战赛」**
+（《第十二届中国研究生未来飞行器创新大赛参赛指南.pdf》，仓库根目录）：
+
+> 使用不少于两架全自主飞行器，在狭窄（宽 ≤1.5 m、长 ≥3 m、转弯半径 ≤1 m）、
+> 含静态（锥桶/支架）与动态（摆动悬挂物）障碍的通道中，于 12 分钟时限内完成
+> 集群起飞（20 s 内）→ 双机进入通道（20 s 内）→ 在线定位与避障 →
+> 未知目标（彩色标签/二维码/温度异常点）协同作业 → 穿越通道 →
+> ArUco 平台精准降落；除启动/急停外不依赖人工遥控。
+
+评分：集群起飞 10 + 协同导航避障 30（3 段，碰撞每次 -5）+ 协同目标作业 30 +
+穿越并降落 20 + 技术汇报 10；同分比时间。任务阶段超 12 分钟终止。
+
+**本仓库当前状态是“可重复的仿真基线”，不是“比赛完整能力”**。完整能力路线与
+每阶段验收标准见 [docs/competition-roadmap.md](docs/competition-roadmap.md)。
+
 ## 技术栈
 
 | 层 | 选型 |
@@ -21,12 +38,36 @@
 - 仿真传感器载荷已补齐 D435i 并接入 EGO-Swarm 深度融合（离线验证通过，live 验证待下次仿真确认）。深度链路 transport 契约（唯一 publisher、约 30 Hz、mono16/640x480、时间戳单调、非全零）已纳入 `run_stage7_topic_probe.bat` 的 `sensor_bridge` 层；与赛道墙体/天花板几何一致性仍需 live 确认。
 - 2026-08-07 live 复测：传感器 bridge 默认改为 `lidar_only`（只加载 Mid360），双机 OFFBOARD/arming/**起飞高度确认已通过**。导航阶段 `planner_commands=0` 已根因定位为 `quadrotor_msgs/PositionCommand` md5 不一致（EGO 发布端 `4712f060…` vs 28com_uav devel `44d620d9…`），修复为 flight runner / stage8 recorder 在 28com_uav 之后、project overlay 之前 source ego-planner-swarm devel；**该修复已 live 验证**（run `stage7-20260807T124153Z-22785`：UAV1 导航 `planner_commands=190/383/116`，ego 日志无 md5 drop）。
 - 2026-08-08 executor subscriber 修复：`mission_executor.py` 导航验证改为持久 `rospy.Subscriber` + 内存缓存（`TopicCache`），不再循环 `wait_for_message()`；新增离线回归测试并纳入 `validate_stage7.ps1`；cold-start readiness 新增 odom relay 初始化等待（`STAGE7_ODOM_INIT_TIMEOUT_SEC`），与消息超时分离。离线 Stage 6C/6D/7/8 验证通过；**live 完整双机错时穿隧道已通过**（3 次 fresh-instance 干净成功：`stage7-20260807T133813Z-2617`、`T134731Z-2508`、`T141751Z-3219`，各 14 段导航确认、41.5 s、零失败），另 1 次实例因 EGO 侧 UAV2 pos_cmd 偶发未发布失败（非 executor 回归）。D435i 多传感器载荷会拖垮 UE4 渲染导致 odom 断流，live 集成暂缓（`--sensor-mode full` 保留给后续视觉任务）。
-- 2026-08-08 P0 Safe Live Stack Lifecycle：live 仿真启动/停止/fresh-instance 改为 manifest 化安全流程（`stack_id` + 进程指纹 ownership、只读 inspect、graceful stop、健康门 fail-closed），`scripts/cleanup_sim_stack.ps1` / `restart_live_stack.ps1` 已封禁为 fail-fast hazard stub。设计见 `docs/2026-08-08-live-stack-lifecycle-design.md`，离线验证 `scripts/validate_lifecycle.ps1` 全部通过；**live 验证待用户批准后执行**（首次用户在场监督，随后 3→5 次 fresh-instance）。
-- 2026-08-08 P0.1 Safety Hardening：ownership 改为**创建时登记**（`stack_register.py`，删除名称/regex 扫描认领）、WSL 按独立 PGID 停止、`clean` 来自 stop 最终验证、健康状态按独立文件原子写、FAST-LIO/EGO/mission/recorder 创建时登记到同一 stack；离线回归全 PASS，**live 仍未执行**。
-- 2026-08-08 P0.2 spawn_attested ownership：daemonized PX4 SITL 经 `RFLY_STACK_ID` 环境标记继承 + `/proc` 结构证据获得第二种合法 ownership（`wsl:px4_uav1/uav2`）；stop 前重新验证 marker，PGID 含未登记成员时禁止 group kill；live 上 marker 继承与登记已验证，健康门 5/5 READY。
+- 2026-08-08 P0 Safe Live Stack Lifecycle：live 仿真启动/停止/fresh-instance 改为 manifest 化安全流程（`stack_id` + 进程指纹 ownership、只读 inspect、graceful stop、健康门 fail-closed），`scripts/cleanup_sim_stack.ps1` / `restart_live_stack.ps1` 已封禁为 fail-fast hazard stub。设计见 `docs/2026-08-08-live-stack-lifecycle-design.md`；**已 live 闭环**（5× fresh closure + 3× full regression），lifecycle 冻结。
+- 2026-08-08 P0.1/P0.2 Safety Hardening：ownership 创建时登记（`stack_register.py`）、WSL 独立 PGID 停止、`clean` 来自 stop 最终验证、每状态独立健康文件、spawn_attested PX4（`RFLY_STACK_ID` /proc 证据）；离线回归全 PASS，live 验证通过。
+- 2026-08-08 PBL-1 full-stack regression：**3× fresh-instance 完整双机飞行全部 success**
+  （FAST-LIO→EGO→OFFBOARD→穿隧道→landing，各 14 段确认、0 碰撞、0 OFFBOARD loss），
+  evidence 见 `docs/2026-08-08-pbl1-fullstack-regression-closure.md`；这是 regression
+  baseline，不是比赛 mission strategy。
 - 地图：SLAMScene + 动态砖块方案已 live 验证可用；**不安装 UE Editor**，静态 UE 地图方案搁置（见 `docs/decisions/2026-08-07-no-ue-editor.md`）。
 
-待办：跨新实例的重复运行（3–5 次）、更长航段、目标感知与行为树任务集成、实机迁移。
+待办（按比赛能力路线）：Phase 2 窄通道比赛几何/静态+动态障碍验收 →
+Phase 3 双机同时进通道协同 → Phase 4 真实视觉目标感知 → Phase 5 协同目标作业 →
+Phase 6 ArUco 精准降落 → Phase 7 全自主比赛任务 → Phase 8 可靠性/时间优化。
+详见 `docs/competition-roadmap.md`。
+
+## 比赛能力现状（2026-08-08）
+
+| 能力 | 状态 |
+|---|---|
+| Lifecycle（启动/停止/fresh-instance/ownership/安全 stop） | DONE（冻结） |
+| 双机 PX4/MAVROS/FAST-LIO/EGO/OFFBOARD 软件栈 | BASELINE |
+| 已知路线窄通道导航（当前 S 形隧道） | BASELINE |
+| 静态/动态障碍避障（锥桶/支架/摆动悬挂物） | NOT IMPLEMENTED |
+| 双机 20 s 内同时/依次进通道 | NOT IMPLEMENTED |
+| 机间防撞 | PARTIAL |
+| 视觉目标感知（彩色标签/二维码/温度） | SCAFFOLD（mock provider） |
+| 目标定位 / 协同目标作业 | NOT IMPLEMENTED |
+| ArUco 精准降落 | NOT IMPLEMENTED（仅 AUTO.LAND） |
+| 完整比赛任务闭环 | NOT IMPLEMENTED |
+
+> 状态等级：DONE（live 闭环）→ BASELINE（能跑未按比赛验收）→ PARTIAL →
+> SCAFFOLD（接口占位）→ NOT IMPLEMENTED。
 
 ## 目录结构
 
