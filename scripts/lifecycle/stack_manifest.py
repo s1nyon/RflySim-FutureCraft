@@ -146,8 +146,13 @@ def entry_matches_process(
 
     entry_raw = entry.get("start_time_raw")
     proc_raw = getattr(proc, "start_time_raw", None)
-    if entry_raw is not None or proc_raw is not None:
-        if str(entry_raw or "").strip() != str(proc_raw or "").strip():
+    if entry_raw is not None and proc_raw is not None:
+        # Both sides carry a raw start-time token (same format family): compare
+        # it exactly. If only ONE side has raw (e.g. spawn_attested manifest
+        # entries carry only start_time_utc while the WSL process table always
+        # carries lstart raw), fall back to UTC comparison - otherwise every
+        # spawn_attested entry would fail identity verification in live WSL.
+        if str(entry_raw).strip() != str(proc_raw).strip():
             return False
     else:
         entry_time = parse_utc(entry["start_time_utc"])

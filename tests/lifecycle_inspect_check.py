@@ -145,6 +145,97 @@ def main() -> int:
 
     # 5. JSON serializable.
     json.dumps(inspect.report_to_dict(orphan_report))
+
+    # 6. Semantic port attribution: required MAVROS/roscore ports bound inside
+    # WSL2 are reflected to Windows as an unidentifiable relay PID. When the
+    # stack owns a LIVE component for that port's owner, the port must count as
+    # owned (otherwise a READY stack can never pass pre-stop inspect).
+    manifest6 = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
+    ownership.register_process(
+        manifest6, side="wsl", pid=500, pgid=500, role="wsl:mavros_uav1", name="roslaunch",
+        command_line="roslaunch rflysim_mavros_px4.launch uav_namespace:=uav1",
+        start_time_utc="2026-08-08T12:00:10Z", reason="t",
+    )
+    manifest6["required_ports"] = [
+        {"port": 14600, "protocol": "udp", "owner": "uav1-mavros"},
+        {"port": 11311, "protocol": "tcp", "owner": "ros_master"},
+    ]
+    mavros_proc = table_mod.ProcessInfo(
+        pid=500, name="roslaunch", start_time_utc="2026-08-08T12:00:10Z",
+        command_line="roslaunch rflysim_mavros_px4.launch uav_namespace:=uav1",
+        parent_pid=1, pgid=500,
+    )
+
+    class RelayPortsProbe:
+        def check(self, port, protocol):
+            # Occupied by an unidentifiable Windows relay PID -> probe says unknown.
+            return inspect.PortStatus(port, protocol, occupied=True, owned=False, detail="relay pid")
+
+    report6 = inspect.inspect_stack(
+        manifest6,
+        win_table=table_mod.FakeProcessTable([]),
+        wsl_table=table_mod.FakeProcessTable([mavros_proc]),
+        ports_probe=RelayPortsProbe(),
+        ros_probe=None,
+    )
+    owned_ports = {p.port: p for p in report6.ports if p.occupied}
+    assert owned_ports[14600].owned is True, "14600 must be attributed to live stack MAVROS"
+    assert owned_ports[11311].owned is False, "11311 without live roscore must stay unknown"
+    assert report6.fail_closed is True, "11311 still unknown -> fail closed"
+
+    # 7. WSL2 phantom relay: live stack PX4 instance reflects the required UDP
+    # ports to Windows as an unidentifiable "px4" process; the port must be
+    # attributed to the stack's alive px4 instance.
+    manifest7 = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
+    ownership.register_process(
+        manifest7, side="wsl", pid=215, pgid=179, role="wsl:px4_uav1", name="px4",
+        command_line="../bin/px4 -i 1 -d /mnt/d/PX4PSP/Firmware/build/px4_sitl_default/etc -s etc/init.d-posix/rcS",
+        start_time_utc="2026-08-08T12:00:20Z", reason="t",
+    )
+    manifest7["required_ports"] = [{"port": 14600, "protocol": "udp", "owner": "uav1-mavros"}]
+    px4_proc = table_mod.ProcessInfo(
+        pid=215, name="px4", start_time_utc="2026-08-08T12:00:20Z",
+        command_line="../bin/px4 -i 1 -d /mnt/d/PX4PSP/Firmware/build/px4_sitl_default/etc -s etc/init.d-posix/rcS",
+        parent_pid=1, pgid=179,
+    )
+    report7 = inspect.inspect_stack(
+        manifest7,
+        win_table=table_mod.FakeProcessTable([]),
+        wsl_table=table_mod.FakeProcessTable([px4_proc]),
+        ports_probe=RelayPortsProbe(),
+        ros_probe=None,
+    )
+    owned7 = {p.port: p for p in report7.ports if p.occupied}
+    assert owned7[14600].owned is True, "14600 must be attributed to live stack PX4"
+    assert report7.fail_closed is False
+
+    # 8. Children of owned processes (e.g. mavros_node under owned roslaunch)
+    # must not be classified unknown.
+    manifest8 = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
+    ownership.register_process(
+        manifest8, side="wsl", pid=951, pgid=951, role="wsl:mavros_uav1", name="roslaunch",
+        command_line="python3 /opt/ros/noetic/bin/roslaunch multi_uav_mission rflysim_mavros_px4.launch",
+        start_time_utc="2026-08-08T12:00:30Z", reason="t",
+    )
+    roslaunch_proc = table_mod.ProcessInfo(
+        pid=951, name="python3.10", start_time_utc="2026-08-08T12:00:30Z",
+        command_line="/usr/bin/python3.10 /opt/ros/noetic/bin/roslaunch multi_uav_mission rflysim_mavros_px4.launch uav_namespace:=uav1",
+        parent_pid=628, pgid=951,
+    )
+    mavros_node = table_mod.ProcessInfo(
+        pid=1036, name="mavros_node", start_time_utc="2026-08-08T12:00:31Z",
+        command_line="/opt/ros/noetic/lib/mavros/mavros_node __name:=mavros",
+        parent_pid=951, pgid=1036,
+    )
+    report8 = inspect.inspect_stack(
+        manifest8,
+        win_table=table_mod.FakeProcessTable([]),
+        wsl_table=table_mod.FakeProcessTable([roslaunch_proc, mavros_node]),
+        ports_probe=CleanPortsProbe(),
+        ros_probe=None,
+    )
+    assert report8.unknown_suspicious == [], "child of owned process must not be unknown"
+
     return 0
 
 

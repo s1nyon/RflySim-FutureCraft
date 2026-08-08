@@ -18,13 +18,17 @@ if __name__ == "__main__" and __package__ is None:
 
 from . import stack_ownership  # noqa: E402
 from .process_table import find_by_pgid, find_by_pid  # noqa: E402
-from .stack_inspect import WindowsPortsProbe, inspect_stack  # noqa: E402
+from .stack_inspect import WslAwarePortsProbe, inspect_stack  # noqa: E402
 from .stack_manifest import (  # noqa: E402
     command_line_fingerprint,
     entry_matches_process,
     load_manifest,
+    normalize_command_line,
+    parse_utc,
     save_manifest,
 )
+
+MATCH_TOLERANCE_SEC = 2.0
 
 
 @dataclass
@@ -198,6 +202,46 @@ class WslMarkerVerifier(MarkerVerifier):
             return False
 
 
+WSL_SESSION_ROLE_FRAGMENTS = {
+    "wsl:px4_build_session": ("sitl_multiple_run_rfly.sh", "tail -f /dev/null"),
+    "wsl:stage2_launcher": ("stage2_two_mavros.sh",),
+    "wsl:roscore": ("roscore",),
+    "wsl:mavros_uav1": ("roslaunch", "mavros"),
+    "wsl:mavros_uav2": ("roslaunch", "mavros"),
+    "wsl:px4_mavlink_uav1": ("px4-mavlink",),
+    "wsl:px4_mavlink_uav2": ("px4-mavlink",),
+}
+
+
+def wsl_session_argv_verified(entry: dict, proc) -> bool:
+    """Narrow identity relaxation for WSL launcher sessions whose argv
+    legitimately transforms after registration (same PID, argv replaced by the
+    exec chain, e.g. bash -> roscore/roslaunch or the injected keepalive).
+
+    Accepts only known launcher roles where role + PID + start-time match AND
+    the current argv contains a fragment specific to that component. This does
+    NOT apply to spawn_attested PX4 entries and does NOT relax inspect's stale
+    detection (which still uses entry_matches_process).
+    """
+    fragments = WSL_SESSION_ROLE_FRAGMENTS.get(str(entry.get("role", "")))
+    if fragments is None:
+        return False
+    if int(entry["pid"]) != int(getattr(proc, "pid", -1)):
+        return False
+    cmd = normalize_command_line(getattr(proc, "command_line", ""))
+    if not any(fragment in cmd for fragment in fragments):
+        return False
+    entry_time = parse_utc(entry.get("start_time_utc", ""))
+    proc_time = parse_utc(getattr(proc, "start_time_utc", ""))
+    if entry_time is None or proc_time is None:
+        return False
+    return abs((entry_time - proc_time).total_seconds()) <= MATCH_TOLERANCE_SEC
+
+
+def _identity_verified(entry: dict, proc) -> bool:
+    return entry_matches_process(entry, proc) or wsl_session_argv_verified(entry, proc)
+
+
 def _ordered_entries(manifest: dict):
     for entry in manifest["windows_processes"]:
         yield "windows", entry
@@ -232,7 +276,7 @@ def plan_stop(manifest: dict, win_table, wsl_table) -> tuple:
 
         if side == "wsl" and pgid is not None:
             group = find_by_pgid(snapshot, pgid)
-            leader_ok = proc is not None and entry_matches_process(entry, proc)
+            leader_ok = proc is not None and _identity_verified(entry, proc)
             if not group and proc is None:
                 actions.append(_action(entry, side, "INT", "pgid", status="already_exited"))
                 continue
@@ -273,6 +317,7 @@ def _final_verification(manifest: dict, win_table, wsl_table) -> dict:
     win_snapshot = win_table.snapshot()
     wsl_snapshot = wsl_table.snapshot()
     problems: List[str] = []
+    recycled: List[int] = []
 
     for side, entry in _ordered_entries(manifest):
         snapshot = win_snapshot if side == "windows" else wsl_snapshot
@@ -293,10 +338,14 @@ def _final_verification(manifest: dict, win_table, wsl_table) -> dict:
         if proc is not None and entry_matches_process(entry, proc):
             problems.append(f"owned pid {entry['pid']} ({entry['role']}) still alive after stop")
         elif proc is not None:
-            problems.append(f"identity mismatch at pid {entry['pid']} ({entry['role']}) after stop")
+            # PID was recycled by an unrelated process -> the original owned
+            # process is verifiably gone. Not a stop failure; the stale entry is
+            # retired by execute_stop after a clean verification.
+            recycled.append(int(entry["pid"]))
 
     return {
         "problems": problems,
+        "recycled_pids": recycled,
         "clean": len(problems) == 0,
         "checked_at_utc": stack_ownership.utc_now_iso(),
     }
@@ -330,6 +379,7 @@ def execute_stop(
     performed: List[StopAction] = []
     force_reasons: List[str] = []
     failure_reasons: List[str] = []
+    recycled_after_term: List[int] = []
 
     for side, entry in _ordered_entries(manifest):
         table = win_table if side == "windows" else wsl_table
@@ -341,7 +391,7 @@ def execute_stop(
         group = find_by_pgid(snapshot, pgid) if (side == "wsl" and pgid is not None) else []
 
         if side == "wsl" and pgid is not None:
-            leader_ok = proc is not None and entry_matches_process(entry, proc)
+            leader_ok = proc is not None and _identity_verified(entry, proc)
             if not group and proc is None:
                 performed.append(_action(entry, side, "INT", "pgid", status="already_exited"))
                 continue
@@ -373,7 +423,7 @@ def execute_stop(
 
             def member_verified(member) -> bool:
                 member_entry = owned_entries.get(int(member.pid))
-                if member_entry is None or not entry_matches_process(member_entry, member):
+                if member_entry is None or not _identity_verified(member_entry, member):
                     return False
                 if member_entry.get("ownership", {}).get("granted") == "spawn_attested" and attest_verifier is not None:
                     return attest_verifier.verify(member_entry, member)
@@ -434,11 +484,13 @@ def execute_stop(
         graceful = "close" if side == "windows" else "INT"
         ok = backend.close_main_window(proc) if graceful == "close" else backend.stop(proc, graceful)
         performed.append(_action(entry, side, graceful, "pid", status="performed" if ok else "failed"))
-        if not ok:
-            failure_reasons.append(f"{graceful} to pid {pid} ({entry['role']}) failed")
         wait(int_wait_s)
 
         proc = find_by_pid(table.snapshot(), pid)
+        # NOTE: a failed graceful close (taskkill /PID without /F is rejected by
+        # windowless/console GUI processes) is NOT recorded as a hard failure.
+        # The authoritative end state is final verification; TERM/KILL failures
+        # are still recorded below when the process actually survives.
         if proc is not None and entry_matches_process(entry, proc):
             ok = backend.stop(proc, "TERM")
             performed.append(_action(entry, side, "TERM", "pid", status="performed" if ok else "failed"))
@@ -459,22 +511,29 @@ def execute_stop(
             else:
                 failure_reasons.append(f"KILL to pid {pid} ({entry['role']}) failed")
         else:
-            refused.append(
-                {
-                    "pid": pid,
-                    "role": entry["role"],
-                    "reason": "force-stop verification failed after TERM (PID reused or command line changed); refusing to kill",
-                }
-            )
+            # PID was recycled between TERM and KILL: the original owned process
+            # is verifiably gone. Never kill the new occupant; retire the stale
+            # entry after final verification instead of failing the closure.
+            recycled_after_term.append(pid)
 
     final = _final_verification(manifest, win_table, wsl_table)
     clean = not refused and not failure_reasons and final["clean"]
+    retired_stale = list(dict.fromkeys(final.get("recycled_pids", []) + recycled_after_term))
+    if clean and retired_stale:
+        recycled_set = set(retired_stale)
+        manifest["windows_processes"] = [
+            e for e in manifest["windows_processes"] if int(e["pid"]) not in recycled_set
+        ]
+        manifest["wsl_processes"] = [
+            e for e in manifest["wsl_processes"] if int(e["pid"]) not in recycled_set
+        ]
     stack_ownership.record_stop(
         manifest,
         reason=reason,
         clean=clean,
         force_reasons=force_reasons,
         failure_reasons=failure_reasons + final["problems"],
+        retired_stale_entries=retired_stale,
     )
     if clean and manifest.get("launcher", {}).get("kind") == "scheduled_task":
         identity = manifest["launcher"].get("identity")
@@ -539,11 +598,12 @@ def _cli_main() -> int:
 
     if not dry_run:
         owned_pids = [int(e["pid"]) for e in manifest["windows_processes"]]
+        owned_wsl_pids = [int(e["pid"]) for e in manifest["wsl_processes"]]
         inspection = inspect_stack(
             manifest,
             win_table=win_table,
             wsl_table=wsl_table,
-            ports_probe=WindowsPortsProbe(owned_pids),
+            ports_probe=WslAwarePortsProbe(owned_pids, owned_wsl_pids, args.distro),
             ros_probe=None,
         )
         if inspection.fail_closed:

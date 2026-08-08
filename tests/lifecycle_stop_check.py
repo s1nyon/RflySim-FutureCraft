@@ -237,6 +237,78 @@ def main() -> int:
     assert -500 in {pid for _, pid in backend.calls}
     assert report.clean is True, "orphan group stopped via PGID must be clean"
 
+    # 6b. SITL build session argv transform (bash exec tail -f /dev/null):
+    # same PID + start-time, registered at_creation with a label cmdline, must
+    # still be stopped via its PGID and produce a clean closure.
+    manifest6b = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
+    ownership.register_process(
+        manifest6b, side="wsl", pid=66, pgid=66, role="wsl:px4_build_session", name="bash",
+        command_line="sitl_multiple_run_rfly.sh", start_time_utc=start, reason="t",
+    )
+    keepalive = make_proc(66, "tail", start, "tail -f /dev/null", pgid=66)
+    wsl_table = MutableTable([keepalive])
+    backend = FakeStopBackend(win_table=MutableTable([]), wsl_table=wsl_table)
+    report = stop.execute_stop(
+        manifest6b, win_table=MutableTable([]), wsl_table=wsl_table,
+        win_backend=backend, wsl_backend=backend, dry_run=False, reason="t",
+        int_wait_s=0, term_wait_s=0,
+    )
+    assert -66 in {pid for _, pid in backend.calls}, "build session keepalive must be stopped via PGID"
+    assert report.clean is True, "build session keepalive stop must be clean"
+
+    # 6c. Same scenario but a WRONG start time (PID reuse) must be refused.
+    manifest6c = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
+    ownership.register_process(
+        manifest6c, side="wsl", pid=66, pgid=66, role="wsl:px4_build_session", name="bash",
+        command_line="sitl_multiple_run_rfly.sh", start_time_utc=start, reason="t",
+    )
+    reused_tail = make_proc(66, "tail", "2026-08-08T14:00:00Z", "tail -f /dev/null", pgid=66)
+    wsl_table = MutableTable([reused_tail])
+    backend = FakeStopBackend(win_table=MutableTable([]), wsl_table=wsl_table)
+    report = stop.execute_stop(
+        manifest6c, win_table=MutableTable([]), wsl_table=wsl_table,
+        win_backend=backend, wsl_backend=backend, dry_run=False, reason="t",
+        int_wait_s=0, term_wait_s=0,
+    )
+    assert not any(pid == -66 for pid in [c for _, c in backend.calls]), "reused PID must not be killed"
+    assert report.clean is False, "unverified reused PID must fail closed"
+
+    # 6d. roscore argv transform (bash -> python3 roscore): registered with a
+    # label cmdline, live argv differs; role-fragment relaxation must allow the
+    # group stop and keep the closure clean.
+    manifest6d = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
+    ownership.register_process(
+        manifest6d, side="wsl", pid=796, pgid=796, role="wsl:roscore", name="roscore",
+        command_line="/opt/ros/noetic/bin/roscore", start_time_utc=start, reason="t",
+    )
+    roscore_proc = make_proc(796, "python3.10", start, "/usr/bin/python3.10 /opt/ros/noetic/bin/roscore", pgid=796)
+    wsl_table = MutableTable([roscore_proc])
+    backend = FakeStopBackend(win_table=MutableTable([]), wsl_table=wsl_table)
+    report = stop.execute_stop(
+        manifest6d, win_table=MutableTable([]), wsl_table=wsl_table,
+        win_backend=backend, wsl_backend=backend, dry_run=False, reason="t",
+        int_wait_s=0, term_wait_s=0,
+    )
+    assert -796 in {pid for _, pid in backend.calls}, "roscore argv-transform must be stoppable via PGID"
+    assert report.clean is True, "roscore argv-transform stop must be clean"
+
+    # 6e. Same role but a foreign argv (no roscore fragment) must be refused.
+    manifest6e = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
+    ownership.register_process(
+        manifest6e, side="wsl", pid=796, pgid=796, role="wsl:roscore", name="roscore",
+        command_line="/opt/ros/noetic/bin/roscore", start_time_utc=start, reason="t",
+    )
+    foreign = make_proc(796, "evil", start, "/usr/bin/evil --daemon", pgid=796)
+    wsl_table = MutableTable([foreign])
+    backend = FakeStopBackend(win_table=MutableTable([]), wsl_table=wsl_table)
+    report = stop.execute_stop(
+        manifest6e, win_table=MutableTable([]), wsl_table=wsl_table,
+        win_backend=backend, wsl_backend=backend, dry_run=False, reason="t",
+        int_wait_s=0, term_wait_s=0,
+    )
+    assert not any(pid == -796 for pid in [c for _, c in backend.calls]), "foreign argv must not be killed"
+    assert report.clean is False, "foreign argv must fail closed"
+
     # 7. Signal failure -> clean=false with failure reasons recorded.
     manifest7 = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
     ownership.register_process(
@@ -309,6 +381,41 @@ def main() -> int:
     )
     assert report.clean is False, "clean must be false when owned process still alive after stop"
     assert 1 in {p.pid for p in win_table.snapshot()}
+
+    # 11. PID recycled AFTER stop: original owned process is gone; the new
+    # occupant must never be touched, the closure is clean, and the stale entry
+    # is retired (retired_stale_entries recorded).
+    manifest11 = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
+    ownership.register_process(
+        manifest11, side="windows", pid=111, role="gui:QGroundControl", name="QGroundControl",
+        command_line='"D:\\PX4PSP\\QGroundControl\\QGroundControl.exe" -noComPix',
+        start_time_utc=start, reason="t",
+    )
+    qgc_proc = make_proc(111, "QGroundControl", start, '"D:\\PX4PSP\\QGroundControl\\QGroundControl.exe" -noComPix')
+
+    class RecycleBackend(FakeStopBackend):
+        def stop(self, proc, signal):
+            self.calls.append((signal, int(proc.pid)))
+            if signal == "KILL":
+                # PID recycled by an unrelated process during the stop.
+                self.win_table.replace(int(proc.pid), make_proc(int(proc.pid), "browser", "2026-08-08T14:00:00Z", "browser.exe --renderer"))
+            return True
+
+    win_table = MutableTable([qgc_proc])
+    backend = RecycleBackend(win_table=win_table, wsl_table=MutableTable([]))
+    report = stop.execute_stop(
+        manifest11, win_table=win_table, wsl_table=MutableTable([]),
+        win_backend=backend, wsl_backend=backend, dry_run=False, reason="t",
+        int_wait_s=0, term_wait_s=0,
+    )
+    assert report.clean is True, "recycled-after-stop must still close clean"
+    assert manifest11["windows_processes"] == [], "stale recycled entry must be retired"
+    assert manifest11["stop"]["retired_stale_entries"] == [111]
+    remaining = {p.pid for p in win_table.snapshot()}
+    assert 111 in remaining, "the new occupant must NEVER be killed"
+    occupant = [p for p in win_table.snapshot() if p.pid == 111][0]
+    assert "browser" in occupant.command_line, "table must still hold the recycled foreign occupant"
+
     return 0
 
 

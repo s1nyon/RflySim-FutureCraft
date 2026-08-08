@@ -169,6 +169,33 @@ def main() -> int:
     assert manifest_mod.entry_matches_process(entry, reused_proc) is False
     assert manifest_mod.entry_matches_process(entry, other_cmd) is False
 
+    # Mixed start_time_raw availability: spawn_attested manifest entries do not
+    # store raw while the WSL process table always carries lstart raw; identity
+    # verification must fall back to UTC comparison instead of failing.
+    raw_proc = table_mod.ProcessInfo(
+        pid=111, name="RflySim3D", start_time_utc="2026-08-08T12:00:03Z",
+        command_line='"D:\\PX4PSP\\RflySim3D\\RflySim3D.exe" -cmd=RflyChangeMapbyName-SLAMScene',
+        parent_pid=1, start_time_raw="Sat Aug  8 12:00:03 2026",
+    )
+    assert manifest_mod.entry_matches_process(entry, raw_proc) is True
+    entry_with_raw = dict(entry)
+    entry_with_raw["start_time_raw"] = "Sat Aug  8 12:00:03 2026"
+    assert manifest_mod.entry_matches_process(entry_with_raw, raw_proc) is True
+    entry_wrong_raw = dict(entry_with_raw)
+    entry_wrong_raw["start_time_raw"] = "Sat Aug  8 14:00:00 2026"
+    assert manifest_mod.entry_matches_process(entry_wrong_raw, raw_proc) is False
+
+    # parse_lstart_iso must convert LOCAL lstart time to TRUE UTC, not treat the
+    # local wall-clock as UTC (would shift identity by the local-UTC offset).
+    import datetime as dt
+
+    naive = dt.datetime.strptime("Sat Aug  8 16:12:20 2026", "%a %b %d %H:%M:%S %Y")
+    local_tz = dt.datetime.now().astimezone().tzinfo
+    expected_utc = naive.replace(tzinfo=local_tz).astimezone(dt.timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    assert table_mod.parse_lstart_iso("Sat Aug  8 16:12:20 2026") == expected_utc
+
     # Stop record carries failure reasons.
     ownership.record_stop(manifest, reason="test", clean=False, failure_reasons=["still alive"])
     assert manifest["stop"]["clean"] is False

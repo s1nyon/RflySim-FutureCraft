@@ -33,6 +33,20 @@ WSL_SUSPICIOUS_PATTERNS = [
     re.compile(r"predicted_narrow_course", re.IGNORECASE),
 ]
 
+# Required-port owners mapped to the live stack WSL components that legitimately
+# bind them. WSL2 localhost-forwarded sockets are reflected to the Windows side
+# as a phantom "px4"/relay process that can never match manifest PIDs, so a
+# probe-level "unknown owner" is not authoritative when the stack itself proves
+# the component is alive.
+OWNER_ROLE_PREFIXES = {
+    # WSL2 localhost forwarding reflects the PX4 UDP sockets to the Windows
+    # side as a phantom "px4" process; the stack's own px4 instance is the
+    # legitimate owner.
+    "uav1-mavros": ("wsl:mavros_uav1", "wsl:px4_mavlink_uav1", "wsl:px4_uav1"),
+    "uav2-mavros": ("wsl:mavros_uav2", "wsl:px4_mavlink_uav2", "wsl:px4_uav2"),
+    "ros_master": ("wsl:roscore",),
+}
+
 
 @dataclass
 class OwnedStatus:
@@ -140,6 +154,8 @@ def _unknown_wsl(processes: Sequence, manifest: dict) -> List:
             continue
         if proc.pgid is not None and int(proc.pgid) in known_pgids:
             continue  # owned via the registered PGID (orphan/child of the group)
+        if int(getattr(proc, "parent_pid", 0)) in known_pids:
+            continue  # direct child of an owned process (e.g. mavros_node under owned roslaunch)
         command_line = str(getattr(proc, "command_line", "")).lower()
         if any(pattern.search(command_line) for pattern in WSL_SUSPICIOUS_PATTERNS):
             unknown.append(proc)
@@ -174,7 +190,20 @@ def inspect_stack(
         if ports_probe is None:
             ports.append(PortStatus(port, protocol, occupied=False, owned=None, detail="not probed"))
             continue
-        ports.append(ports_probe.check(port, protocol))
+        status = ports_probe.check(port, protocol)
+        # Semantic attribution: when the required port's owner component is an
+        # owned-and-alive stack process, the port belongs to this stack even if
+        # the raw probe cannot map the binding PID (WSL2 localhost relay).
+        if status.occupied and status.owned is False:
+            prefixes = OWNER_ROLE_PREFIXES.get(str(required.get("owner", "")))
+            if prefixes and any(
+                item.status in ("owned_and_alive", "owned_orphan")
+                and str(item.entry.get("role", "")).startswith(prefixes)
+                for item in owned
+            ):
+                status.owned = True
+                status.detail += f" | attributed to live stack owner {required.get('owner')}"
+        ports.append(status)
 
     ros = RosStatus()
     if ros_probe is not None:
@@ -302,6 +331,80 @@ class WindowsPortsProbe:
             pids = [pids]
         owned = all(int(p) in self.owned_pids for p in pids)
         return PortStatus(int(port), protocol, occupied=True, owned=owned, detail=f"owning pids: {pids}")
+
+
+class WslAwarePortsProbe:
+    """Windows port probe that additionally attributes WSL-owned bindings.
+
+    MAVROS/PX4 required ports live inside WSL2; the Windows-side probe cannot
+    map them to manifest WSL PIDs, so a READY stack would always look
+    port-conflicted. Query `ss -tulpn` inside the distro and treat a binding as
+    owned when its process PID is in the stack manifest's wsl_processes.
+    """
+
+    def __init__(
+        self,
+        owned_win_pids,
+        owned_wsl_pids,
+        distro: str = "RflySim-20.04",
+    ):
+        self.win_probe = WindowsPortsProbe(owned_win_pids)
+        self.wsl_pids = {int(p) for p in owned_wsl_pids}
+        self.distro = distro
+
+    def check(self, port: int, protocol: str) -> PortStatus:
+        status = self.win_probe.check(port, protocol)
+        if not (status.occupied and status.owned is False):
+            return status
+        wsl_pids = self._wsl_binding_pids(port, protocol)
+        if wsl_pids:
+            if any(int(p) in self.wsl_pids for p in wsl_pids):
+                return PortStatus(
+                    int(port),
+                    protocol,
+                    occupied=True,
+                    owned=True,
+                    detail=f"wsl owners in manifest: {sorted(wsl_pids)}",
+                )
+            return PortStatus(
+                int(port),
+                protocol,
+                occupied=True,
+                owned=False,
+                detail=f"wsl owners NOT in manifest: {sorted(wsl_pids)}",
+            )
+        return status
+
+    def _wsl_binding_pids(self, port: int, protocol: str) -> List[int]:
+        try:
+            result = subprocess.run(
+                [
+                    "wsl.exe", "-d", self.distro, "-e", "bash", "-lic",
+                    f"ss -tulpn 2>/dev/null || lsof -i -P -n 2>/dev/null",
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=30,
+            )
+        except (subprocess.SubprocessError, OSError):
+            return []
+        pids: List[int] = []
+        needle = f":{int(port)}"
+        for line in (result.stdout or "").splitlines():
+            if needle not in line:
+                continue
+            if protocol == "tcp" and "LISTEN" not in line.upper():
+                continue
+            if protocol == "udp" and "UNCONN" not in line.upper() and "UDP" not in line.upper():
+                continue
+            for m in re.finditer(r"pid=(\d+)", line):
+                try:
+                    pids.append(int(m.group(1)))
+                except ValueError:
+                    continue
+        return pids
 
 
 class WslRosProbe:

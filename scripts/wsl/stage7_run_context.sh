@@ -7,7 +7,7 @@ stage7_current_simulation_instance_id() {
   # process name exactly ("px4"), excluding px4-mavlink, roslaunch helpers and
   # the hashing pipeline itself, so the id is stable between readiness
   # collection and flight launch.
-  px4_process_state="$(pgrep -x px4 | sort | while read -r pid; do ps -p "$pid" -o pid=,lstart=,args=; done || true)"
+  px4_process_state="$(pgrep -x px4 2>/dev/null | sort | while read -r pid; do ps -p "$pid" -o pid=,lstart=,args= 2>/dev/null; done || true)"
   if [ -z "$px4_process_state" ]; then
     echo "[ERROR] No PX4 process was found for the Stage 7 simulation instance." >&2
     return 1

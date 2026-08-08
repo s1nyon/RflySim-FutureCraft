@@ -40,6 +40,7 @@ def record_stop(
     clean: bool,
     force_reasons: Optional[Sequence[str]] = None,
     failure_reasons: Optional[Sequence[str]] = None,
+    retired_stale_entries: Optional[Sequence[int]] = None,
 ) -> None:
     manifest["stop"] = {
         "last_stop_reason": reason,
@@ -47,6 +48,7 @@ def record_stop(
         "clean": clean,
         "force_reasons": list(force_reasons or []),
         "failure_reasons": list(failure_reasons or []),
+        "retired_stale_entries": list(retired_stale_entries or []),
     }
 
 

@@ -41,7 +41,7 @@ def find_by_pgid(processes: Sequence[ProcessInfo], pgid: int) -> List[ProcessInf
 def _cim_datetime_to_utc(cim_value: Optional[str]) -> str:
     """Convert a serialized process start time to UTC ISO.
 
-    Handles both `\/Date(<epoch-ms>)\/` (PowerShell ConvertTo-Json output) and
+    Handles both `/Date(<epoch-ms>)/` (PowerShell ConvertTo-Json output) and
     WMI CIM datetime (e.g. 20260808120003.123456+480).
     """
     if not cim_value:
@@ -175,7 +175,13 @@ def parse_wsl_snapshot(text: str) -> List[ProcessInfo]:
 
 
 def parse_lstart_iso(lstart: str) -> str:
-    """Parse `ps lstart` text to an ISO string (UTC-naive by convention; raw used for matching)."""
+    """Parse `ps lstart` text to an ISO UTC string.
+
+    `ps lstart` prints LOCAL time (e.g. "Sat Aug  8 16:12:20 2026"), while
+    manifest entries store TRUE UTC. Treating local as UTC would shift every
+    WSL process start by the local-UTC offset (8h here) and break PID-reuse
+    identity verification. Convert via the system's current local timezone.
+    """
     import datetime as dt
     import re
 
@@ -184,4 +190,9 @@ def parse_lstart_iso(lstart: str) -> str:
         parsed = dt.datetime.strptime(normalized, "%a %b %d %H:%M:%S %Y")
     except ValueError:
         return ""
-    return parsed.strftime("%Y-%m-%dT%H:%M:%SZ")
+    local_tz = dt.datetime.now().astimezone().tzinfo
+    try:
+        parsed_local = parsed.replace(tzinfo=local_tz)
+        return parsed_local.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except (OverflowError, OSError, ValueError):
+        return parsed.strftime("%Y-%m-%dT%H:%M:%SZ")
