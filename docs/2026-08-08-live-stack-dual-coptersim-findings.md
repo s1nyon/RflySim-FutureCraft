@@ -1,9 +1,11 @@
 # 2026-08-08：双机启动只加载一架 CopterSim 的取证与修复设计
 
-> 状态：**Current Finding / Open Issue**（已取证，修复待实施）
+> 状态：**Resolved**（修复已实施并经 5 次连续 live cycle 验证，2026-08-08）
 > 关联任务：P0 Live Stack Lifecycle 第一次完整真实 closure
 > 关联文档：`docs/2026-08-08-live-stack-lifecycle-design.md`、`docs/2026-08-08-cleanup-script-hazard.md`
 > 取证时间：2026-08-08 16:25 前后（Session 1 真实宿主进程状态）
+> 修复提交：`0f5af43`（CopterSim 实例化）、`a84c44f`（stage2 fail-fast/批次根因）、
+>  `d787480`（拓扑健康门）、`2c21b88`（ownership/stop 硬化）、`fd54835`（回归测试接入）
 
 ---
 
@@ -121,6 +123,19 @@ RflySim3D / QGC 的“已运行则跳过”逻辑保留（GUI 本来就应单实
 
 ## 6. 状态与下一步
 
-- **未改动任何代码**（本轮只取证 + 记录）；
-- 下一步最小动作：按 §5 实施 wrapper 修复并离线验证；真实启动/停止仍属 Red，
-  需用户批准。
+- **已修复并 live 验证**（见 `docs/2026-08-08-lifecycle-p0-fix-live-validated.md`）：
+  - §5.1 双 CopterSim 实例化已落地（stack-scoped pid 文件 + `gui:CopterSim/uavN` role +
+    `--instance-marker`，循环内不再有全局名称守卫）；
+  - §5.2 `%~dp0\UAVSITL.py` 已改为经 `UAV_SITL_DIR`（28com_SITL 真实绝对路径）解析；
+  - 现场 trace 证实：`copter uav1 registered` / `copter uav2 registered` 两架独立登记，
+    PID 互异；
+  - 5 次连续 fresh start → READY → stop clean 全部通过。
+
+## 7. 追加根因（live 验证过程中定位）
+
+单 CopterSim 的直接根因是 wrapper 循环内的名称守卫；但 live 首轮验证又暴露了
+**第二个致命根因**：`start_wsl_mavros_two.bat` DRY-RUN 块内 echo 文本中的括号
+`(GUI_READY/...)` 提前关闭 `if (...)` 块，使 `exit /b 0` 无条件执行——mavros
+wrapper 在 step A 后静默退出，stage2（roscore/MAVROS）从未启动。同一类括号 bug
+还存在于 step B/C/D 失败块与 stage8 recorder dry-run 块。修复后 stage2 全链路
+正常（step A→E trace 齐全，health gate ready）。详见开发日志。

@@ -159,14 +159,15 @@ vision / task logic / behavior tree
   - Session-1 启动链显式健康状态：`stage2_two_mavros.sh` 写 health.json，
     `start_wsl_mavros_two.bat` 轮询并 fail closed，`start_predicted_course_two_uav.bat`
     写 GUI_READY/COURSE_READY；
-  - 入口：`scripts/live_stack_start.ps1` / `live_stack_inspect.ps1` /
-    `live_stack_stop.ps1` / `live_stack_fresh_instance.ps1`（默认 DryRun；`-Execute` 需批准）；
-  - 离线回归：`tests/lifecycle_*.py` + `scripts/validate_lifecycle.ps1` 全部 PASS；
-    现有 Stage 2/6D/7/8 验证未回归。
-- 状态：**live 尚未执行**。第一次涉及真实宿主机进程停止/计划任务修改的 live 操作前，
-  必须先展示 DryRun 输出与设计并获得用户批准；随后用户在场监督 1 次完整周期
-  （start → readiness → flight → graceful stop → verify clean），再做 3 次 fresh-instance
-  （稳定后 5 次），每次记录 `startup_success` / `flight_success` / `shutdown_clean`。
+- 入口：`scripts/live_stack_start.ps1` / `live_stack_inspect.ps1` /
+  `live_stack_stop.ps1` / `live_stack_fresh_instance.ps1`（默认 DryRun；`-Execute` 需批准）；
+- 离线回归：`tests/lifecycle_*.py` + `scripts/validate_lifecycle.ps1` 全部 PASS；
+  现有 Stage 2/6D/7/8 验证未回归。
+- 状态：**live 已执行并闭环（2026-08-08）**。双 CopterSim 实例化、Stage2 fail-fast、
+  双机拓扑 health gate、WSL identity/端口归属/PID 复用硬化全部落地，5 次连续
+  fresh start → READY → stop clean 通过（cycle 明细与根因链见
+  `docs/2026-08-08-lifecycle-p0-fix-live-validated.md`）。READY 后的
+  FAST-LIO/EGO/飞行链本轮未重验，恢复飞行前需按原测试阶梯重新覆盖。
 
 ### 2.3.2 P0.1 Lifecycle Safety Hardening（2026-08-08）
 
@@ -203,6 +204,10 @@ vision / task logic / behavior tree
 - **live 验证**：marker 继承在真实 PX4（`-i 1`/`-i 2`）上确认；两机以 spawn_attested
   登记成功；健康门 5/5 READY；stop DryRun 只计划 owned 目标。readiness 本轮因
   FAST-LIO 传感器话题门未过（环境），非生命周期缺陷。
+  **2026-08-08 更新**：spawn_attested 的 live stop 已闭环——修复了
+  `ps lstart` 本地时间被当 UTC（identity 差 8 小时）与 manifest 缺 raw 导致
+  `entry_matches_process` 恒失败的问题；5 次连续 cycle 中 PX4 均以 spawn_attested
+  登记且 stop 前 marker 复验通过、PGID 停止成功（见 lifecycle-p0-fix-live-validated.md）。
 
 因此当前工作模型必须是：
 

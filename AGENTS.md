@@ -36,6 +36,9 @@
 - **当前最高优先级是 P0 Safe Live Stack Lifecycle**：live 仿真的启动、停止和 fresh-instance
   重复验证必须可控、可证明、不通过系统级扫杀破坏宿主机。
   设计见 `docs/2026-08-08-live-stack-lifecycle-design.md`，最新状态见 `.agents/AGENT2READ.md` §2.3。
+  **2026-08-08 已完成 live 闭环验证**：双 CopterSim 实例化、Stage2 fail-fast、双机拓扑
+  health gate、WSL identity/端口归属/PID 复用硬化均已落地；5 次连续 fresh start →
+  READY → stop clean 全部通过（证据见 `docs/2026-08-08-lifecycle-p0-fix-live-validated.md`）。
 - 仓库中旧的 `planner_commands=0` 无条件结论、2026-08-02 Stage 8 失败等记录属于历史诊断证据；
   除非 fresh live evidence 再次证明它们仍存在，否则不得把它们直接当作当前 blocker。
 
