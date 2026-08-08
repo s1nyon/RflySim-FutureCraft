@@ -52,6 +52,17 @@ try {
         '--stop-module', "$lifecycle\stack_stop.py"
     )
     Invoke-Checked $python @('tests\lifecycle_banned_command_check.py', '--project-root', $ProjectRoot)
+    Invoke-Checked $python @(
+        'tests\lifecycle_topology_check.py',
+        '--topology-module', "$lifecycle\stack_topology.py",
+        '--process-table-module', "$lifecycle\process_table.py",
+        '--manifest-module', "$lifecycle\stack_manifest.py",
+        '--ownership-module', "$lifecycle\stack_ownership.py"
+    )
+    Invoke-Checked $python @(
+        'tests\lifecycle_wrapper_generation_check.py',
+        '--generator', "$lifecycle\generate_sitl_wrapper.ps1"
+    )
 
     # Hazard stubs must refuse with exit code 1.
     & powershell -ExecutionPolicy Bypass -File (Join-Path $ProjectRoot 'scripts\cleanup_sim_stack.ps1') 2>&1 | Out-Null
