@@ -45,6 +45,7 @@ scripts/lifecycle/*.py             纯逻辑核心（可离线测试）：
   stack_manifest.py                stack_id、manifest schema、指纹、PID 复用校验
   stack_ownership.py               创建时登记（register_process；无名称/regex 认领）
   stack_register.py                registration CLI（唯一 ownership 授予入口）
+  spawn_attest.py                  spawn_attested：/proc marker-attested PX4 daemon 登记
   register_launcher.py             Windows 进程创建即登记（subprocess.Popen，PID/pid-file）
   generate_sitl_wrapper.ps1        SITL wrapper 生成（GUI 创建时登记、剥离名称杀）
   process_table.py                 Windows/WSL/Fake 进程表后端
@@ -96,6 +97,25 @@ scripts/validate_lifecycle.ps1     lifecycle 验证入口
   停止时拒绝操作并 fail closed；
 - `logs/` 已在 `.gitignore`，manifest 属于 run-scoped 运行产物，不入库。
 - **Ownership 只在创建时授予**：禁止扫描系统进程按名称/regex 认领（P0.1）。
+
+### 4.1 两种合法 ownership（P0.2）
+
+1. `at_creation`：由我们直接 `Popen/CreateProcess`/`setsid` 创建并当场登记 PID/PGID。
+2. `spawn_attested`：不是我们直接创建的进程，但由已登记 launcher 间接产生，且能通过
+   **可重复的结构证据**证明属于当前 stack。当前唯一使用场景：28com SITL 链把最终 PX4
+   daemon 化到独立 SID/PGID。证据链（全部必须成立，缺一不可）：
+   - `/proc/<pid>/environ` 继承 `RFLY_STACK_ID == stack_id`（我们控制的 SITL wrapper 在
+     调用 28com 链前注入；这是**主要证明**）；
+   - 进程 start time 晚于已登记的 `wsl:px4_build_session` 启动时间；
+   - `/proc/<pid>/exe` 指向 PX4 SITL executable（`px4_sitl_default`）；
+   - `/proc/<pid>/cmdline` 带 PX4 instance index（`-i 1/2`）并匹配预期形态；
+   - 登记发生在当前 SITL launch transaction（wrapper 内一次 attestation 调用）；
+   - manifest 记录：`ownership_grant=spawn_attested`、`ownership_parent_role`、
+     `stack_marker`、`simulation_instance_id`、pid/pgid/sid/start_time/exe/
+     cmdline_fingerprint/ownership_evidence、reason。
+
+名称/regex 只用于 detection / role identification，**不能赋予 ownership**。marker 缺失或
+错误时一律 unknown + fail closed，不允许降级为名称扫描认领。
 
 ## 5. Inspect（只读）
 
@@ -229,6 +249,13 @@ ros_master_alive / mavros_uav1_connected / mavros_uav2_connected / course_ready
 9. **权限**：AGENTS.md §6 更新 Green（只读 inspect/DryRun/离线测试）、
    Yellow（lifecycle/launcher 代码修改）、Red（真实停止/PGID 强杀/计划任务/fresh-instance
    -Execute/首次 live 验证）。
+
+10. **spawn_attested（P0.2）**：`spawn_attest.py` 用 stack-marker（`RFLY_STACK_ID` 继承）
+    + start-after-parent + exe + instance-index + transaction 五重证据为 daemonized PX4
+    授予 `spawn_attested` ownership（`wsl:px4_uav1/uav2`）；stop 前对 spawn_attested 条目
+    重新验证 marker/identity，PGID 含未登记成员时禁止 group kill、降级为逐 PID 验证停止。
+    离线测试 Cases A–G 覆盖 old/current、marker 错误/缺失、stale PID、双 UAV 区分、
+    unowned-member 保护、spawn_attested stop 序列。
 
 **live 状态**：仍未执行。第一次 live 前展示 DryRun 输出、目标 PID/PGID、ownership 证明、
 stop 顺序与 fail-closed 条件；第一次 live 周期为 start → health gate → no-arm readiness →

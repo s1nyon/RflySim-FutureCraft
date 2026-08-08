@@ -122,6 +122,14 @@ Agent 允许停止的进程必须能证明由**当前项目、当前 stack insta
 command fingerprint；WSL 组件用 `setsid` 独立 PGID）。禁止扫描系统进程后按名称/regex
 猜测归属写入 manifest（旧的 `stack_record.py` 扫描式认领已删除）。
 
+**两种合法 ownership（P0.2）**：
+1. `at_creation`：直接创建并当场登记；
+2. `spawn_attested`：由已登记 launcher 间接产生，且通过可重复结构证据证明归属
+   （当前用于 28com SITL 链 daemon 化的 PX4：`RFLY_STACK_ID` 环境标记继承 +
+   start-after-parent + exe + cmdline instance index + transaction）。
+名称/regex 只用于 detection / role identification，**不能赋予 ownership**；
+marker 缺失/错误一律 unknown + fail closed。
+
 所有 live 启动/停止/fresh-instance 一律走 manifest 化安全入口：
 
 ```powershell

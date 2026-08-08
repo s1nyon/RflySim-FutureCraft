@@ -189,6 +189,21 @@ vision / task logic / behavior tree
 - **离线回归**：`tests/lifecycle_*.py` 10 项场景 + `validate_lifecycle.ps1` 全 PASS；
   Stage 2/6D/7/8 未回归；**live 仍未执行**（Red 操作需用户批准，见 AGENTS.md §6）。
 
+### 2.3.3 spawn_attested ownership（P0.2，live 已部分验证）
+
+- 28com SITL 链把最终 PX4 daemon 化到独立 SID/PGID，无法在创建点直接拿 PID →
+  引入第二种合法 ownership：**spawn_attested**（`scripts/lifecycle/spawn_attest.py`）。
+- 主证明：我们控制的 SITL wrapper 在调用 28com 链前注入 `RFLY_STACK_ID=<stack_id>` /
+  `RFLY_SIM_INSTANCE_ID=<stack_id>`；daemonized PX4 继承后，attestation 读
+  `/proc/<pid>/environ` 精确匹配 stack_id，并结合 start-after-parent、exe、cmdline
+  instance index、transaction 才能登记（`wsl:px4_uav1/uav2`）。
+- 名称/regex 只用于 detection，绝不赋予 ownership；marker 缺失/错误 → unknown + fail closed。
+- stop：spawn_attested 条目每次发信号前重新验证 marker + identity；PGID 含未登记成员时
+  禁止 group kill，降级为逐 PID 验证停止（Cases A–G 离线测试覆盖）。
+- **live 验证**：marker 继承在真实 PX4（`-i 1`/`-i 2`）上确认；两机以 spawn_attested
+  登记成功；健康门 5/5 READY；stop DryRun 只计划 owned 目标。readiness 本轮因
+  FAST-LIO 传感器话题门未过（环境），非生命周期缺陷。
+
 因此当前工作模型必须是：
 
 ```text

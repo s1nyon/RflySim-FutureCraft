@@ -23,6 +23,7 @@
 - 2026-08-08 executor subscriber 修复：`mission_executor.py` 导航验证改为持久 `rospy.Subscriber` + 内存缓存（`TopicCache`），不再循环 `wait_for_message()`；新增离线回归测试并纳入 `validate_stage7.ps1`；cold-start readiness 新增 odom relay 初始化等待（`STAGE7_ODOM_INIT_TIMEOUT_SEC`），与消息超时分离。离线 Stage 6C/6D/7/8 验证通过；**live 完整双机错时穿隧道已通过**（3 次 fresh-instance 干净成功：`stage7-20260807T133813Z-2617`、`T134731Z-2508`、`T141751Z-3219`，各 14 段导航确认、41.5 s、零失败），另 1 次实例因 EGO 侧 UAV2 pos_cmd 偶发未发布失败（非 executor 回归）。D435i 多传感器载荷会拖垮 UE4 渲染导致 odom 断流，live 集成暂缓（`--sensor-mode full` 保留给后续视觉任务）。
 - 2026-08-08 P0 Safe Live Stack Lifecycle：live 仿真启动/停止/fresh-instance 改为 manifest 化安全流程（`stack_id` + 进程指纹 ownership、只读 inspect、graceful stop、健康门 fail-closed），`scripts/cleanup_sim_stack.ps1` / `restart_live_stack.ps1` 已封禁为 fail-fast hazard stub。设计见 `docs/2026-08-08-live-stack-lifecycle-design.md`，离线验证 `scripts/validate_lifecycle.ps1` 全部通过；**live 验证待用户批准后执行**（首次用户在场监督，随后 3→5 次 fresh-instance）。
 - 2026-08-08 P0.1 Safety Hardening：ownership 改为**创建时登记**（`stack_register.py`，删除名称/regex 扫描认领）、WSL 按独立 PGID 停止、`clean` 来自 stop 最终验证、健康状态按独立文件原子写、FAST-LIO/EGO/mission/recorder 创建时登记到同一 stack；离线回归全 PASS，**live 仍未执行**。
+- 2026-08-08 P0.2 spawn_attested ownership：daemonized PX4 SITL 经 `RFLY_STACK_ID` 环境标记继承 + `/proc` 结构证据获得第二种合法 ownership（`wsl:px4_uav1/uav2`）；stop 前重新验证 marker，PGID 含未登记成员时禁止 group kill；live 上 marker 继承与登记已验证，健康门 5/5 READY。
 - 地图：SLAMScene + 动态砖块方案已 live 验证可用；**不安装 UE Editor**，静态 UE 地图方案搁置（见 `docs/decisions/2026-08-07-no-ue-editor.md`）。
 
 待办：跨新实例的重复运行（3–5 次）、更长航段、目标感知与行为树任务集成、实机迁移。
