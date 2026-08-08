@@ -15,7 +15,7 @@ cd /d "%RFLYSIM_VCXSRV_DIR%"
 tasklist | find /i "vcxsrv.exe" >nul
 if errorlevel 1 (
   if defined STACK_MANIFEST (
-    "%PYTHON_EXE%" "%SCRIPT_DIR%..\scripts\lifecycle\register_launcher.py" --manifest "%STACK_MANIFEST%" --role "gui:VcXsrv" --command-line "%RFLYSIM_VCXSRV_DIR%\Xlaunch.exe -run config1.xlaunch" --file-path "%RFLYSIM_VCXSRV_DIR%\Xlaunch.exe" --arguments "-run config1.xlaunch" --working-directory "%RFLYSIM_VCXSRV_DIR%"
+    "%PYTHON_EXE%" "%SCRIPT_DIR%..\scripts\lifecycle\register_launcher.py" launch --manifest "%STACK_MANIFEST%" --role "gui:VcXsrv" --command-line "%RFLYSIM_VCXSRV_DIR%\Xlaunch.exe -run config1.xlaunch" --file-path "%RFLYSIM_VCXSRV_DIR%\Xlaunch.exe" --arguments "-run config1.xlaunch" --working-directory "%RFLYSIM_VCXSRV_DIR%"
     if errorlevel 1 echo [WARN] VcXsrv launcher registration failed.
   ) else (
     Xlaunch.exe -run config1.xlaunch
