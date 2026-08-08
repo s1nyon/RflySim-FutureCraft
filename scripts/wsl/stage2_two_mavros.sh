@@ -147,16 +147,10 @@ done
 write_health MAVROS_UAV1_CONNECTED "$uav1_ok" "uav1 mavros state connected=$uav1_ok"
 write_health MAVROS_UAV2_CONNECTED "$uav2_ok" "uav2 mavros state connected=$uav2_ok"
 
-course_ok=false
-for _attempt in $(seq 1 24); do
-  course_info="$(timeout 5s rostopic info /predicted_narrow_course/global_cloud 2>/dev/null || true)"
-  if [[ "$course_info" == *"Publishers:"* && "$course_info" != *"Publishers: None"* ]]; then
-    course_ok=true
-    break
-  fi
-  sleep 5
-done
-write_health COURSE_READY "$course_ok" "predicted narrow course cloud publisher=$course_ok"
+# NOTE: COURSE_READY is owned exclusively by start_predicted_course_two_uav.bat
+# (UE course load outcome). Stage 2 must NOT write it: the course cloud
+# publisher only appears later with the planner, so a stage2 write would
+# overwrite a true value with false (per-status single-producer rule).
 
 echo "[INFO] Stage 2 dual MAVROS headless launch started."
 echo "[INFO] Keeping this WSL session alive. Close this window to stop roscore and MAVROS."

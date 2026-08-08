@@ -24,25 +24,31 @@ if "%DRY_RUN%"=="1" (
   exit /b 0
 )
 
-if defined STACK_HEALTH_DIR (
-  for /f "delims=" %%w in ('powershell -NoLogo -NoProfile -Command "$p='%STACK_HEALTH_DIR%'; if($p -match '^([A-Za-z]):\\(.*)$'){ '/mnt/' + $matches[1].ToLower() + '/' + ($matches[2] -replace '\\','/') } else { $p.Replace('\','/') }"') do set "STACK_HEALTH_DIR_WSL=%%w"
-)
-if defined STACK_MANIFEST (
-  for /f "delims=" %%m in ('powershell -NoLogo -NoProfile -Command "$p='%STACK_MANIFEST%'; if($p -match '^([A-Za-z]):\\(.*)$'){ '/mnt/' + $matches[1].ToLower() + '/' + ($matches[2] -replace '\\','/') } else { $p.Replace('\','/') }"') do set "STACK_MANIFEST_WSL=%%m"
-)
+rem Convert Windows paths to WSL paths via direct PowerShell + file reads
+rem (for /f cannot handle quoted first tokens; keep goto structure, no parens).
+if not defined STACK_HEALTH_DIR goto no_health_dir
+powershell -NoLogo -NoProfile -Command "$p='%STACK_HEALTH_DIR%'; if($p -match '^([A-Za-z]):\\(.*)$'){ '/mnt/' + $matches[1].ToLower() + '/' + ($matches[2] -replace '\\','/') } else { $p.Replace('\','/') }" > "%TEMP%\stack_health_dir_wsl.txt"
+set /p STACK_HEALTH_DIR_WSL=<"%TEMP%\stack_health_dir_wsl.txt"
+:no_health_dir
+if not defined STACK_MANIFEST goto no_manifest
+powershell -NoLogo -NoProfile -Command "$p='%STACK_MANIFEST%'; if($p -match '^([A-Za-z]):\\(.*)$'){ '/mnt/' + $matches[1].ToLower() + '/' + ($matches[2] -replace '\\','/') } else { $p.Replace('\','/') }" > "%TEMP%\stack_manifest_wsl.txt"
+set /p STACK_MANIFEST_WSL=<"%TEMP%\stack_manifest_wsl.txt"
+:no_manifest
 
-if defined STACK_HEALTH_DIR_WSL (
-  start "futureAircraftSim MAVROS two" wsl -d %RFLYSIM_WSL_DISTRO% -e bash -lic "STACK_HEALTH_DIR='%STACK_HEALTH_DIR_WSL%' STACK_ID='%STACK_ID%' STACK_MANIFEST='%STACK_MANIFEST_WSL%' bash '%FUTURE_AIRCRAFT_SIM_WSL_DIR%/scripts/wsl/stage2_two_mavros.sh'"
-) else (
-  start "futureAircraftSim MAVROS two" wsl -d %RFLYSIM_WSL_DISTRO% -e bash -lic "bash '%FUTURE_AIRCRAFT_SIM_WSL_DIR%/scripts/wsl/stage2_two_mavros.sh'"
-)
+if not defined STACK_HEALTH_DIR_WSL goto launch_plain
+start "futureAircraftSim MAVROS two" wsl -d %RFLYSIM_WSL_DISTRO% -e bash -lic "STACK_HEALTH_DIR='%STACK_HEALTH_DIR_WSL%' STACK_ID='%STACK_ID%' STACK_MANIFEST='%STACK_MANIFEST_WSL%' bash '%FUTURE_AIRCRAFT_SIM_WSL_DIR%/scripts/wsl/stage2_two_mavros.sh'"
+goto launch_done
+:launch_plain
+start "futureAircraftSim MAVROS two" wsl -d %RFLYSIM_WSL_DISTRO% -e bash -lic "bash '%FUTURE_AIRCRAFT_SIM_WSL_DIR%/scripts/wsl/stage2_two_mavros.sh'"
+:launch_done
 
-if defined STACK_HEALTH_DIR_WSL (
-  wsl -d %RFLYSIM_WSL_DISTRO% -e bash -lic "STACK_HEALTH_DIR='%STACK_HEALTH_DIR_WSL%' bash '%FUTURE_AIRCRAFT_SIM_WSL_DIR%/scripts/wsl/stage2_health_check.sh' --wait-seconds 180"
-  if errorlevel 1 (
-    echo [ERROR] ROS/MAVROS health gate failed to become ready within 180s.
-    exit /b 1
-  )
-  echo [OK] ROS/MAVROS health gate ready.
-)
+if not defined STACK_HEALTH_DIR_WSL goto health_done
+wsl -d %RFLYSIM_WSL_DISTRO% -e bash -lic "STACK_HEALTH_DIR='%STACK_HEALTH_DIR_WSL%' bash '%FUTURE_AIRCRAFT_SIM_WSL_DIR%/scripts/wsl/stage2_health_check.sh' --wait-seconds 180"
+if errorlevel 1 goto health_fail
+echo [OK] ROS/MAVROS health gate ready.
+goto health_done
+:health_fail
+echo [ERROR] ROS/MAVROS health gate failed to become ready within 180s.
+exit /b 1
+:health_done
 exit /b 0

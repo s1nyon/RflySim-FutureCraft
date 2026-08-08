@@ -14,16 +14,17 @@ Name/regex is never sufficient: a process without the stack marker is unknown, p
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from lifecycle.process_table import parse_lstart_iso  # noqa: E402
 from lifecycle.stack_manifest import (  # noqa: E402
     command_line_fingerprint,
     load_manifest,
@@ -98,7 +99,7 @@ def read_proc_candidate(pid: int) -> Optional[dict]:
         exe = os.readlink(f"/proc/{pid}/exe")
         cwd = os.readlink(f"/proc/{pid}/cwd")
         result = subprocess.run(
-            ["ps", "-o", "pid=,ppid=,pgid=,sid=,lstart=,args=", "-p", str(pid)],
+            ["ps", "-o", "pid=,ppid=,pgid=,sid=,etimes=,args=", "-p", str(pid)],
             capture_output=True,
             text=True,
             timeout=10,
@@ -108,13 +109,17 @@ def read_proc_candidate(pid: int) -> Optional[dict]:
         parts = result.stdout.strip().split(None, 5)
         if len(parts) < 6:
             return None
-        _, _, pgid, sid, lstart, args = parts
+        _, _, pgid, sid, etimes, args = parts
+        start_epoch = time.time() - int(etimes)
+        start_time_utc = dt.datetime.fromtimestamp(start_epoch, tz=dt.timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
         return {
             "pid": int(pid),
             "pgid": int(pgid),
             "sid": int(sid),
-            "start_time_raw": lstart,
-            "start_time_utc": parse_lstart_iso(lstart),
+            "start_time_raw": f"etime {etimes}s",
+            "start_time_utc": start_time_utc,
             "exe": exe,
             "cwd": cwd,
             "cmdline": cmdline or args,
@@ -270,11 +275,14 @@ def _enumerate_marker_candidates(stack_id: str) -> List[dict]:
 
 
 def _cli_main() -> int:
+    argv = sys.argv[1:]
+    if argv and argv[0] == "attest":
+        argv = argv[1:]
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--parent-pid", type=int, default=None)
     parser.add_argument("--sim-instance-token", default=None)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     manifest = load_manifest(args.manifest)
     parent = _find_parent(manifest, args.parent_pid)
@@ -282,7 +290,18 @@ def _cli_main() -> int:
         print(f"[ERROR] no {PARENT_ROLE} entry in manifest (parent-pid={args.parent_pid})", file=sys.stderr)
         return 1
 
-    candidates = _enumerate_marker_candidates(manifest["stack_id"])
+    # Bounded retry: sitl_multiple_run_rfly.sh returns before the PX4 daemons
+    # fully daemonize; poll up to 60s for marker-attested candidates.
+    candidates: List[dict] = []
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        candidates = _enumerate_marker_candidates(manifest["stack_id"])
+        if any(
+            attestation_decision(c, manifest["stack_id"], parent, args.sim_instance_token)[0]
+            for c in candidates
+        ):
+            break
+        time.sleep(5)
     approved, rejected = attest_candidates(
         manifest, candidates, parent_entry=parent, sim_instance_token=args.sim_instance_token
     )
