@@ -117,6 +117,11 @@ Agent 允许停止的进程必须能证明由**当前项目、当前 stack insta
 必须同时满足 PID + 进程 start-time + command-line 指纹与
 `logs/live_stack/<stack_id>/stack_manifest.json` 中的 owned 记录一致（PID 复用保护）。
 
+**Ownership 只在创建时授予**（P0.1）：各 launcher 创建进程的瞬间拿到 PID/PGID 并立即
+通过 `scripts/lifecycle/stack_register.py` 登记（含 ownership reason、start time、
+command fingerprint；WSL 组件用 `setsid` 独立 PGID）。禁止扫描系统进程后按名称/regex
+猜测归属写入 manifest（旧的 `stack_record.py` 扫描式认领已删除）。
+
 所有 live 启动/停止/fresh-instance 一律走 manifest 化安全入口：
 
 ```powershell
@@ -145,6 +150,9 @@ stop/clean 验证失败时禁止自动 force retry，直接停止并向用户报
 - mission logic / tests / diagnostics
 - Windows/WSL 启动与验证脚本
 - 项目文档
+- lifecycle **只读 inspect**（`live_stack_inspect.ps1`）
+- lifecycle **DryRun**（`live_stack_stop.ps1 -DryRun`、`live_stack_fresh_instance.ps1 -DryRun`）
+- 离线 lifecycle 测试（`scripts\validate_lifecycle.ps1`）
 
 ### Yellow：可以调查，但修改前必须先向用户说明证据、影响面和设计
 
@@ -154,6 +162,8 @@ stop/clean 验证失败时禁止自动 force retry，直接停止并向用户报
 - 双机统一坐标系的大改
 - 大规模架构重构
 - 大范围改变 watchdog / geofence 安全语义
+- **lifecycle / launcher 代码修改**（`scripts/lifecycle/*`、`live_stack_*.ps1`、
+  启动链 bat/sh、health gate）——修改前说明影响面与设计
 
 ### Red：未经用户明确授权不得执行
 
@@ -162,6 +172,14 @@ stop/clean 验证失败时禁止自动 force retry，直接停止并向用户报
 - 破坏性 git history rewrite
 - 无备份覆盖外部 RflySim/CopterSim/PX4 运行资产
 - 修改原 `28com_sim` / `28com_uav` 工程来“迁就”本项目
+- **真实宿主机进程停止**（`live_stack_stop.ps1 -Execute`）
+- **PGID 强制终止**
+- **scheduled task 删除/修改**
+- **`fresh-instance -Execute`**
+- **第一次真实 live lifecycle 验证**
+
+Red 操作在首次启用前必须先向用户展示：DryRun 输出、实际目标 PID/PGID、ownership 证明、
+stop 顺序、fail-closed 条件；未经明确同意不得执行。
 
 ---
 

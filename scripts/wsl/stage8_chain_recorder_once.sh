@@ -4,6 +4,8 @@
 # publishes or arms.
 set -eo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lifecycle_common.sh"
 PROJECT_DIR="${FUTURE_AIRCRAFT_SIM_WSL_DIR:-/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/future_aircraft_sim}"
 REF_28COM_UAV_WSL_DIR="${REF_28COM_UAV_WSL_DIR:-/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/28com_sim/UAV_demo/28com_uav}"
 EGO_SWARM_WSL_DIR="${EGO_SWARM_WSL_DIR:-$PROJECT_DIR/external/ego-planner-swarm}"
@@ -19,6 +21,11 @@ else
 fi
 source "$PROJECT_DIR/scripts/wsl/stage7_run_context.sh"
 stage7_load_run_context "$PROJECT_DIR"
+
+RECORDER_SESSION_PGID="$(ps -o pgid= -p $$ | tr -d ' ')"
+stack_register wsl "$$" "$RECORDER_SESSION_PGID" "wsl:recorder_session" \
+  "stage8_chain_recorder_once.sh (read-only control-chain recorder + analyzer)" \
+  "created by stage8_chain_recorder_once.sh (self session registration before launch)"
 
 OUTPUT="$STAGE7_RUN_DIR/stage8_control_chain.jsonl"
 python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/stage8_control_chain_recorder.py" \

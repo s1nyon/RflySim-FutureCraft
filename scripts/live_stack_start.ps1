@@ -31,7 +31,9 @@ $stackId = 'stack-' + (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ') 
 $taskName = "\FutureAircraftSim_LiveStack_$stackId"
 $manifestDir = Join-Path $projectRoot "logs\live_stack\$stackId"
 $manifestPath = Join-Path $manifestDir 'stack_manifest.json'
-$healthDirWsl = ConvertTo-WslPath -Path $manifestDir
+$healthDir = Join-Path $manifestDir 'health'
+$healthDirWsl = ConvertTo-WslPath -Path $healthDir
+$contextFile = Join-Path $manifestDir 'stack_context.env'
 $gitCommit = ((& git -C $projectRoot rev-parse HEAD 2>$null) -join '')
 
 Write-Host "[live-stack-start] stack_id=$stackId"
@@ -40,11 +42,11 @@ Write-Host "[live-stack-start] manifest=$manifestPath"
 Write-Host "[live-stack-start] health_dir=$healthDirWsl"
 
 if ($DryRun) {
-    Write-Host '[DRY-RUN] 1. init run-scoped manifest (stack_id, git commit, start time, launcher identity, ROS master)'
-    Write-Host "[DRY-RUN] 2. create one-shot scheduled task $taskName (far-future /st, then /run) launching $startup --stack-id --health-dir"
-    Write-Host '[DRY-RUN] 3. wait for GUI processes (RflySim3D/CopterSim), record owned Windows processes into manifest'
-    Write-Host '[DRY-RUN] 4. snapshot WSL ownership (roscore/mavros/px4/sensor/fastlio/ego), simulation_instance_id, ROS master'
-    Write-Host '[DRY-RUN] 5. wait for health gate all-ready (GUI/ROSCORE/MAVROS_UAV1/MAVROS_UAV2/COURSE)'
+    Write-Host '[DRY-RUN] 1. init run-scoped manifest v2 (stack_id, git commit, start time, launcher identity, ROS master)'
+    Write-Host "[DRY-RUN] 2. create one-shot scheduled task $taskName (far-future /st, then /run) launching $startup --stack-id --health-dir --manifest"
+    Write-Host '[DRY-RUN] 3. write stack_context.env (STACK_ID/STACK_MANIFEST/STACK_HEALTH_DIR) for later runners'
+    Write-Host '[DRY-RUN] 4. launchers register owned processes AT CREATION (cmd windows via register_launcher.ps1; GUI via generated SITL wrapper; roscore/MAVROS via stage2 setsid)'
+    Write-Host '[DRY-RUN] 5. set simulation_instance_id + ROS master in manifest; wait for per-status health gate all-ready'
     Write-Host '[DRY-RUN] The manifest-recorded scheduled task is removed only by graceful stop (manifest-only).'
     exit 0
 }
@@ -54,12 +56,21 @@ if ($DryRun) {
     --launcher-kind scheduled_task --launcher-identity $taskName
 if ($LASTEXITCODE -ne 0) { throw 'stack manifest init failed' }
 
-$taskCmd = "cmd /c call `"$startup`" --stack-id $stackId --health-dir $manifestDir"
+$taskCmd = "cmd /c call `"$startup`" --stack-id $stackId --health-dir $healthDir --manifest $manifestPath"
 schtasks /create /tn $taskName /tr $taskCmd /sc once /st 00:00 /sd 01/01/2030 /ru $TaskUser /rl HIGHEST /f | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "schtasks /create failed: $taskName" }
 schtasks /run /tn $taskName | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "schtasks /run failed: $taskName" }
 Write-Host "[live-stack-start] scheduled task launched: $taskName"
+
+@(
+    "STACK_ID=$stackId",
+    "STACK_MANIFEST=$manifestPath",
+    "STACK_MANIFEST_WSL=$(ConvertTo-WslPath -Path $manifestPath)",
+    "STACK_HEALTH_DIR=$healthDir",
+    "STACK_HEALTH_DIR_WSL=$healthDirWsl"
+) | Set-Content -LiteralPath $contextFile -Encoding ASCII
+Write-Host "[live-stack-start] stack context: $contextFile"
 
 $guiDeadline = (Get-Date).AddSeconds(240)
 $guiOk = $false
@@ -76,12 +87,15 @@ if (-not $guiOk) {
     Write-Host '[ERROR] GUI stack did not come up within 240s; manifest written; inspect before stopping.' -ForegroundColor Red
 }
 
-& $python (Join-Path $lifecycle 'stack_record.py') --manifest $manifestPath --distro $Distro
+$simId = wsl -d $Distro -e bash -lic "bash '$(ConvertTo-WslPath -Path $projectRoot)/scripts/wsl/live_stack_wsl_ops.sh' sim-id" 2>$null | Select-Object -Last 1
+& $python (Join-Path $lifecycle 'stack_register.py') set-sim-id --manifest $manifestPath --simulation-instance-id $simId
 if ($LASTEXITCODE -ne 0) {
-    Write-Host '[WARN] ownership recording incomplete; inspect before proceeding.' -ForegroundColor Yellow
+    Write-Host '[WARN] simulation_instance_id not recorded; inspect before proceeding.' -ForegroundColor Yellow
 }
+$rosMasterUri = if ($env:ROS_MASTER_URI) { $env:ROS_MASTER_URI } else { 'http://127.0.0.1:11311' }
+& $python (Join-Path $lifecycle 'stack_register.py') set-ros-master --manifest $manifestPath --uri $rosMasterUri
 
-& $python (Join-Path $lifecycle 'health_probe.py') check --health-dir $manifestDir --wait-seconds 300
+& $python (Join-Path $lifecycle 'health_probe.py') check --health-dir $healthDir --wait-seconds 300
 if ($LASTEXITCODE -ne 0) {
     Write-Host '[ERROR] health gate not ready; fail closed - do not proceed to FAST-LIO/arming.' -ForegroundColor Red
     exit 1

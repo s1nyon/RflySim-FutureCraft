@@ -4,6 +4,7 @@ set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$SCRIPT_DIR/lifecycle_common.sh"
 REF_28COM_UAV_WSL_DIR="${REF_28COM_UAV_WSL_DIR:-/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/28com_sim/UAV_demo/28com_uav}"
 LOG_DIR="$PROJECT_ROOT/logs/stage2_mavros"
 ROS_MASTER_URI="${ROS_MASTER_URI:-http://127.0.0.1:11311}"
@@ -25,8 +26,11 @@ start_one() {
   local odom_parent_frame="${ns}_odom"
   local odom_child_frame="${ns}_base_link"
   local log_file="$LOG_DIR/${ns}_mavros.log"
-  nohup bash -lc "source /opt/ros/noetic/setup.bash; source '$REF_28COM_UAV_WSL_DIR/devel/setup.bash'; if [[ -f '$PROJECT_ROOT/future_aircraft_ws/devel/setup.bash' ]]; then source '$PROJECT_ROOT/future_aircraft_ws/devel/setup.bash'; else export ROS_PACKAGE_PATH='$PROJECT_ROOT/future_aircraft_ws/src':\${ROS_PACKAGE_PATH:-}; fi; export ROS_MASTER_URI='$ROS_MASTER_URI'; roslaunch multi_uav_mission rflysim_mavros_px4.launch uav_namespace:=$ns fcu_url:=$fcu_url tgt_system:=$sysid map_id_des:=$map_frame odom_parent_id_des:=$odom_parent_frame odom_child_id_des:=$odom_child_frame" >"$log_file" 2>&1 &
-  echo "[INFO] Started MAVROS namespace=$ns pid=$! log=$log_file"
+  local inner="source /opt/ros/noetic/setup.bash; source '$REF_28COM_UAV_WSL_DIR/devel/setup.bash'; if [[ -f '$PROJECT_ROOT/future_aircraft_ws/devel/setup.bash' ]]; then source '$PROJECT_ROOT/future_aircraft_ws/devel/setup.bash'; else export ROS_PACKAGE_PATH='$PROJECT_ROOT/future_aircraft_ws/src':\${ROS_PACKAGE_PATH:-}; fi; export ROS_MASTER_URI='$ROS_MASTER_URI'; roslaunch multi_uav_mission rflysim_mavros_px4.launch uav_namespace:=$ns fcu_url:=$fcu_url tgt_system:=$sysid map_id_des:=$map_frame odom_parent_id_des:=$odom_parent_frame odom_child_id_des:=$odom_child_frame"
+  setsid nohup bash -lc "$inner" >"$log_file" 2>&1 &
+  local pid=$!
+  stack_register wsl "$pid" "$pid" "wsl:mavros_${ns}" "bash -lc $inner" "created by stage2_two_mavros.sh start_one (setsid)"
+  echo "[INFO] Started MAVROS namespace=$ns pid=$pid log=$log_file"
 }
 
 start_px4_mavros_link() {
@@ -51,9 +55,11 @@ start_px4_mavros_link() {
     exit 1
   fi
 
-  if ! "$PX4_MAVLINK_BIN" --instance "$sysid" start -u "$px4_port" -o "$mavros_port" -r 4000000; then
-    echo "[WARN] PX4 instance=$sysid MAVROS link may already exist; continuing with stream setup." >&2
-  fi
+  local link_args="--instance $sysid start -u $px4_port -o $mavros_port -r 4000000"
+  setsid nohup "$PX4_MAVLINK_BIN" $link_args >"$LOG_DIR/px4_mavlink_${sysid}.log" 2>&1 &
+  local pxm_pid=$!
+  stack_register wsl "$pxm_pid" "$pxm_pid" "wsl:px4_mavlink_uav${sysid}" "$PX4_MAVLINK_BIN $link_args" "created by stage2_two_mavros.sh start_px4_mavros_link (setsid)"
+  sleep 2
   "$PX4_MAVLINK_BIN" --instance "$sysid" stream -u "$px4_port" -s LOCAL_POSITION_NED -r 30
   "$PX4_MAVLINK_BIN" --instance "$sysid" stream -u "$px4_port" -s ODOMETRY -r 30
   "$PX4_MAVLINK_BIN" --instance "$sysid" boot_complete
@@ -101,8 +107,10 @@ export ROS_IP="${ROS_IP:-127.0.0.1}"
 trap cleanup EXIT INT TERM
 
 if ! timeout 3s rostopic list >/dev/null 2>&1; then
-  nohup roscore >"$LOG_DIR/roscore.log" 2>&1 &
-  echo "[INFO] Started roscore pid=$! log=$LOG_DIR/roscore.log"
+  setsid nohup roscore >"$LOG_DIR/roscore.log" 2>&1 &
+  roscore_pid=$!
+  stack_register wsl "$roscore_pid" "$roscore_pid" "wsl:roscore" "/opt/ros/noetic/bin/roscore" "created by stage2_two_mavros.sh (setsid)"
+  echo "[INFO] Started roscore pid=$roscore_pid log=$LOG_DIR/roscore.log"
   sleep 5
 fi
 

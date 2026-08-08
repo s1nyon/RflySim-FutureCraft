@@ -168,6 +168,27 @@ vision / task logic / behavior tree
   （start → readiness → flight → graceful stop → verify clean），再做 3 次 fresh-instance
   （稳定后 5 次），每次记录 `startup_success` / `flight_success` / `shutdown_clean`。
 
+### 2.3.2 P0.1 Lifecycle Safety Hardening（2026-08-08）
+
+用户审阅后要求进入真实 `-Execute` 前补齐安全缺口，已全部落地（offline 验证通过）：
+
+- **Ownership 只在创建时授予**：`scripts/lifecycle/stack_record.py`（名称/regex 扫描认领）
+  已删除；`stack_register.py` 是唯一登记入口；Windows 由 `register_launcher.ps1`
+  （Process.Start -PassThru）与生成 SITL wrapper 在创建瞬间登记 GUI/cmd PID；
+  WSL 由 `lifecycle_common.sh stack_register()` 登记 roscore/MAVROS/px4-mavlink/
+  sensor bridge/FAST-LIO/EGO/mission/recorder 的 PID+PGID；
+- **WSL 独立 PGID**：受管组件 `setsid` 独立 session；stop 目标是已验证 owned PGID
+  （`kill -SIG -- -PGID`）；禁止全局 pkill / `wsl --shutdown`；
+- **clean=true 来自 stop 自身最终验证**（owned alive=0、无 orphan、无 stale、
+  无 signal 失败），不依赖调用方再 inspect；
+- **health 每状态独立文件**（`health/<STATUS>.json` 原子写，producer 只写自己的；
+  修复 `start_wsl_mavros_two.bat` 清空继承 STACK_ID/STACK_HEALTH_DIR 的 bug；
+  `live_stack_start.ps1` 写出 `stack_context.env`）；
+- **后续启动器登记**：stage7 fastlio/ego/flight 与 stage8 recorder 通过
+  `--stack-id`/`--manifest` 接入同一 stack 并创建时登记；
+- **离线回归**：`tests/lifecycle_*.py` 10 项场景 + `validate_lifecycle.ps1` 全 PASS；
+  Stage 2/6D/7/8 未回归；**live 仍未执行**（Red 操作需用户批准，见 AGENTS.md §6）。
+
 因此当前工作模型必须是：
 
 ```text
@@ -827,6 +848,11 @@ scripts\live_stack_inspect.ps1 -Manifest logs\live_stack\<stack_id>\stack_manife
 scripts\live_stack_stop.ps1 -Manifest <path> -DryRun   # 或 -Execute
 scripts\live_stack_fresh_instance.ps1 -DryRun
 ```
+
+后续运行器（FAST-LIO / EGO / flight / recorder）通过
+`--stack-id <id>` / `--manifest <path>`（或 `stack_context.env` 环境变量）接入当前
+stack，并在**创建进程的瞬间**登记 PID/PGID（`stack_register`）。没有 stack context
+时运行器只告警、不登记，相关进程在生命周期里表现为 unknown（fail closed，不会被自动停止）。
 
 典型飞行顺序：
 

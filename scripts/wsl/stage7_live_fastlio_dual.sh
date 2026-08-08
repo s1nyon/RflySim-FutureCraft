@@ -2,6 +2,8 @@
 # Keep this script LF-only for WSL execution.
 set -eo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lifecycle_common.sh"
 PROJECT_DIR="${FUTURE_AIRCRAFT_SIM_WSL_DIR:-/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/future_aircraft_sim}"
 REF_28COM_UAV_WSL_DIR="${REF_28COM_UAV_WSL_DIR:-/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/28com_sim/UAV_demo/28com_uav}"
 OUTPUT_DIR="$PROJECT_DIR/logs/stage7_live"
@@ -54,37 +56,41 @@ topic_has_publisher() {
   [[ "$info" == *"Publishers:"* && "$info" != *"Publishers: None"* ]]
 }
 
+SENSOR_PIDS=()
+SENSOR_PGIDS=()
+
 cleanup_sensor_bridges() {
-  local pattern='[r]flysim_sensor_bridge.py'
-  local cleanup_deadline
-  pkill -TERM -f "$pattern" >/dev/null 2>&1 || true
-  cleanup_deadline=$((SECONDS + 5))
-  while pgrep -f "$pattern" >/dev/null 2>&1 && (( SECONDS < cleanup_deadline )); do
-    sleep 1
+  # Registered handles only: SIGTERM -> wait -> verified SIGKILL per owned PGID/PID.
+  local idx pid pgid
+  for idx in "${!SENSOR_PIDS[@]}"; do
+    pid="${SENSOR_PIDS[$idx]}"
+    pgid="${SENSOR_PGIDS[$idx]}"
+    kill -TERM -- "-$pgid" >/dev/null 2>&1 || kill -TERM -- "$pid" >/dev/null 2>&1 || true
   done
-  if pgrep -f "$pattern" >/dev/null 2>&1; then
-    pkill -KILL -f "$pattern" >/dev/null 2>&1 || true
-    sleep 1
-  fi
-  if pgrep -f "$pattern" >/dev/null 2>&1; then
-    echo "[ERROR] stale RflySim sensor bridge processes survived cleanup" >&2
-    return 1
-  fi
+  sleep 2
+  for idx in "${!SENSOR_PIDS[@]}"; do
+    pid="${SENSOR_PIDS[$idx]}"
+    pgid="${SENSOR_PGIDS[$idx]}"
+    if kill -0 -- "-$pgid" >/dev/null 2>&1 || kill -0 -- "$pid" >/dev/null 2>&1; then
+      kill -KILL -- "-$pgid" >/dev/null 2>&1 || kill -KILL -- "$pid" >/dev/null 2>&1 || true
+    fi
+  done
+  sleep 1
 }
 
 FASTLIO_PID=""
 cleanup_stage7_run() {
   set +e
   if [[ -n "$FASTLIO_PID" ]] && kill -0 "$FASTLIO_PID" >/dev/null 2>&1; then
-    kill -TERM "$FASTLIO_PID" >/dev/null 2>&1
+    kill -TERM -- "-$FASTLIO_PID" >/dev/null 2>&1 || kill -TERM "$FASTLIO_PID" >/dev/null 2>&1
     for _attempt in $(seq 1 5); do
-      if ! kill -0 "$FASTLIO_PID" >/dev/null 2>&1; then
+      if ! kill -0 "$FASTLIO_PID" >/dev/null 2>&1 && ! kill -0 -- "-$FASTLIO_PID" >/dev/null 2>&1; then
         break
       fi
       sleep 1
     done
     if kill -0 "$FASTLIO_PID" >/dev/null 2>&1; then
-      kill -KILL "$FASTLIO_PID" >/dev/null 2>&1
+      kill -KILL -- "-$FASTLIO_PID" >/dev/null 2>&1 || kill -KILL "$FASTLIO_PID" >/dev/null 2>&1
     fi
     wait "$FASTLIO_PID" >/dev/null 2>&1
   fi
@@ -98,7 +104,7 @@ handle_shutdown() {
 cleanup_sensor_bridges
 trap cleanup_stage7_run EXIT
 trap handle_shutdown INT TERM
-nohup env ROS_NAMESPACE=/uav1 python3 \
+setsid nohup env ROS_NAMESPACE=/uav1 python3 \
   "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_sensor_bridge.py" \
   --psp-path "${PSP_PATH_LINUX:-/mnt/d/PX4PSP}" \
   --config "$PROJECT_DIR/config/rflysim_sensor_uav1.json" \
@@ -115,8 +121,13 @@ nohup env ROS_NAMESPACE=/uav1 python3 \
   --keepalive \
   __name:=rflysim_sensor_bridge \
   /uav1/rflysim/imu:=/uav1/rflysim/imu_raw >"$RUN_DIR/uav1_sensor_bridge.log" 2>&1 &
+SENSOR_PIDS+=("$!")
+SENSOR_PGIDS+=("$!")
+stack_register wsl "$!" "$!" "wsl:sensor_bridge_uav1" \
+  "python3 .../rflysim_sensor_bridge.py --copter-id 1 --sensor-mode lidar_only" \
+  "created by stage7_live_fastlio_dual.sh (setsid)"
 
-nohup env ROS_NAMESPACE=/uav2 python3 \
+setsid nohup env ROS_NAMESPACE=/uav2 python3 \
   "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_sensor_bridge.py" \
   --psp-path "${PSP_PATH_LINUX:-/mnt/d/PX4PSP}" \
   --config "$PROJECT_DIR/config/rflysim_sensor_uav2.json" \
@@ -133,6 +144,11 @@ nohup env ROS_NAMESPACE=/uav2 python3 \
   --keepalive \
   __name:=rflysim_sensor_bridge \
   /uav2/rflysim/imu:=/uav2/rflysim/imu_raw >"$RUN_DIR/uav2_sensor_bridge.log" 2>&1 &
+SENSOR_PIDS+=("$!")
+SENSOR_PGIDS+=("$!")
+stack_register wsl "$!" "$!" "wsl:sensor_bridge_uav2" \
+  "python3 .../rflysim_sensor_bridge.py --copter-id 2 --sensor-mode lidar_only" \
+  "created by stage7_live_fastlio_dual.sh (setsid)"
 
 RAW_TOPICS=(
   /uav1/rflysim/sensor_identity
@@ -163,9 +179,12 @@ for topic in "${RAW_TOPICS[@]}"; do
   fi
 done
 
-nohup roslaunch multi_uav_mission rflysim_fastlio_dual.launch rviz:=false \
+setsid nohup roslaunch multi_uav_mission rflysim_fastlio_dual.launch rviz:=false \
   >"$FASTLIO_LOG" 2>&1 &
 FASTLIO_PID=$!
+stack_register wsl "$FASTLIO_PID" "$FASTLIO_PID" "wsl:fastlio" \
+  "roslaunch multi_uav_mission rflysim_fastlio_dual.launch rviz:=false" \
+  "created by stage7_live_fastlio_dual.sh (setsid)"
 
 # Wait for the FAST-LIO odometry chain to come up before sampling readiness.
 # This is a publisher-presence gate (initialization wait), intentionally

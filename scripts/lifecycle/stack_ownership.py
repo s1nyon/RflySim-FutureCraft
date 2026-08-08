@@ -1,35 +1,11 @@
-"""Ownership recording: Windows process-tree descendants and WSL snapshot roles."""
+"""Ownership: registration-at-creation only. Scanning/name/regex claiming is forbidden."""
 
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Sequence
+from typing import Optional, Sequence
 
 from .stack_manifest import utc_now_iso
-
-WINDOWS_STACK_NAMES = {"RflySim3D", "CopterSim", "QGroundControl"}
-
-STAGE_CMD_PATTERNS = (
-    "start_predicted_course",
-    "start_two_uav",
-    "start_rflysim_sitl_two",
-    "start_wsl_mavros_two",
-    "future_aircraft_stage2",
-)
-
-WSL_ROLE_PATTERNS = [
-    (r"/bin/roscore|bin/roscore|roscore$", "wsl:roscore"),
-    (r"px4-mavlink", "wsl:px4_mavlink"),
-    (r"rflysim_mavros_px4\.launch.*uav_namespace:=uav1", "wsl:mavros_uav1"),
-    (r"rflysim_mavros_px4\.launch.*uav_namespace:=uav2", "wsl:mavros_uav2"),
-    (r"(^|/)px4(\s|$)|bin/px4", "wsl:px4_sitl"),
-    (r"rflysim_sensor_bridge\.py", "wsl:sensor_bridge"),
-    (r"rflysim_fastlio_dual", "wsl:fastlio"),
-    (r"rflysim_ego_swarm_dual", "wsl:ego_swarm"),
-    (r"mission_executor\.py", "wsl:mission_executor"),
-    (r"(predicted_)?narrow_course_cloud_server\.py", "wsl:course_cloud"),
-    (r"stage2_two_mavros\.sh", "wsl:stage2_script"),
-]
 
 
 def set_launcher(
@@ -63,12 +39,14 @@ def record_stop(
     reason: str,
     clean: bool,
     force_reasons: Optional[Sequence[str]] = None,
+    failure_reasons: Optional[Sequence[str]] = None,
 ) -> None:
     manifest["stop"] = {
         "last_stop_reason": reason,
         "last_stop_utc": utc_now_iso(),
         "clean": clean,
         "force_reasons": list(force_reasons or []),
+        "failure_reasons": list(failure_reasons or []),
     }
 
 
@@ -76,116 +54,46 @@ def record_health(manifest: dict, health: dict) -> None:
     manifest["health"] = health
 
 
-def find_descendants(processes: Sequence, root_pid: int) -> List:
-    """Return root + all transitive children by ParentProcessId."""
-    by_parent: dict = {}
-    for proc in processes:
-        by_parent.setdefault(int(getattr(proc, "parent_pid")), []).append(proc)
-    result: List = []
-    for proc in processes:
-        if int(proc.pid) == int(root_pid):
-            result.append(proc)
-            break
-    queue = [root_pid]
-    seen = set()
-    while queue:
-        pid = queue.pop(0)
-        if pid in seen:
-            continue
-        seen.add(pid)
-        for proc in by_parent.get(pid, []):
-            result.append(proc)
-            queue.append(int(proc.pid))
-    return result
+def register_process(
+    manifest: dict,
+    side: str,
+    pid: int,
+    role: str,
+    command_line: str,
+    start_time_utc: Optional[str] = None,
+    name: Optional[str] = None,
+    pgid: Optional[int] = None,
+    reason: Optional[str] = None,
+) -> dict:
+    """Grant ownership at creation. The caller must have obtained pid/pgid when it created the process."""
+    if side not in ("windows", "wsl"):
+        raise ValueError(f"invalid side: {side}")
+    if not isinstance(pid, int) or pid <= 0:
+        raise ValueError(f"invalid pid: {pid}")
+    if not reason:
+        raise ValueError("ownership grant requires an explicit reason (how the launcher obtained the PID at creation)")
+    if not command_line:
+        raise ValueError("ownership grant requires the command line captured at creation")
 
+    target = manifest[f"{side}_processes"]
+    existing = {int(e["pid"]) for e in target}
+    if int(pid) in existing:
+        raise ValueError(f"duplicate registration for side={side} pid={pid}; fix the launcher")
 
-def guess_windows_role(proc) -> str:
-    name = str(getattr(proc, "name", "")).lower()
-    if name == "rflysim3d":
-        return "gui:RflySim3D"
-    if name == "coptersim":
-        return "gui:CopterSim"
-    if name == "qgroundcontrol":
-        return "gui:QGroundControl"
-    if name == "cmd.exe":
-        command_line = str(getattr(proc, "command_line", ""))
-        if any(pattern in command_line.lower() for pattern in STAGE_CMD_PATTERNS):
-            return "cmd:stage_orchestrator"
-    return "win:other"
-
-
-def _entry_for_proc(proc, role: str) -> dict:
     entry = {
-        "pid": int(proc.pid),
-        "name": str(getattr(proc, "name", "")),
-        "start_time_utc": str(getattr(proc, "start_time_utc", "")),
-        "command_line": str(getattr(proc, "command_line", "")),
-        "role": role,
+        "pid": int(pid),
+        "name": str(name or ""),
+        "start_time_utc": start_time_utc or utc_now_iso(),
+        "command_line": str(command_line),
+        "role": str(role),
         "verified_at_utc": utc_now_iso(),
+        "ownership": {
+            "granted": "at_creation",
+            "reason": str(reason),
+            "granted_at_utc": utc_now_iso(),
+        },
     }
-    raw = getattr(proc, "start_time_raw", None)
-    if raw:
-        entry["start_time_raw"] = str(raw)
-    pgid = getattr(proc, "pgid", None)
     if pgid is not None:
         entry["pgid"] = int(pgid)
+    target.append(entry)
     return entry
-
-
-def record_windows_processes(
-    manifest: dict,
-    table,
-    launcher_pid: Optional[int] = None,
-    min_start_time_utc: Optional[str] = None,
-) -> List[dict]:
-    processes = table.snapshot()
-    if launcher_pid is not None:
-        candidates = find_descendants(processes, launcher_pid)
-    else:
-        candidates = [p for p in processes if str(getattr(p, "name", "")) in WINDOWS_STACK_NAMES]
-    if min_start_time_utc:
-        from .stack_manifest import parse_utc
-
-        min_time = parse_utc(min_start_time_utc)
-        if min_time is not None:
-            candidates = [
-                p
-                for p in candidates
-                if (lambda t: t is None or t >= min_time)(parse_utc(getattr(p, "start_time_utc", "")))
-            ]
-    existing = {int(e["pid"]) for e in manifest["windows_processes"]}
-    recorded: List[dict] = []
-    for proc in candidates:
-        if int(proc.pid) in existing:
-            continue
-        entry = _entry_for_proc(proc, guess_windows_role(proc))
-        manifest["windows_processes"].append(entry)
-        existing.add(int(proc.pid))
-        recorded.append(entry)
-    return recorded
-
-
-def _wsl_role_for_line(command_line: str) -> Optional[str]:
-    for pattern, role in WSL_ROLE_PATTERNS:
-        if re.search(pattern, command_line):
-            return role
-    return None
-
-
-def record_wsl_processes(manifest: dict, snapshot_lines: Sequence[str]) -> List[dict]:
-    from .process_table import parse_wsl_snapshot
-
-    processes = parse_wsl_snapshot("\n".join(snapshot_lines))
-    existing = {int(e["pid"]) for e in manifest["wsl_processes"]}
-    recorded: List[dict] = []
-    for proc in processes:
-        role = _wsl_role_for_line(proc.command_line)
-        if role is None:
-            continue
-        if int(proc.pid) in existing:
-            continue
-        entry = _entry_for_proc(proc, role)
-        manifest["wsl_processes"].append(entry)
-        existing.add(int(proc.pid))
-        recorded.append(entry)
-    return recorded

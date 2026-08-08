@@ -2,6 +2,8 @@
 # Keep this script LF-only for WSL execution.
 set -Eeo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lifecycle_common.sh"
 ALLOW_ARM=false
 SIMULATION_ONLY=false
 for arg in "$@"; do
@@ -51,6 +53,10 @@ python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/stage7_ru
 exec > >(tee -a "$RUNNER_LOG") 2>&1
 
 RUN_PHASE="environment"
+FLIGHT_SESSION_PGID="$(ps -o pgid= -p $$ | tr -d ' ')"
+stack_register wsl "$$" "$FLIGHT_SESSION_PGID" "wsl:flight_runner_session" \
+  "stage7_live_slam_ego_swarm_flight.sh (mission executor + setpoint bridges + watchdog session)" \
+  "created by stage7_live_slam_ego_swarm_flight.sh (self session registration before launch)"
 record_early_failure() {
   local exit_code=$?
   trap - ERR
@@ -166,7 +172,7 @@ start_keepalive() {
   local x="$3"
   local y="$4"
   local z="$5"
-  nohup python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/ego_swarm_setpoint_bridge.py" \
+  setsid nohup python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/ego_swarm_setpoint_bridge.py" \
     --setpoint-topic "$topic" \
     --planner-topic "$planner_topic" \
     --initial-x "$x" \
@@ -176,11 +182,14 @@ start_keepalive() {
     --yaw 0.0 \
     --rate-hz 20 >"$OUTPUT_DIR/$(basename "$topic" | tr '/' '_')_keepalive.log" 2>&1 &
   KEEPALIVE_PIDS+=("$!")
+  stack_register wsl "$!" "$!" "wsl:setpoint_bridge" \
+    "python3 .../ego_swarm_setpoint_bridge.py --setpoint-topic $topic" \
+    "created by stage7_live_slam_ego_swarm_flight.sh start_keepalive (setsid)"
 }
 
 start_watchdog() {
   local uav="$1"
-  nohup python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/course_geofence_watchdog.py" \
+  setsid nohup python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/course_geofence_watchdog.py" \
     --state-topic "/$uav/mavros/state" --odom-topic "/$uav/mavros/local_position/odom" \
     --set-mode-service "/$uav/mavros/set_mode" \
     --min-x -1 --max-x 17 --min-y -2 --max-y 7 --min-z -0.5 --max-z 2 \
@@ -188,6 +197,9 @@ start_watchdog() {
     --output "$OUTPUT_DIR/${uav}_watchdog_events.jsonl" \
     >"$OUTPUT_DIR/${uav}_geofence_watchdog.log" 2>&1 &
   WATCHDOG_PIDS+=("$!")
+  stack_register wsl "$!" "$!" "wsl:geofence_watchdog_${uav}" \
+    "python3 .../course_geofence_watchdog.py --state-topic /$uav/mavros/state" \
+    "created by stage7_live_slam_ego_swarm_flight.sh start_watchdog (setsid)"
 }
 
 RUN_PHASE="smoke_check"

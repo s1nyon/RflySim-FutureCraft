@@ -12,11 +12,13 @@ set STAGE2_YAW_STR=%PREDICTED_COURSE_YAW_STR%
 set DRY_RUN=0
 set STACK_ID=
 set STACK_HEALTH_DIR=
+set STACK_MANIFEST=
 :parse_args
 if "%~1"=="" goto args_done
 if /I "%~1"=="--dry-run" set DRY_RUN=1
 if /I "%~1"=="--stack-id" set "STACK_ID=%~2"
 if /I "%~1"=="--health-dir" set "STACK_HEALTH_DIR=%~2"
+if /I "%~1"=="--manifest" set "STACK_MANIFEST=%~2"
 shift & goto parse_args
 :args_done
 

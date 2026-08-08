@@ -16,7 +16,19 @@ if /I "%~1"=="--dry-run" (
   exit /b 0
 )
 call "%SCRIPT_DIR%start_vcxsrv.bat"
-start "futureAircraftSim SITL two" cmd /k call "%SCRIPT_DIR%start_rflysim_sitl_two.bat"
+if defined STACK_MANIFEST (
+  powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%..\scripts\lifecycle\register_launcher.ps1" `
+    -Manifest "%STACK_MANIFEST%" -Role "cmd:stage_orchestrator" -CommandLine "%SCRIPT_DIR%start_rflysim_sitl_two.bat"
+  if errorlevel 1 echo [WARN] SITL launcher registration failed.
+) else (
+  start "futureAircraftSim SITL two" cmd /k call "%SCRIPT_DIR%start_rflysim_sitl_two.bat"
+)
 powershell -NoLogo -NoProfile -Command "Start-Sleep -Seconds ([int]$env:STAGE2_BOOT_WAIT_SECONDS)"
-start "futureAircraftSim MAVROS two" cmd /k call "%SCRIPT_DIR%start_wsl_mavros_two.bat"
+if defined STACK_MANIFEST (
+  powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%..\scripts\lifecycle\register_launcher.ps1" `
+    -Manifest "%STACK_MANIFEST%" -Role "cmd:stage_orchestrator" -CommandLine "%SCRIPT_DIR%start_wsl_mavros_two.bat"
+  if errorlevel 1 echo [WARN] MAVROS launcher registration failed.
+) else (
+  start "futureAircraftSim MAVROS two" cmd /k call "%SCRIPT_DIR%start_wsl_mavros_two.bat"
+)
 exit /b 0

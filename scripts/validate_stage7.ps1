@@ -342,13 +342,13 @@ if (Test-Path -LiteralPath $fastLioRunnerPath) {
     if ($fastLioRunner -notmatch 'SENSOR_STARTUP_DEADLINE') {
         $contractErrors += 'stage7_live_fastlio_dual.sh must enforce the sensor startup timeout with a deadline'
     }
-    foreach ($cleanupPattern in @('cleanup_sensor_bridges', 'pkill -KILL', 'pgrep -f')) {
-        if ($fastLioRunner -notmatch $cleanupPattern) {
+    foreach ($cleanupPattern in @('cleanup_sensor_bridges', 'SENSOR_PIDS', 'SENSOR_PGIDS', 'kill -TERM -- "-$pgid"')) {
+        if (-not $fastLioRunner.Contains($cleanupPattern)) {
             $contractErrors += "stage7_live_fastlio_dual.sh missing bounded stale bridge cleanup: $cleanupPattern"
         }
     }
-    foreach ($lifecyclePattern in @('cleanup_stage7_run', 'FASTLIO_PID', 'kill -TERM "\$FASTLIO_PID"', 'handle_shutdown')) {
-        if ($fastLioRunner -notmatch $lifecyclePattern) {
+    foreach ($lifecyclePattern in @('cleanup_stage7_run', 'FASTLIO_PID', 'kill -TERM -- "-$FASTLIO_PID"', 'handle_shutdown')) {
+        if (-not $fastLioRunner.Contains($lifecyclePattern)) {
             $contractErrors += "stage7_live_fastlio_dual.sh missing owned FAST-LIO lifecycle cleanup: $lifecyclePattern"
         }
     }

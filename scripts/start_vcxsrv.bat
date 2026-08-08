@@ -12,5 +12,15 @@ if /I "%~1"=="--dry-run" (
   exit /b 0
 )
 cd /d "%RFLYSIM_VCXSRV_DIR%"
-tasklist | find /i "vcxsrv.exe" >nul || Xlaunch.exe -run config1.xlaunch
+tasklist | find /i "vcxsrv.exe" >nul
+if errorlevel 1 (
+  if defined STACK_MANIFEST (
+    powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%..\scripts\lifecycle\register_launcher.ps1" `
+      -Manifest "%STACK_MANIFEST%" -Role "gui:VcXsrv" -FilePath "%RFLYSIM_VCXSRV_DIR%\Xlaunch.exe" `
+      -Arguments "-run config1.xlaunch" -WorkingDirectory "%RFLYSIM_VCXSRV_DIR%"
+    if errorlevel 1 echo [WARN] VcXsrv launcher registration failed.
+  ) else (
+    Xlaunch.exe -run config1.xlaunch
+  )
+)
 exit /b 0

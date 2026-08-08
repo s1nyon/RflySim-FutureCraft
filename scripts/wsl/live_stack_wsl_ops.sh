@@ -14,6 +14,8 @@ usage: live_stack_wsl_ops.sh <command> [args]
   sim-id                            print current PX4 simulation instance id
   alive <pid>                       exit 0 if the explicit pid is alive
   signal <SIG> <pid>                send SIG (INT|TERM|KILL) to the explicit pid
+  alive-group <pgid>                exit 0 if the explicit process group is alive
+  signal-group <SIG> <pgid>         send SIG (INT|TERM|KILL) to the explicit process group
 EOF
   exit 2
 }
@@ -43,6 +45,24 @@ case "${1:-}" in
       usage
     fi
     kill -"$sig" -- "$pid"
+    ;;
+  alive-group)
+    pgid="${2:-}"
+    if [[ ! "$pgid" =~ ^[0-9]+$ ]]; then
+      usage
+    fi
+    kill -0 -- "-$pgid" 2>/dev/null
+    ;;
+  signal-group)
+    sig="${2:-}"
+    pgid="${3:-}"
+    if [[ "$sig" != INT && "$sig" != TERM && "$sig" != KILL ]]; then
+      usage
+    fi
+    if [[ ! "$pgid" =~ ^[0-9]+$ ]]; then
+      usage
+    fi
+    kill -"$sig" -- "-$pgid"
     ;;
   *)
     usage

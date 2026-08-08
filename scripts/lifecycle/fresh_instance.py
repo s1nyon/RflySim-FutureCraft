@@ -53,6 +53,7 @@ def _report_counts(report) -> dict:
     return {
         "owned_alive": owned_alive,
         "owned_exited": owned_exited,
+        "orphans": int(getattr(report, "orphans", 0)),
         "stale": stale,
         "unknown": unknown,
         "ports_unknown": ports_unknown,
@@ -64,6 +65,8 @@ def verify_clean_decision(report) -> tuple:
     reasons: list = []
     if counts["owned_alive"]:
         reasons.append(f"{counts['owned_alive']} owned process(es) still alive")
+    if counts["orphans"]:
+        reasons.append(f"{counts['orphans']} owned orphan process group(s) still alive")
     if counts["stale"]:
         reasons.append(f"{counts['stale']} stale/PID-reuse record(s)")
     if counts["unknown"]:
@@ -75,5 +78,6 @@ def verify_clean_decision(report) -> tuple:
 
 def can_proceed_to_start(report) -> bool:
     if hasattr(report, "fail_closed"):
-        return not bool(report.fail_closed)
+        counts = _report_counts(report)
+        return not bool(report.fail_closed) and counts["orphans"] == 0
     return not _report_counts(report)["stale"] and not _report_counts(report)["unknown"] and not _report_counts(report)["ports_unknown"]

@@ -2,6 +2,8 @@
 # Keep this script LF-only for WSL execution.
 set -eo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lifecycle_common.sh"
 PROJECT_DIR="${FUTURE_AIRCRAFT_SIM_WSL_DIR:-/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/future_aircraft_sim}"
 EGO_SWARM_WSL_DIR="${EGO_SWARM_WSL_DIR:-$PROJECT_DIR/external/ego-planner-swarm}"
 OUTPUT_DIR="$PROJECT_DIR/logs/stage7_live"
@@ -34,4 +36,8 @@ else
 fi
 
 EGO_LOG="$STAGE7_RUN_DIR/ego_swarm_dual.log"
+EGO_SESSION_PGID="$(ps -o pgid= -p $$ | tr -d ' ')"
+stack_register wsl "$$" "$EGO_SESSION_PGID" "wsl:ego_swarm_session" \
+  "stage7_live_ego_swarm_dual.sh -> roslaunch multi_uav_mission rflysim_ego_swarm_dual.launch" \
+  "created by stage7_live_ego_swarm_dual.sh (self session registration before exec)"
 exec roslaunch multi_uav_mission rflysim_ego_swarm_dual.launch 2>&1 | tee "$EGO_LOG"

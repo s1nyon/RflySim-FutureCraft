@@ -16,7 +16,7 @@ if __name__ == "__main__" and __package__ is None:
 
     raise SystemExit(_self._cli_main())
 
-from .process_table import find_by_pid
+from .process_table import find_by_pgid, find_by_pid
 from .stack_manifest import entry_matches_process, load_manifest
 
 WINDOWS_STACK_NAMES = {"RflySim3D", "CopterSim", "QGroundControl"}
@@ -63,6 +63,7 @@ class InspectReport:
     stack_id: Optional[str] = None
     owned: List[OwnedStatus] = field(default_factory=list)
     stale: List[OwnedStatus] = field(default_factory=list)
+    orphans: List[OwnedStatus] = field(default_factory=list)
     unknown_suspicious: List = field(default_factory=list)
     ports: List[PortStatus] = field(default_factory=list)
     ros: RosStatus = field(default_factory=RosStatus)
@@ -89,18 +90,34 @@ class RosProbe:
         raise NotImplementedError
 
 
-def _classify_entries(entries: Sequence[dict], processes: Sequence) -> tuple:
+def _classify_entries(entries: Sequence[dict], processes: Sequence, side: str = "windows") -> tuple:
     owned: List[OwnedStatus] = []
     stale: List[OwnedStatus] = []
+    orphans: List[OwnedStatus] = []
     for entry in entries:
         proc = find_by_pid(processes, entry["pid"])
-        if proc is None:
-            owned.append(OwnedStatus(entry=entry, status="owned_but_exited"))
-        elif entry_matches_process(entry, proc):
-            owned.append(OwnedStatus(entry=entry, status="owned_and_alive"))
+        pgid = entry.get("pgid")
+        if side == "wsl" and pgid is not None:
+            group = find_by_pgid(processes, pgid)
+            leader_ok = proc is not None and entry_matches_process(entry, proc)
+            if leader_ok:
+                owned.append(OwnedStatus(entry=entry, status="owned_and_alive"))
+            elif group:
+                status = OwnedStatus(entry=entry, status="owned_orphan")
+                owned.append(status)
+                orphans.append(status)
+            elif proc is None:
+                owned.append(OwnedStatus(entry=entry, status="owned_but_exited"))
+            else:
+                stale.append(OwnedStatus(entry=entry, status="stale_pid_reuse"))
         else:
-            stale.append(OwnedStatus(entry=entry, status="stale_pid_reuse"))
-    return owned, stale
+            if proc is None:
+                owned.append(OwnedStatus(entry=entry, status="owned_but_exited"))
+            elif entry_matches_process(entry, proc):
+                owned.append(OwnedStatus(entry=entry, status="owned_and_alive"))
+            else:
+                stale.append(OwnedStatus(entry=entry, status="stale_pid_reuse"))
+    return owned, stale, orphans
 
 
 def _unknown_windows(processes: Sequence, manifest: dict) -> List:
@@ -116,10 +133,13 @@ def _unknown_windows(processes: Sequence, manifest: dict) -> List:
 
 def _unknown_wsl(processes: Sequence, manifest: dict) -> List:
     known_pids = {int(e["pid"]) for e in manifest["wsl_processes"]}
+    known_pgids = {int(e["pgid"]) for e in manifest["wsl_processes"] if e.get("pgid")}
     unknown: List = []
     for proc in processes:
         if int(proc.pid) in known_pids:
             continue
+        if proc.pgid is not None and int(proc.pgid) in known_pgids:
+            continue  # owned via the registered PGID (orphan/child of the group)
         command_line = str(getattr(proc, "command_line", "")).lower()
         if any(pattern.search(command_line) for pattern in WSL_SUSPICIOUS_PATTERNS):
             unknown.append(proc)
@@ -138,12 +158,13 @@ def inspect_stack(
 
     owned: List[OwnedStatus] = []
     stale: List[OwnedStatus] = []
-    w_owned, w_stale = _classify_entries(manifest["windows_processes"], win_procs)
-    s_owned, s_stale = _classify_entries(manifest["wsl_processes"], wsl_procs)
+    w_owned, w_stale, _ = _classify_entries(manifest["windows_processes"], win_procs, side="windows")
+    s_owned, s_stale, s_orphans = _classify_entries(manifest["wsl_processes"], wsl_procs, side="wsl")
     owned.extend(w_owned)
     owned.extend(s_owned)
     stale.extend(w_stale)
     stale.extend(s_stale)
+    orphans = list(s_orphans)
 
     unknown = _unknown_windows(win_procs, manifest) + _unknown_wsl(wsl_procs, manifest)
 
@@ -171,6 +192,7 @@ def inspect_stack(
         stack_id=manifest.get("stack_id"),
         owned=owned,
         stale=stale,
+        orphans=orphans,
         unknown_suspicious=unknown,
         ports=ports,
         ros=ros,
@@ -201,6 +223,10 @@ def report_to_dict(report: InspectReport) -> dict:
             {"entry": item.entry, "status": item.status}
             for item in report.stale
         ],
+        "orphans": [
+            {"entry": item.entry, "status": item.status}
+            for item in report.orphans
+        ],
         "unknown_suspicious": [_proc_to_dict(p) for p in report.unknown_suspicious],
         "ports": [
             {
@@ -222,7 +248,7 @@ def report_to_dict(report: InspectReport) -> dict:
 
 
 def summarize(report: InspectReport) -> dict:
-    counts: dict = {"owned_and_alive": 0, "owned_but_exited": 0, "stale_pid_reuse": 0}
+    counts: dict = {"owned_and_alive": 0, "owned_but_exited": 0, "owned_orphan": 0, "stale_pid_reuse": 0}
     for item in report.owned:
         counts[item.status] = counts.get(item.status, 0) + 1
     for item in report.stale:
@@ -231,6 +257,7 @@ def summarize(report: InspectReport) -> dict:
         "stack_id": report.stack_id,
         "fail_closed": report.fail_closed,
         **counts,
+        "orphans": len(report.orphans),
         "unknown_suspicious": len(report.unknown_suspicious),
         "ports_occupied_by_unknown": sum(1 for p in report.ports if p.occupied and p.owned is False),
     }

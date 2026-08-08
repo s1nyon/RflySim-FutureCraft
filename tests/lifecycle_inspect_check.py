@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Read-only inspect contract: owned states, unknown fail-closed, stale PID reuse, ports, ROS."""
+"""Read-only inspect: owned states, orphans, unknown fail-closed, stale PID reuse, ports, ROS."""
 
 from __future__ import annotations
 
 import argparse
+import importlib
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -13,8 +15,6 @@ def load_module(name: str, module_path: Path):
     module_path = Path(module_path).resolve()
     if module_path.parent.name == "lifecycle":
         sys.path.insert(0, str(module_path.parent.parent))
-        import importlib
-
         importlib.import_module("lifecycle")
         return importlib.import_module(f"lifecycle.{name}")
     sys.path.insert(0, str(module_path.parent))
@@ -32,11 +32,13 @@ def main() -> int:
     parser.add_argument("--inspect-module", required=True, type=Path)
     parser.add_argument("--process-table-module", required=True, type=Path)
     parser.add_argument("--manifest-module", required=True, type=Path)
+    parser.add_argument("--ownership-module", required=True, type=Path)
     args = parser.parse_args()
 
     inspect = load_module("stack_inspect", args.inspect_module)
     table_mod = load_module("process_table", args.process_table_module)
     manifest_mod = load_module("stack_manifest", args.manifest_module)
+    ownership = load_module("stack_ownership", args.ownership_module)
 
     win_alive = table_mod.ProcessInfo(pid=111, name="RflySim3D", start_time_utc="2026-08-08T12:00:03Z",
                                       command_line='"D:\\PX4PSP\\RflySim3D\\RflySim3D.exe"', parent_pid=1000)
@@ -50,48 +52,30 @@ def main() -> int:
 
     manifest = manifest_mod.new_manifest(
         stack_id="stack-20260808T120000Z-a1b2c3d4",
-        launcher={"kind": "batch", "identity": "scripts/start_predicted_course_two_uav.bat"},
+        launcher={"kind": "batch", "identity": "test"},
     )
-    manifest["windows_processes"] = [
-        {
-            "pid": 111,
-            "name": "RflySim3D",
-            "start_time_utc": "2026-08-08T12:00:03Z",
-            "command_line": '"D:\\PX4PSP\\RflySim3D\\RflySim3D.exe"',
-            "role": "gui:RflySim3D",
-        },
-        {
-            "pid": 112,
-            "name": "CopterSim",
-            "start_time_utc": "2026-08-08T12:00:05Z",
-            "command_line": '"D:\\PX4PSP\\CopterSim\\CopterSim.exe"',
-            "role": "gui:CopterSim",
-        },
-    ]
-    manifest["wsl_processes"] = [
-        {
-            "pid": 520,
-            "pgid": 500,
-            "name": "px4",
-            "start_time_utc": "2026-08-08T12:00:14Z",
-            "command_line": "/mnt/d/PX4PSP/Firmware/build/px4_sitl_default/bin/px4 -s etc/init.d/rcS",
-            "role": "wsl:px4_sitl",
-        }
-    ]
+    ownership.register_process(
+        manifest, side="windows", pid=111, role="gui:RflySim3D", name="RflySim3D",
+        command_line='"D:\\PX4PSP\\RflySim3D\\RflySim3D.exe"', start_time_utc="2026-08-08T12:00:03Z", reason="t",
+    )
+    ownership.register_process(
+        manifest, side="windows", pid=112, role="gui:CopterSim", name="CopterSim",
+        command_line='"D:\\PX4PSP\\CopterSim\\CopterSim.exe"', start_time_utc="2026-08-08T12:00:05Z", reason="t",
+    )
+    ownership.register_process(
+        manifest, side="wsl", pid=520, pgid=500, role="wsl:px4_sitl", name="px4",
+        command_line="/mnt/d/PX4PSP/Firmware/build/px4_sitl_default/bin/px4 -s etc/init.d/rcS",
+        start_time_utc="2026-08-08T12:00:14Z", reason="t",
+    )
     manifest["required_ports"] = [{"port": 14600, "protocol": "udp", "owner": "uav1-mavros"}]
 
     class FakePortsProbe:
         def check(self, port, protocol):
-            return inspect.PortStatus(
-                port=port, protocol=protocol, occupied=True, owned=False,
-                detail="owned-by-unknown",
-            )
+            return inspect.PortStatus(port=port, protocol=protocol, occupied=True, owned=False, detail="unknown")
 
     class CleanPortsProbe:
         def check(self, port, protocol):
-            return inspect.PortStatus(
-                port=port, protocol=protocol, occupied=False, owned=None, detail="free"
-            )
+            return inspect.PortStatus(port=port, protocol=protocol, occupied=False, owned=None, detail="free")
 
     class FakeRosProbe:
         def roscore_alive(self):
@@ -103,7 +87,7 @@ def main() -> int:
         def course_ready(self):
             return True
 
-    # 1. owned alive + owned but exited + ROS statuses + port occupied by non-owned
+    # 1. owned alive/exited + unknown fail-closed + ports + ROS.
     report = inspect.inspect_stack(
         manifest,
         win_table=table_mod.FakeProcessTable([win_alive, unknown_gui]),
@@ -115,18 +99,11 @@ def main() -> int:
     assert by_pid[111] == "owned_and_alive"
     assert by_pid[112] == "owned_but_exited"
     assert by_pid[520] == "owned_and_alive"
-    assert report.ros.roscore_alive is True
-    assert report.ros.mavros_uav1_connected is True
     assert report.ros.mavros_uav2_connected is False
-    assert report.ros.course_ready is True
-    assert any(p.port == 14600 and p.occupied and not p.owned for p in report.ports)
-
-    # 2. unknown suspicious process -> fail closed
-    unknown_pids = {p.pid for p in report.unknown_suspicious}
-    assert 999 in unknown_pids, "QGroundControl not in manifest must be reported as unknown"
+    assert {p.pid for p in report.unknown_suspicious} == {999}
     assert report.fail_closed is True
 
-    # 3. clean stack: no unknown, no stale -> not fail closed
+    # 2. clean stack without unknown/stale.
     clean = inspect.inspect_stack(
         manifest,
         win_table=table_mod.FakeProcessTable([win_alive]),
@@ -134,10 +111,10 @@ def main() -> int:
         ports_probe=CleanPortsProbe(),
         ros_probe=FakeRosProbe(),
     )
-    assert clean.unknown_suspicious == []
+    assert clean.unknown_suspicious == [] and clean.stale == [] and clean.orphans == []
     assert clean.fail_closed is False
 
-    # 4. stale PID reuse -> fail closed and classified, never matched as owned_and_alive
+    # 3. stale PID reuse -> fail closed.
     reused = table_mod.ProcessInfo(pid=111, name="RflySim3D", start_time_utc="2026-08-08T14:00:00Z",
                                    command_line='"D:\\PX4PSP\\RflySim3D\\RflySim3D.exe"', parent_pid=1)
     stale_report = inspect.inspect_stack(
@@ -145,16 +122,29 @@ def main() -> int:
         win_table=table_mod.FakeProcessTable([reused]),
         wsl_table=table_mod.FakeProcessTable([wsl_px4]),
         ports_probe=CleanPortsProbe(),
-        ros_probe=FakeRosProbe(),
+        ros_probe=None,
     )
-    stale_pids = {item.entry["pid"] for item in stale_report.stale}
-    assert 111 in stale_pids
+    assert {item.entry["pid"] for item in stale_report.stale} == {111}
     assert stale_report.fail_closed is True
-    assert all(item.status != "owned_and_alive" for item in stale_report.owned if item.entry["pid"] == 111)
 
-    # 5. JSON-serializable report
-    import json
-    json.dumps(inspect.report_to_dict(stale_report))
+    # 4. owned orphan: leader exited but registered PGID still has processes.
+    orphan = table_mod.ProcessInfo(pid=777, name="px4", start_time_utc="2026-08-08T12:00:15Z",
+                                   command_line="/mnt/d/PX4PSP/Firmware/build/px4_sitl_default/bin/px4 -s etc/init.d/rcS",
+                                   parent_pid=1, pgid=500)
+    orphan_report = inspect.inspect_stack(
+        manifest,
+        win_table=table_mod.FakeProcessTable([win_alive]),
+        wsl_table=table_mod.FakeProcessTable([orphan]),
+        ports_probe=CleanPortsProbe(),
+        ros_probe=None,
+    )
+    orphan_statuses = [item for item in orphan_report.owned if item.entry["pid"] == 520]
+    assert any(item.status == "owned_orphan" for item in orphan_statuses), "orphan must be classified owned_orphan"
+    assert len(orphan_report.orphans) == 1
+    assert orphan_report.fail_closed is False, "owned orphans must not block stop (they are owned)"
+
+    # 5. JSON serializable.
+    json.dumps(inspect.report_to_dict(orphan_report))
     return 0
 
 

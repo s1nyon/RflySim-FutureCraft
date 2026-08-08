@@ -43,12 +43,16 @@ scripts/live_stack_fresh_instance.ps1  fresh-instance 编排（默认 DryRun）
 scripts/wsl/live_stack_wsl_ops.sh  WSL 只读快照 + 显式 PID kill（无 pkill / 无 wsl --shutdown）
 scripts/lifecycle/*.py             纯逻辑核心（可离线测试）：
   stack_manifest.py                stack_id、manifest schema、指纹、PID 复用校验
-  stack_ownership.py               Windows 进程树/WSL 快照 → manifest owned 记录
+  stack_ownership.py               创建时登记（register_process；无名称/regex 认领）
+  stack_register.py                registration CLI（唯一 ownership 授予入口）
+  register_launcher.ps1            Windows 进程创建即登记（Process.Start -PassThru）
+  generate_sitl_wrapper.ps1        SITL wrapper 生成（GUI 创建时登记、剥离名称杀）
   process_table.py                 Windows/WSL/Fake 进程表后端
-  stack_inspect.py                 只读 inspect 与 fail-closed 判定
-  stack_stop.py                    优雅 stop 编排（DryRun / verified force）
-  health_gate.py                   健康状态 schema 与 all_ready 判定
+  stack_inspect.py                 只读 inspect（owned/orphan/stale/unknown，fail-closed）
+  stack_stop.py                    优雅 stop（PGID-aware、最终验证 clean）
+  health_gate.py                   每状态独立文件的健康门（原子写、并发安全）
   fresh_instance.py                fresh-instance 阶段序列与 gate 校验
+scripts/wsl/lifecycle_common.sh    共享 stack_register() helper
 scripts/cleanup_sim_stack.ps1      → 已替换为 fail-fast hazard stub
 scripts/restart_live_stack.ps1     → 已替换为 fail-fast hazard stub
 tests/lifecycle_*.py               离线回归测试
@@ -86,10 +90,12 @@ scripts/validate_lifecycle.ps1     lifecycle 验证入口
 关键点：
 
 - 不依赖裸 PID：owned 条目必须同时记录 PID、进程 start-time 与 command-line 指纹；
+- 每个条目必须携带 `ownership: {granted: "at_creation", reason, granted_at_utc}`；
 - `entry_matches_process(entry, proc)` = PID 相同 AND start-time 在容差内（默认 ±2s）
   AND command-line 归一化指纹相同；任一不满足即视为 **PID 复用 / 非同一进程**，
   停止时拒绝操作并 fail closed；
 - `logs/` 已在 `.gitignore`，manifest 属于 run-scoped 运行产物，不入库。
+- **Ownership 只在创建时授予**：禁止扫描系统进程按名称/regex 认领（P0.1）。
 
 ## 5. Inspect（只读）
 
@@ -98,6 +104,7 @@ scripts/validate_lifecycle.ps1     lifecycle 验证入口
 ```text
 owned_and_alive      manifest 条目在当前进程表中精确匹配
 owned_but_exited     manifest 条目当前不存在
+owned_orphan         leader 已退出但登记的 PGID 仍有进程（仍属 owned，可停）
 stale_pid_reuse      PID 存在但 start-time/指纹不匹配（fail closed，报告）
 unknown_suspicious   栈相关进程名但不在 manifest（fail closed，报告，绝不 kill）
 port_occupied        必需端口被非 owned 进程占用（报告）
@@ -114,16 +121,19 @@ ros_master_alive / mavros_uav1_connected / mavros_uav2_connected / course_ready
 
 每类 owned 进程按顺序：
 
-1. 优雅关闭：WSL `kill -INT`（对 PGID）；Windows GUI `CloseMainWindow` /
+1. 优雅关闭：WSL `kill -INT`（对**登记的 PGID**，`setsid` 独立会话）；
+   Windows GUI `CloseMainWindow` /
    无 `/F` 的 `taskkill /PID`；cmd 窗口 `Stop-Process`（无 -Force）；
 2. wait（默认 5s，可配）；
-3. `SIGTERM`：WSL `kill -TERM`；Windows `Stop-Process`（无 -Force）；
+3. `SIGTERM`：WSL `kill -TERM -- -PGID`；Windows `Stop-Process`（无 -Force）；
 4. wait（5s）；
 5. 最后手段强制：仅当对**当前进程表**重新完成 PID+start-time+command-line
-   验证后，WSL `kill -KILL` / Windows `Stop-Process -Force`，并把原因写入
+   验证后，WSL `kill -KILL -- -PGID` / Windows `Stop-Process -Force`，并把原因写入
    manifest `stop` 段；
 6. 验证失败（PID 复用等）→ 拒绝强制，fail closed 报告；
-7. 记录 `stop_reason`、`stop_utc`、`clean`。
+7. **最终验证**：所有信号阶段后重新 snapshot/inspect，确认 owned alive=0、无 owned
+   orphan、无 stale/identity mismatch、无 signal 失败，才写 `clean=true`；
+   否则 `clean=false` 并记录 failure reasons（P0.1，stop 自身保证，不依赖调用方）。
 
 禁止：WSL distribution 级 shutdown、全局 pkill、名称扫杀。
 
@@ -136,11 +146,12 @@ ros_master_alive / mavros_uav1_connected / mavros_uav2_connected / course_ready
 `stage2_two_mavros.sh`）。修复：
 
 - `stage2_two_mavros.sh` 启动后执行健康探测，向
-  `logs/live_stack/<stack_id>/health.json` 写入状态；
+  `logs/live_stack/<stack_id>/health/<STATUS>.json` 写入状态（每状态独立文件，原子写）；
 - `start_wsl_mavros_two.bat` 透传 `STACK_HEALTH_DIR`，并轮询 health.json；
 - `start_predicted_course_two_uav.bat` 在加载 course 后写 GUI_READY / COURSE_READY；
 - 状态枚举（固定）：`GUI_READY`、`ROSCORE_READY`、`MAVROS_UAV1_CONNECTED`、
   `MAVROS_UAV2_CONNECTED`、`COURSE_READY`；
+- 每个 producer 只写自己的状态文件，禁止跨 Windows/WSL 共享 read-modify-write（P0.1）；
 - `all_ready` 为 false → fail closed，不进入 FAST-LIO / arming；
 - 保持 `--dry-run` 兼容（validate_stage8 依赖）。
 
@@ -159,18 +170,28 @@ ros_master_alive / mavros_uav1_connected / mavros_uav2_connected / course_ready
 每个 run 记录：`startup_success`、`flight_success`、`shutdown_clean`。
 `fresh_instance.py` 固化该序列；任何阶段 gate 失败 → 停止并向用户报告。
 
+## 8.1 Stack Context（P0.1）
+
+`live_stack_start.ps1 -Execute` 写出 `logs/live_stack/<stack_id>/stack_context.env`
+（STACK_ID / STACK_MANIFEST / STACK_MANIFEST_WSL / STACK_HEALTH_DIR / STACK_HEALTH_DIR_WSL）。
+后续 FAST-LIO / EGO / mission / recorder 启动器通过 `--stack-id` / `--manifest`（或环境变量）
+消费该 context，并**在创建进程的瞬间**用 `stack_register` 登记 PID/PGID。
+
 ## 9. 离线回归测试（接触真实 RflySim 之前必须通过）
 
 - `lifecycle_banned_command_check.py`：静态 banned 命令契约（wsl --shutdown /
   pkill -9 / taskkill /F /IM / 名称扫杀 Stop-Process -Force / schtasks /delete 越界）；
 - `lifecycle_manifest_check.py`：manifest schema、stack_id 唯一性、指纹、
-  PID 复用保护；
-- `lifecycle_ownership_check.py`：Windows 进程树/WSL 快照 → owned 记录；
-- `lifecycle_inspect_check.py`：owned alive/exited、unknown fail-closed、
+  PID 复用保护、创建时登记（ownership grant）、重复登记拒绝；
+- `lifecycle_ownership_check.py`：注册 API 契约；确认无扫描式认领函数残留；
+- `lifecycle_inspect_check.py`：owned alive/exited/orphan、unknown fail-closed、
   stale PID reuse、无 kill API；
-- `lifecycle_stop_check.py`：DryRun 零副作用、owned A/B 停止而未登记 C 存活、
-  仅 owned 可停、强制必须重验证且记录原因；
-- `lifecycle_health_gate_check.py`：health schema、all_ready、fail-closed；
+- `lifecycle_stop_check.py`：DryRun 零副作用且输出 PID/PGID/start-time/fingerprint/
+  ownership reason/信号序列；owned A/B 停止而未登记 C 存活；同名称只停登记的；
+  旧 roscore 不被认领；PGID 隔离；orphan 经 PGID 停止；signal 失败 clean=false；
+  stale PID reuse 拒绝；force 重验证；clean 来自最终验证；
+- `lifecycle_health_gate_check.py`：每状态独立文件、原子写、并发不丢状态、
+  all_ready、fail-closed；
 - `lifecycle_fresh_instance_check.py`：序列顺序、无自动 force retry。
 
 ## 10. Live 验证门槛（需要用户批准后执行）
@@ -179,3 +200,36 @@ ros_master_alive / mavros_uav1_connected / mavros_uav2_connected / course_ready
 2. 用户在场监督 1 次完整：start → readiness → flight → graceful stop → verify clean；
 3. 3 次 fresh-instance；稳定后扩展 5 次；
 4. 每次记录 `startup_success` / `flight_success` / `shutdown_clean`。
+
+---
+
+## 11. P0.1 Safety Hardening（2026-08-08）
+
+用户审阅后确认方向正确，要求进入真实 `-Execute` 前补齐安全缺口。已落地：
+
+1. **Ownership = 创建时登记**：删除 `stack_record.py`（名称/regex 扫描认领）；
+   `stack_register.py` 成为唯一授予入口；Windows 经 `register_launcher.ps1`
+   （Process.Start -PassThru）与生成 SITL wrapper 登记 GUI/cmd PID；WSL 经
+   `lifecycle_common.sh stack_register()` 登记 roscore/MAVROS/px4-mavlink/
+   sensor bridge/FAST-LIO/EGO/mission/recorder 的 PID+PGID。
+2. **WSL 独立 PGID**：受管组件用 `setsid` 独立 session；stop 目标为经过验证的
+   owned PGID（`kill -SIG -- -PGID`），仅最后手段对明确 owned PID。
+3. **clean=true 来自最终验证**：stop 自身重新 snapshot/inspect，owned alive=0 且
+   无 orphan、无 stale、无 signal 失败才为 clean，并记录 failure reasons。
+4. **health 参数链路**：修复 `start_wsl_mavros_two.bat` 清空继承的
+   STACK_ID/STACK_HEALTH_DIR bug；新增 `--manifest` 透传；`live_stack_start.ps1`
+   写出 `stack_context.env`。
+5. **health 每状态独立文件**：`health/<STATUS>.json` 原子写，producer 只写自己的
+   状态；checker 聚合，缺失即 fail closed；并发写入不丢状态。
+6. **后续进程登记**：stage7 fastlio/ego/flight runner 与 stage8 recorder 在创建时
+   登记到当前 stack（STACK_ID/STACK_MANIFEST context）。
+7. **离线测试扩展**：`tests/lifecycle_*.py` 覆盖 10 项场景；`validate_lifecycle.ps1`
+   全 PASS；Stage 2/6D/7/8 未回归。
+8. **无自动 adopt**：不存在 `--adopt-existing`；unknown 一律 report + fail closed。
+9. **权限**：AGENTS.md §6 更新 Green（只读 inspect/DryRun/离线测试）、
+   Yellow（lifecycle/launcher 代码修改）、Red（真实停止/PGID 强杀/计划任务/fresh-instance
+   -Execute/首次 live 验证）。
+
+**live 状态**：仍未执行。第一次 live 前展示 DryRun 输出、目标 PID/PGID、ownership 证明、
+stop 顺序与 fail-closed 条件；第一次 live 周期为 start → health gate → no-arm readiness →
+graceful stop → inspect clean（不飞行）。

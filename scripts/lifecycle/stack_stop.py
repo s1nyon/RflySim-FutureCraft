@@ -1,4 +1,4 @@
-"""Graceful stop orchestrator: manifest-owned processes only, verified force as last resort."""
+"""Graceful stop: manifest-only, PGID-aware, final-verification clean."""
 
 from __future__ import annotations
 
@@ -16,10 +16,15 @@ if __name__ == "__main__" and __package__ is None:
 
     raise SystemExit(_self._cli_main())
 
-from .process_table import find_by_pid
-from .stack_manifest import entry_matches_process, load_manifest, save_manifest
-from . import stack_ownership
-from .stack_inspect import WindowsPortsProbe, inspect_stack
+from . import stack_ownership  # noqa: E402
+from .process_table import find_by_pgid, find_by_pid  # noqa: E402
+from .stack_inspect import WindowsPortsProbe, inspect_stack  # noqa: E402
+from .stack_manifest import (  # noqa: E402
+    command_line_fingerprint,
+    entry_matches_process,
+    load_manifest,
+    save_manifest,
+)
 
 
 @dataclass
@@ -27,10 +32,14 @@ class StopAction:
     side: str  # windows | wsl
     pid: int
     pgid: Optional[int]
+    target: str  # pid | pgid
     signal: str  # close | INT | TERM | KILL
     role: str
     entry: dict
     status: str = "planned"
+    start_time: str = ""
+    fingerprint: str = ""
+    ownership_reason: str = ""
 
 
 @dataclass
@@ -42,15 +51,22 @@ class StopReport:
     actions: List[StopAction] = field(default_factory=list)
     refused: List[dict] = field(default_factory=list)
     clean: bool = False
+    final_verification: dict = field(default_factory=dict)
 
 
 class StopBackend:
-    """Protocol: graceful close, signal stop, task deletion."""
+    """Protocol: graceful close, pid/group signals, task deletion."""
 
     def close_main_window(self, proc) -> bool:
         raise NotImplementedError
 
     def stop(self, proc, signal: str) -> bool:
+        raise NotImplementedError
+
+    def stop_group(self, pgid: int, signal: str) -> bool:
+        raise NotImplementedError
+
+    def alive_group(self, pgid: int) -> bool:
         raise NotImplementedError
 
     def delete_task(self, identity: str) -> bool:
@@ -90,12 +106,18 @@ class WindowsStopBackend(StopBackend):
                               f"Stop-Process -Id {pid} -Force -ErrorAction SilentlyContinue"])
         raise ValueError(f"unsupported Windows signal: {signal}")
 
+    def stop_group(self, pgid: int, signal: str) -> bool:
+        return False
+
+    def alive_group(self, pgid: int) -> bool:
+        return False
+
     def delete_task(self, identity: str) -> bool:
         return self._run(["schtasks.exe", "/delete", "/tn", identity, "/f"])
 
 
 class WslStopBackend(StopBackend):
-    """WSL side: explicit-PID kill only; never global process-kill, never WSL distribution shutdown."""
+    """WSL side: explicit PID/PGID signals only; never global process-kill, never WSL distribution shutdown."""
 
     def __init__(self, distro: str = "RflySim-20.04", wsl: str = "wsl.exe"):
         self.distro = distro
@@ -121,8 +143,15 @@ class WslStopBackend(StopBackend):
     def stop(self, proc, signal: str) -> bool:
         if signal not in ("INT", "TERM", "KILL"):
             raise ValueError(f"unsupported WSL signal: {signal}")
-        pid = str(int(proc.pid))
-        return self._run(f"kill -{signal} -- {pid} 2>/dev/null || true")
+        return self._run(f"kill -{signal} -- {int(proc.pid)} 2>/dev/null || true")
+
+    def stop_group(self, pgid: int, signal: str) -> bool:
+        if signal not in ("INT", "TERM", "KILL"):
+            raise ValueError(f"unsupported WSL signal: {signal}")
+        return self._run(f"kill -{signal} -- -{int(pgid)} 2>/dev/null || true")
+
+    def alive_group(self, pgid: int) -> bool:
+        return self._run(f"kill -0 -- -{int(pgid)} 2>/dev/null")
 
     def delete_task(self, identity: str) -> bool:
         return False
@@ -135,17 +164,53 @@ def _ordered_entries(manifest: dict):
         yield "wsl", entry
 
 
+def _action(entry: dict, side: str, signal: str, target: str, status: str = "planned") -> StopAction:
+    return StopAction(
+        side=side,
+        pid=int(entry["pid"]),
+        pgid=entry.get("pgid"),
+        target=target,
+        signal=signal,
+        role=entry["role"],
+        entry=entry,
+        status=status,
+        start_time=entry.get("start_time_utc", ""),
+        fingerprint=command_line_fingerprint(entry.get("command_line", "")),
+        ownership_reason=entry.get("ownership", {}).get("reason", ""),
+    )
+
+
 def plan_stop(manifest: dict, win_table, wsl_table) -> tuple:
     actions: List[StopAction] = []
     refused: List[dict] = []
     for side, entry in _ordered_entries(manifest):
         table = win_table if side == "windows" else wsl_table
-        proc = find_by_pid(table.snapshot(), entry["pid"])
+        snapshot = table.snapshot()
+        proc = find_by_pid(snapshot, entry["pid"])
+        pgid = entry.get("pgid")
+
+        if side == "wsl" and pgid is not None:
+            group = find_by_pgid(snapshot, pgid)
+            leader_ok = proc is not None and entry_matches_process(entry, proc)
+            if not group and proc is None:
+                actions.append(_action(entry, side, "INT", "pgid", status="already_exited"))
+                continue
+            if not group and proc is not None and not leader_ok:
+                refused.append(
+                    {
+                        "pid": int(entry["pid"]),
+                        "pgid": int(pgid),
+                        "role": entry["role"],
+                        "reason": "PID/start-time/command-line verification failed and PGID group is gone (PID reuse)",
+                    }
+                )
+                continue
+            for signal in ("INT", "TERM", "KILL"):
+                actions.append(_action(entry, side, signal, "pgid"))
+            continue
+
         if proc is None:
-            actions.append(
-                StopAction(side, int(entry["pid"]), entry.get("pgid"), "close" if side == "windows" else "INT",
-                           entry["role"], entry, status="already_exited")
-            )
+            actions.append(_action(entry, side, "close" if side == "windows" else "INT", "pid", status="already_exited"))
             continue
         if not entry_matches_process(entry, proc):
             refused.append(
@@ -158,11 +223,42 @@ def plan_stop(manifest: dict, win_table, wsl_table) -> tuple:
             continue
         graceful = "close" if side == "windows" else "INT"
         for signal in (graceful, "TERM", "KILL"):
-            actions.append(
-                StopAction(side, int(entry["pid"]), entry.get("pgid"), signal,
-                           entry["role"], entry, status="planned")
-            )
+            actions.append(_action(entry, side, signal, "pid"))
     return actions, refused
+
+
+def _final_verification(manifest: dict, win_table, wsl_table) -> dict:
+    """Post-stop truth: owned alive=0, no orphans, no stale/identity mismatch."""
+    win_snapshot = win_table.snapshot()
+    wsl_snapshot = wsl_table.snapshot()
+    problems: List[str] = []
+
+    for side, entry in _ordered_entries(manifest):
+        snapshot = win_snapshot if side == "windows" else wsl_snapshot
+        proc = find_by_pid(snapshot, entry["pid"])
+        pgid = entry.get("pgid")
+        if side == "wsl" and pgid is not None:
+            group = find_by_pgid(snapshot, pgid)
+            if group:
+                problems.append(
+                    f"owned PGID {pgid} ({entry['role']}) still has {len(group)} process(es) after stop"
+                )
+                continue
+            if proc is not None and entry_matches_process(entry, proc):
+                problems.append(f"owned pid {entry['pid']} ({entry['role']}) still alive after stop")
+            elif proc is not None:
+                problems.append(f"identity mismatch at pid {entry['pid']} ({entry['role']}) after stop")
+            continue
+        if proc is not None and entry_matches_process(entry, proc):
+            problems.append(f"owned pid {entry['pid']} ({entry['role']}) still alive after stop")
+        elif proc is not None:
+            problems.append(f"identity mismatch at pid {entry['pid']} ({entry['role']}) after stop")
+
+    return {
+        "problems": problems,
+        "clean": len(problems) == 0,
+        "checked_at_utc": stack_ownership.utc_now_iso(),
+    }
 
 
 def execute_stop(
@@ -191,15 +287,59 @@ def execute_stop(
 
     performed: List[StopAction] = []
     force_reasons: List[str] = []
+    failure_reasons: List[str] = []
+
     for side, entry in _ordered_entries(manifest):
         table = win_table if side == "windows" else wsl_table
         backend = win_backend if side == "windows" else wsl_backend
         pid = int(entry["pid"])
+        pgid = entry.get("pgid")
+        snapshot = table.snapshot()
+        proc = find_by_pid(snapshot, pid)
+        group = find_by_pgid(snapshot, pgid) if (side == "wsl" and pgid is not None) else []
 
-        proc = find_by_pid(table.snapshot(), pid)
+        if side == "wsl" and pgid is not None:
+            leader_ok = proc is not None and entry_matches_process(entry, proc)
+            if not group and proc is None:
+                performed.append(_action(entry, side, "INT", "pgid", status="already_exited"))
+                continue
+            if not group and proc is not None and not leader_ok:
+                refused.append(
+                    {
+                        "pid": pid,
+                        "pgid": int(pgid),
+                        "role": entry["role"],
+                        "reason": "verification failed and PGID group is gone (PID reuse)",
+                    }
+                )
+                continue
+
+            ok = backend.stop_group(int(pgid), "INT")
+            performed.append(_action(entry, side, "INT", "pgid", status="performed" if ok else "failed"))
+            if not ok:
+                failure_reasons.append(f"INT to PGID {pgid} ({entry['role']}) failed")
+            wait(int_wait_s)
+
+            if backend.alive_group(int(pgid)) or find_by_pgid(table.snapshot(), pgid):
+                ok = backend.stop_group(int(pgid), "TERM")
+                performed.append(_action(entry, side, "TERM", "pgid", status="performed" if ok else "failed"))
+                if not ok:
+                    failure_reasons.append(f"TERM to PGID {pgid} ({entry['role']}) failed")
+            wait(term_wait_s)
+
+            if find_by_pgid(table.snapshot(), pgid):
+                ok = backend.stop_group(int(pgid), "KILL")
+                performed.append(_action(entry, side, "KILL", "pgid", status="performed" if ok else "failed"))
+                if ok:
+                    force_reasons.append(
+                        f"PGID {pgid} ({entry['role']}) still alive after TERM; force-stopped after verification"
+                    )
+                else:
+                    failure_reasons.append(f"KILL to PGID {pgid} ({entry['role']}) failed")
+            continue
+
         if proc is None:
-            performed.append(StopAction(side, pid, entry.get("pgid"), "close" if side == "windows" else "INT",
-                                        entry["role"], entry, status="already_exited"))
+            performed.append(_action(entry, side, "close" if side == "windows" else "INT", "pid", status="already_exited"))
             continue
         if not entry_matches_process(entry, proc):
             refused.append(
@@ -211,31 +351,33 @@ def execute_stop(
             )
             continue
 
-        # Phase 1: graceful close
         graceful = "close" if side == "windows" else "INT"
         ok = backend.close_main_window(proc) if graceful == "close" else backend.stop(proc, graceful)
-        performed.append(StopAction(side, pid, entry.get("pgid"), graceful, entry["role"], entry,
-                                    status="performed" if ok else "failed"))
+        performed.append(_action(entry, side, graceful, "pid", status="performed" if ok else "failed"))
+        if not ok:
+            failure_reasons.append(f"{graceful} to pid {pid} ({entry['role']}) failed")
         wait(int_wait_s)
 
-        # Phase 2: SIGTERM
         proc = find_by_pid(table.snapshot(), pid)
         if proc is not None and entry_matches_process(entry, proc):
             ok = backend.stop(proc, "TERM")
-            performed.append(StopAction(side, pid, entry.get("pgid"), "TERM", entry["role"], entry,
-                                        status="performed" if ok else "failed"))
+            performed.append(_action(entry, side, "TERM", "pid", status="performed" if ok else "failed"))
+            if not ok:
+                failure_reasons.append(f"TERM to pid {pid} ({entry['role']}) failed")
         wait(term_wait_s)
 
-        # Phase 3: verified force (last resort)
         proc = find_by_pid(table.snapshot(), pid)
         if proc is None:
             continue
         if entry_matches_process(entry, proc):
             ok = backend.stop(proc, "KILL")
-            performed.append(StopAction(side, pid, entry.get("pgid"), "KILL", entry["role"], entry,
-                                        status="performed" if ok else "failed"))
+            performed.append(_action(entry, side, "KILL", "pid", status="performed" if ok else "failed"))
             if ok:
-                force_reasons.append(f"pid {pid} ({entry['role']}) still alive after TERM; force-stopped after verification")
+                force_reasons.append(
+                    f"pid {pid} ({entry['role']}) still alive after TERM; force-stopped after verification"
+                )
+            else:
+                failure_reasons.append(f"KILL to pid {pid} ({entry['role']}) failed")
         else:
             refused.append(
                 {
@@ -245,8 +387,15 @@ def execute_stop(
                 }
             )
 
-    clean = not refused
-    stack_ownership.record_stop(manifest, reason=reason, clean=clean, force_reasons=force_reasons)
+    final = _final_verification(manifest, win_table, wsl_table)
+    clean = not refused and not failure_reasons and final["clean"]
+    stack_ownership.record_stop(
+        manifest,
+        reason=reason,
+        clean=clean,
+        force_reasons=force_reasons,
+        failure_reasons=failure_reasons + final["problems"],
+    )
     if clean and manifest.get("launcher", {}).get("kind") == "scheduled_task":
         identity = manifest["launcher"].get("identity")
         if identity:
@@ -258,6 +407,7 @@ def execute_stop(
         actions=performed,
         refused=refused,
         clean=clean,
+        final_verification=final,
     )
 
 
@@ -267,14 +417,19 @@ def report_to_dict(report: StopReport) -> dict:
         "dry_run": report.dry_run,
         "reason": report.reason,
         "clean": report.clean,
+        "final_verification": report.final_verification,
         "actions": [
             {
                 "side": a.side,
                 "pid": a.pid,
                 "pgid": a.pgid,
+                "target": a.target,
                 "signal": a.signal,
                 "role": a.role,
                 "status": a.status,
+                "start_time": a.start_time,
+                "fingerprint": a.fingerprint,
+                "ownership_reason": a.ownership_reason,
             }
             for a in report.actions
         ],
@@ -286,6 +441,7 @@ def _cli_main() -> int:
     import argparse
 
     from .process_table import WindowsProcessTable, WslProcessTable
+    from .stack_inspect import report_to_dict as inspect_to_dict
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", required=True, type=Path)
@@ -311,8 +467,6 @@ def _cli_main() -> int:
             ros_probe=None,
         )
         if inspection.fail_closed:
-            from .stack_inspect import report_to_dict as inspect_to_dict
-
             print(json.dumps(inspect_to_dict(inspection), indent=2, ensure_ascii=False))
             print("[stop] ABORT: inspect fail-closed (unknown/stale/port conflict); refusing to stop", file=sys.stderr)
             return 2
@@ -334,7 +488,7 @@ def _cli_main() -> int:
     if report.clean:
         print("[stop] clean")
         return 0
-    print("[stop] NOT clean; see refused/actions", file=sys.stderr)
+    print("[stop] NOT clean; see refused/actions/final_verification", file=sys.stderr)
     return 1
 
 

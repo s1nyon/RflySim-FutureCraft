@@ -33,6 +33,10 @@ def find_by_pid(processes: Sequence[ProcessInfo], pid: int) -> Optional[ProcessI
     return None
 
 
+def find_by_pgid(processes: Sequence[ProcessInfo], pgid: int) -> List[ProcessInfo]:
+    return [proc for proc in processes if proc.pgid is not None and int(proc.pgid) == int(pgid)]
+
+
 def _cim_datetime_to_utc(cim_value: Optional[str]) -> str:
     """Convert WMI CIM datetime (e.g. 20260808120003.123456+480) to UTC ISO."""
     if not cim_value:

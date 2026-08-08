@@ -159,3 +159,18 @@ schtasks /delete /tn "\FutureAircraftSim_LiveStack_Session1" /f
 先展示 DryRun 输出与设计并获得用户批准；随后用户在场监督 1 次完整周期，
 再做 3 次（稳定后 5 次）fresh-instance，每次记录
 `startup_success` / `flight_success` / `shutdown_clean`。
+
+## 7.1 P0.1 Safety Hardening（2026-08-08）
+
+用户审阅后要求进入真实 `-Execute` 前补齐安全缺口，已全部落地（offline 验证通过，
+详见设计文档 §11）：
+
+- **Ownership 创建时登记**：删除扫描式 `stack_record.py`；`stack_register.py` 为唯一
+  授予入口；Windows GUI/cmd 经 `register_launcher.ps1`/生成 SITL wrapper 在创建瞬间
+  登记；WSL 组件经 `lifecycle_common.sh stack_register()` 登记 PID+PGID（`setsid` 独立
+  session）；
+- **stop 按 owned PGID**（`kill -SIG -- -PGID`），`clean=true` 来自 stop 自身最终验证；
+- **health 每状态独立文件**（原子写、并发安全），修复启动链 STACK_ID/HEALTH_DIR 继承；
+- **后续 FAST-LIO/EGO/mission/recorder 创建时登记**到同一 stack（stack context）；
+- **离线回归**：`validate_lifecycle.ps1` 全 PASS，Stage 2/6D/7/8 未回归；
+  **live 仍未执行**（Red 操作需用户批准）。

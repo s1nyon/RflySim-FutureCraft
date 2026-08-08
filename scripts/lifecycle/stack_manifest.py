@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 MATCH_TOLERANCE_SEC = 2.0
 
 REQUIRED_TOP_LEVEL = {
@@ -99,6 +99,11 @@ def validate_manifest(manifest: dict) -> None:
         for field in ("pid", "name", "start_time_utc", "command_line", "role"):
             if field not in entry:
                 raise ValueError(f"process entry missing '{field}': {entry}")
+        ownership = entry.get("ownership")
+        if not isinstance(ownership, dict) or ownership.get("granted") != "at_creation":
+            raise ValueError(f"process entry without at_creation ownership grant: pid={entry.get('pid')}")
+        if not ownership.get("reason") or not ownership.get("granted_at_utc"):
+            raise ValueError(f"process entry ownership grant must include reason and granted_at_utc: pid={entry.get('pid')}")
 
 
 def normalize_command_line(command_line: str) -> str:
@@ -147,9 +152,12 @@ def entry_matches_process(
 def save_manifest(manifest: dict, path: Path) -> None:
     validate_manifest(manifest)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
+    payload = json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
+    tmp_path = path.with_name(path.name + ".tmp")
+    tmp_path.write_text(payload, encoding="utf-8")
+    import os
+
+    os.replace(tmp_path, path)
 
 
 def load_manifest(path: Path) -> dict:
