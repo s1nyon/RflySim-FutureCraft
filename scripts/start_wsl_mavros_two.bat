@@ -36,10 +36,10 @@ set /p STACK_MANIFEST_WSL=<"%TEMP%\stack_manifest_wsl.txt"
 :no_manifest
 
 if not defined STACK_HEALTH_DIR_WSL goto launch_plain
-start "futureAircraftSim MAVROS two" wsl -d %RFLYSIM_WSL_DISTRO% -e bash -lic "STACK_HEALTH_DIR='%STACK_HEALTH_DIR_WSL%' STACK_ID='%STACK_ID%' STACK_MANIFEST='%STACK_MANIFEST_WSL%' bash '%FUTURE_AIRCRAFT_SIM_WSL_DIR%/scripts/wsl/stage2_two_mavros.sh'"
+powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%..\scripts\lifecycle\launch_stage2.ps1" -HealthDirWsl "%STACK_HEALTH_DIR_WSL%" -StackId "%STACK_ID%" -ManifestWsl "%STACK_MANIFEST_WSL%"
 goto launch_done
 :launch_plain
-start "futureAircraftSim MAVROS two" wsl -d %RFLYSIM_WSL_DISTRO% -e bash -lic "bash '%FUTURE_AIRCRAFT_SIM_WSL_DIR%/scripts/wsl/stage2_two_mavros.sh'"
+powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%..\scripts\lifecycle\launch_stage2.ps1"
 :launch_done
 
 if not defined STACK_HEALTH_DIR_WSL goto health_done
