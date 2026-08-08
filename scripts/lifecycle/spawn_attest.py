@@ -279,10 +279,20 @@ def _cli_main() -> int:
     if argv and argv[0] == "attest":
         argv = argv[1:]
     parser = argparse.ArgumentParser()
-    parser.add_argument("--manifest", required=True, type=Path)
+    parser.add_argument("--manifest", type=Path, default=None)
     parser.add_argument("--parent-pid", type=int, default=None)
     parser.add_argument("--sim-instance-token", default=None)
     args = parser.parse_args(argv)
+
+    if args.manifest is None:
+        env_manifest = os.environ.get("STACK_MANIFEST")
+        if env_manifest:
+            args.manifest = Path(env_manifest)
+    if args.sim_instance_token is None:
+        args.sim_instance_token = os.environ.get("RFLY_SIM_INSTANCE_ID")
+    if args.manifest is None:
+        print("[ERROR] --manifest is required (or export STACK_MANIFEST)", file=sys.stderr)
+        return 2
 
     manifest = load_manifest(args.manifest)
     parent = _find_parent(manifest, args.parent_pid)
