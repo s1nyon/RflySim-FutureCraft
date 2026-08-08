@@ -87,7 +87,16 @@ if (-not $guiOk) {
     Write-Host '[ERROR] GUI stack did not come up within 240s; manifest written; inspect before stopping.' -ForegroundColor Red
 }
 
-$simId = wsl -d $Distro -e bash -lic "bash '$(ConvertTo-WslPath -Path $projectRoot)/scripts/wsl/live_stack_wsl_ops.sh' sim-id" 2>$null | Select-Object -Last 1
+$simId = $null
+try {
+    # sim-id is best-effort: PX4 may still be building when this runs, and the
+    # WSL helper may emit benign stderr (e.g. `pgrep: uptime`) that PowerShell
+    # 5.1 turns into a NativeCommandError under EAP=Stop. Never abort the stack
+    # start over it.
+    $simId = wsl -d $Distro -e bash -lic "bash '$(ConvertTo-WslPath -Path $projectRoot)/scripts/wsl/live_stack_wsl_ops.sh' sim-id" 2>$null | Select-Object -Last 1
+} catch {
+    $simId = $null
+}
 & $python (Join-Path $lifecycle 'stack_register.py') set-sim-id --manifest $manifestPath --simulation-instance-id $simId
 if ($LASTEXITCODE -ne 0) {
     Write-Host '[WARN] simulation_instance_id not recorded; inspect before proceeding.' -ForegroundColor Yellow
@@ -95,11 +104,11 @@ if ($LASTEXITCODE -ne 0) {
 $rosMasterUri = if ($env:ROS_MASTER_URI) { $env:ROS_MASTER_URI } else { 'http://127.0.0.1:11311' }
 & $python (Join-Path $lifecycle 'stack_register.py') set-ros-master --manifest $manifestPath --uri $rosMasterUri
 
-& $python (Join-Path $lifecycle 'health_probe.py') check --health-dir $healthDir --wait-seconds 300
+& $python (Join-Path $lifecycle 'health_probe.py') check --health-dir $healthDir --manifest $manifestPath --wait-seconds 300
 if ($LASTEXITCODE -ne 0) {
-    Write-Host '[ERROR] health gate not ready; fail closed - do not proceed to FAST-LIO/arming.' -ForegroundColor Red
+    Write-Host '[ERROR] health gate not ready (statuses and/or dual-UAV topology); fail closed - do not proceed to FAST-LIO/arming.' -ForegroundColor Red
     exit 1
 }
 
-Write-Host "[OK] live stack started: $manifestPath"
+Write-Host "[OK] live stack started (health + dual-UAV topology ready): $manifestPath"
 exit 0
