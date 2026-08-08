@@ -5,10 +5,27 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/lifecycle_common.sh"
+# The stage2 launcher session registers ITSELF so inspect/stop can attribute
+# the top-level bash process (the same self-registration pattern the SITL
+# wrapper uses for wsl:px4_build_session).
+stack_register wsl "$$" "$$" "wsl:stage2_launcher" "stage2_two_mavros.sh" "self-registered stage2 launcher session at session start"
 REF_28COM_UAV_WSL_DIR="${REF_28COM_UAV_WSL_DIR:-/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/28com_sim/UAV_demo/28com_uav}"
 LOG_DIR="$PROJECT_ROOT/logs/stage2_mavros"
 ROS_MASTER_URI="${ROS_MASTER_URI:-http://127.0.0.1:11311}"
 PX4_MAVLINK_BIN="${PX4_MAVLINK_BIN:-/mnt/d/PX4PSP/Firmware/build/px4_sitl_default/bin/px4-mavlink}"
+STACK_ID="${STACK_ID:-unknown}"
+
+stage2_trace() {
+  local msg="$1"
+  local trace_dir="$PROJECT_ROOT/logs/live_stack/$STACK_ID"
+  local trace_file="$LOG_DIR/stage2_trace.log"
+  if [[ -n "${STACK_MANIFEST:-}" && -f "$STACK_MANIFEST" ]]; then
+    trace_dir="$(cd "$(dirname "$STACK_MANIFEST")" && pwd)"
+  fi
+  mkdir -p "$trace_dir"
+  trace_file="$trace_dir/stage2_trace.log"
+  echo "$(date '+%H:%M:%S.%3N') [stage2] $msg" >> "$trace_file" 2>/dev/null || true
+}
 
 cleanup() {
   local pids
@@ -87,7 +104,6 @@ fi
 mkdir -p "$LOG_DIR"
 
 HEALTH_DIR="${STACK_HEALTH_DIR:-}"
-STACK_ID="${STACK_ID:-unknown}"
 HEALTH_PROBE="$PROJECT_ROOT/scripts/lifecycle/health_probe.py"
 
 write_health() {
@@ -106,30 +122,43 @@ export ROS_MASTER_URI
 export ROS_IP="${ROS_IP:-127.0.0.1}"
 trap cleanup EXIT INT TERM
 
+stage2_trace "step 1 start (ros master availability check)"
 if ! timeout 3s rostopic list >/dev/null 2>&1; then
   setsid nohup roscore >"$LOG_DIR/roscore.log" 2>&1 &
   roscore_pid=$!
   stack_register wsl "$roscore_pid" "$roscore_pid" "wsl:roscore" "/opt/ros/noetic/bin/roscore" "created by stage2_two_mavros.sh (setsid)"
   echo "[INFO] Started roscore pid=$roscore_pid log=$LOG_DIR/roscore.log"
+  stage2_trace "step 1.1 started roscore pid=$roscore_pid"
   sleep 5
 fi
 
 if ! timeout 5s rostopic list >/dev/null 2>&1; then
   write_health ROSCORE_READY false "roscore unavailable at $ROS_MASTER_URI"
   echo "[ERROR] ROS master is still unavailable at $ROS_MASTER_URI" >&2
+  stage2_trace "step 1 FAILED (roscore unavailable)"
   exit 1
 fi
 write_health ROSCORE_READY true "roscore responding at $ROS_MASTER_URI"
+stage2_trace "step 1 success (roscore ready)"
 
+stage2_trace "step 2 start (px4-mavlink link uav1)"
 start_px4_mavros_link 1 14600 14601
+stage2_trace "step 2 success (px4-mavlink link uav1)"
+stage2_trace "step 3 start (px4-mavlink link uav2)"
 start_px4_mavros_link 2 14610 14611
+stage2_trace "step 3 success (px4-mavlink link uav2)"
 
+stage2_trace "step 4 start (start_one uav1 mavros)"
 start_one uav1 udp://:14601@127.0.0.1:14600 1
+stage2_trace "step 4 success (uav1 mavros launched)"
 sleep 3
+stage2_trace "step 5 start (start_one uav2 mavros)"
 start_one uav2 udp://:14611@127.0.0.1:14610 2
+stage2_trace "step 5 success (uav2 mavros launched)"
 sleep 2
 
 # Explicit health status instead of relying on window appearance.
+stage2_trace "step 6 start (mavros connected readiness loop)"
 uav1_ok=false
 uav2_ok=false
 for _attempt in $(seq 1 12); do
@@ -146,6 +175,7 @@ for _attempt in $(seq 1 12); do
 done
 write_health MAVROS_UAV1_CONNECTED "$uav1_ok" "uav1 mavros state connected=$uav1_ok"
 write_health MAVROS_UAV2_CONNECTED "$uav2_ok" "uav2 mavros state connected=$uav2_ok"
+stage2_trace "step 6 success uav1_ok=$uav1_ok uav2_ok=$uav2_ok"
 
 # NOTE: COURSE_READY is owned exclusively by start_predicted_course_two_uav.bat
 # (UE course load outcome). Stage 2 must NOT write it: the course cloud
@@ -154,4 +184,5 @@ write_health MAVROS_UAV2_CONNECTED "$uav2_ok" "uav2 mavros state connected=$uav2
 
 echo "[INFO] Stage 2 dual MAVROS headless launch started."
 echo "[INFO] Keeping this WSL session alive. Close this window to stop roscore and MAVROS."
+stage2_trace "step 7 (session alive; waiting)"
 wait

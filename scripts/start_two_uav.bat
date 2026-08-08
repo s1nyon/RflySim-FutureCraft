@@ -17,14 +17,16 @@ if /I "%~1"=="--dry-run" (
 )
 call "%SCRIPT_DIR%start_vcxsrv.bat"
 if defined STACK_MANIFEST (
-  "%PYTHON_EXE%" "%SCRIPT_DIR%..\scripts\lifecycle\register_launcher.py" --manifest "%STACK_MANIFEST%" --role "cmd:stage_orchestrator" --command-line "cmd /k call %SCRIPT_DIR%start_rflysim_sitl_two.bat" --file-path "cmd.exe" --arguments "/k call %SCRIPT_DIR%start_rflysim_sitl_two.bat"
+  "%PYTHON_EXE%" "%SCRIPT_DIR%..\scripts\lifecycle\register_launcher.py" launch --manifest "%STACK_MANIFEST%" --role "cmd:stage_orchestrator" --command-line "cmd /k call %SCRIPT_DIR%start_rflysim_sitl_two.bat" --file-path "cmd.exe" --arguments "/k call %SCRIPT_DIR%start_rflysim_sitl_two.bat"
   if errorlevel 1 echo [WARN] SITL launcher registration failed.
 ) else (
   start "futureAircraftSim SITL two" cmd /k call "%SCRIPT_DIR%start_rflysim_sitl_two.bat"
 )
 powershell -NoLogo -NoProfile -Command "Start-Sleep -Seconds ([int]$env:STAGE2_BOOT_WAIT_SECONDS)"
 if defined STACK_MANIFEST (
-  "%PYTHON_EXE%" "%SCRIPT_DIR%..\scripts\lifecycle\register_launcher.py" --manifest "%STACK_MANIFEST%" --role "cmd:stage_orchestrator" --command-line "cmd /k call %SCRIPT_DIR%start_wsl_mavros_two.bat" --file-path "cmd.exe" --arguments "/k call %SCRIPT_DIR%start_wsl_mavros_two.bat"
+  rem /k keeps the registered cmd alive (stable PID for stop) after the batch
+  rem completes; the batch itself must never exit early (block parens fixed).
+  "%PYTHON_EXE%" "%SCRIPT_DIR%..\scripts\lifecycle\register_launcher.py" launch --manifest "%STACK_MANIFEST%" --role "cmd:stage_orchestrator" --command-line "cmd /k call %SCRIPT_DIR%start_wsl_mavros_two.bat" --file-path "cmd.exe" --arguments "/k call %SCRIPT_DIR%start_wsl_mavros_two.bat"
   if errorlevel 1 echo [WARN] MAVROS launcher registration failed.
 ) else (
   start "futureAircraftSim MAVROS two" cmd /k call "%SCRIPT_DIR%start_wsl_mavros_two.bat"
