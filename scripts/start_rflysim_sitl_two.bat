@@ -27,8 +27,7 @@ if /I "%~1"=="--generate-only" (
 )
 
 if defined STACK_MANIFEST (
-  powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%..\scripts\lifecycle\register_launcher.ps1" `
-    -Manifest "%STACK_MANIFEST%" -Role "cmd:stage_orchestrator" -CommandLine "%TEMP_SCRIPT%"
+  "%PYTHON_EXE%" "%SCRIPT_DIR%..\scripts\lifecycle\register_launcher.py" --manifest "%STACK_MANIFEST%" --role "cmd:stage_orchestrator" --command-line "cmd /k call %TEMP_SCRIPT%" --file-path "cmd.exe" --arguments "/k call %TEMP_SCRIPT%"
   if errorlevel 1 (
     echo [WARN] SITL wrapper launcher registration failed.
   )

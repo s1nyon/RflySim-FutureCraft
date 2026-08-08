@@ -166,7 +166,7 @@ schtasks /delete /tn "\FutureAircraftSim_LiveStack_Session1" /f
 详见设计文档 §11）：
 
 - **Ownership 创建时登记**：删除扫描式 `stack_record.py`；`stack_register.py` 为唯一
-  授予入口；Windows GUI/cmd 经 `register_launcher.ps1`/生成 SITL wrapper 在创建瞬间
+  授予入口；Windows GUI/cmd 经 `register_launcher.py`/生成 SITL wrapper 在创建瞬间
   登记；WSL 组件经 `lifecycle_common.sh stack_register()` 登记 PID+PGID（`setsid` 独立
   session）；
 - **stop 按 owned PGID**（`kill -SIG -- -PGID`），`clean=true` 来自 stop 自身最终验证；

@@ -22,6 +22,13 @@ if /I "%~1"=="--manifest" set "STACK_MANIFEST=%~2"
 shift & goto parse_args
 :args_done
 
+rem Derive stack paths from STACK_ID when explicit args are absent (keeps the
+rem scheduled-task command short: schtasks /tr is limited to 261 chars).
+if defined STACK_ID (
+  if not defined STACK_HEALTH_DIR set "STACK_HEALTH_DIR=%FUTURE_AIRCRAFT_SIM_DIR%\logs\live_stack\%STACK_ID%\health"
+  if not defined STACK_MANIFEST set "STACK_MANIFEST=%FUTURE_AIRCRAFT_SIM_DIR%\logs\live_stack\%STACK_ID%\stack_manifest.json"
+)
+
 if "%DRY_RUN%"=="1" (
   echo [DRY-RUN] Predicted narrow-course two-UAV orchestration
   echo [DRY-RUN] base map: %RFLYSIM_UE4_MAP%

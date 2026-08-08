@@ -17,16 +17,14 @@ if /I "%~1"=="--dry-run" (
 )
 call "%SCRIPT_DIR%start_vcxsrv.bat"
 if defined STACK_MANIFEST (
-  powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%..\scripts\lifecycle\register_launcher.ps1" `
-    -Manifest "%STACK_MANIFEST%" -Role "cmd:stage_orchestrator" -CommandLine "%SCRIPT_DIR%start_rflysim_sitl_two.bat"
+  "%PYTHON_EXE%" "%SCRIPT_DIR%..\scripts\lifecycle\register_launcher.py" --manifest "%STACK_MANIFEST%" --role "cmd:stage_orchestrator" --command-line "cmd /k call %SCRIPT_DIR%start_rflysim_sitl_two.bat" --file-path "cmd.exe" --arguments "/k call %SCRIPT_DIR%start_rflysim_sitl_two.bat"
   if errorlevel 1 echo [WARN] SITL launcher registration failed.
 ) else (
   start "futureAircraftSim SITL two" cmd /k call "%SCRIPT_DIR%start_rflysim_sitl_two.bat"
 )
 powershell -NoLogo -NoProfile -Command "Start-Sleep -Seconds ([int]$env:STAGE2_BOOT_WAIT_SECONDS)"
 if defined STACK_MANIFEST (
-  powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%..\scripts\lifecycle\register_launcher.ps1" `
-    -Manifest "%STACK_MANIFEST%" -Role "cmd:stage_orchestrator" -CommandLine "%SCRIPT_DIR%start_wsl_mavros_two.bat"
+  "%PYTHON_EXE%" "%SCRIPT_DIR%..\scripts\lifecycle\register_launcher.py" --manifest "%STACK_MANIFEST%" --role "cmd:stage_orchestrator" --command-line "cmd /k call %SCRIPT_DIR%start_wsl_mavros_two.bat" --file-path "cmd.exe" --arguments "/k call %SCRIPT_DIR%start_wsl_mavros_two.bat"
   if errorlevel 1 echo [WARN] MAVROS launcher registration failed.
 ) else (
   start "futureAircraftSim MAVROS two" cmd /k call "%SCRIPT_DIR%start_wsl_mavros_two.bat"

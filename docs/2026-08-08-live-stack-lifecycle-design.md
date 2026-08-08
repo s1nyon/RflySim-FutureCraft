@@ -45,7 +45,7 @@ scripts/lifecycle/*.py             纯逻辑核心（可离线测试）：
   stack_manifest.py                stack_id、manifest schema、指纹、PID 复用校验
   stack_ownership.py               创建时登记（register_process；无名称/regex 认领）
   stack_register.py                registration CLI（唯一 ownership 授予入口）
-  register_launcher.ps1            Windows 进程创建即登记（Process.Start -PassThru）
+  register_launcher.py             Windows 进程创建即登记（subprocess.Popen，PID/pid-file）
   generate_sitl_wrapper.ps1        SITL wrapper 生成（GUI 创建时登记、剥离名称杀）
   process_table.py                 Windows/WSL/Fake 进程表后端
   stack_inspect.py                 只读 inspect（owned/orphan/stale/unknown，fail-closed）
@@ -208,7 +208,7 @@ ros_master_alive / mavros_uav1_connected / mavros_uav2_connected / course_ready
 用户审阅后确认方向正确，要求进入真实 `-Execute` 前补齐安全缺口。已落地：
 
 1. **Ownership = 创建时登记**：删除 `stack_record.py`（名称/regex 扫描认领）；
-   `stack_register.py` 成为唯一授予入口；Windows 经 `register_launcher.ps1`
+   `stack_register.py` 成为唯一授予入口；Windows 经 `register_launcher.py`
    （Process.Start -PassThru）与生成 SITL wrapper 登记 GUI/cmd PID；WSL 经
    `lifecycle_common.sh stack_register()` 登记 roscore/MAVROS/px4-mavlink/
    sensor bridge/FAST-LIO/EGO/mission/recorder 的 PID+PGID。

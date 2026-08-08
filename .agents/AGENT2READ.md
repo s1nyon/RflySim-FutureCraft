@@ -173,7 +173,7 @@ vision / task logic / behavior tree
 用户审阅后要求进入真实 `-Execute` 前补齐安全缺口，已全部落地（offline 验证通过）：
 
 - **Ownership 只在创建时授予**：`scripts/lifecycle/stack_record.py`（名称/regex 扫描认领）
-  已删除；`stack_register.py` 是唯一登记入口；Windows 由 `register_launcher.ps1`
+  已删除；`stack_register.py` 是唯一登记入口；Windows 由 `register_launcher.py`
   （Process.Start -PassThru）与生成 SITL wrapper 在创建瞬间登记 GUI/cmd PID；
   WSL 由 `lifecycle_common.sh stack_register()` 登记 roscore/MAVROS/px4-mavlink/
   sensor bridge/FAST-LIO/EGO/mission/recorder 的 PID+PGID；

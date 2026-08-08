@@ -45,7 +45,7 @@ if ($DryRun) {
     Write-Host '[DRY-RUN] 1. init run-scoped manifest v2 (stack_id, git commit, start time, launcher identity, ROS master)'
     Write-Host "[DRY-RUN] 2. create one-shot scheduled task $taskName (far-future /st, then /run) launching $startup --stack-id --health-dir --manifest"
     Write-Host '[DRY-RUN] 3. write stack_context.env (STACK_ID/STACK_MANIFEST/STACK_HEALTH_DIR) for later runners'
-    Write-Host '[DRY-RUN] 4. launchers register owned processes AT CREATION (cmd windows via register_launcher.ps1; GUI via generated SITL wrapper; roscore/MAVROS via stage2 setsid)'
+    Write-Host '[DRY-RUN] 4. launchers register owned processes AT CREATION (cmd windows via register_launcher.py; GUI via generated SITL wrapper; roscore/MAVROS via stage2 setsid)'
     Write-Host '[DRY-RUN] 5. set simulation_instance_id + ROS master in manifest; wait for per-status health gate all-ready'
     Write-Host '[DRY-RUN] The manifest-recorded scheduled task is removed only by graceful stop (manifest-only).'
     exit 0
@@ -56,8 +56,8 @@ if ($DryRun) {
     --launcher-kind scheduled_task --launcher-identity $taskName
 if ($LASTEXITCODE -ne 0) { throw 'stack manifest init failed' }
 
-$taskCmd = "cmd /c call `"$startup`" --stack-id $stackId --health-dir $healthDir --manifest $manifestPath"
-schtasks /create /tn $taskName /tr $taskCmd /sc once /st 00:00 /sd 01/01/2030 /ru $TaskUser /rl HIGHEST /f | Out-Null
+$taskCmd = "cmd /c call `"$startup`" --stack-id $stackId"
+schtasks /create /tn $taskName /tr $taskCmd /sc once /st 00:00 /sd 2030/01/01 /ru $TaskUser /rl HIGHEST /it /f | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "schtasks /create failed: $taskName" }
 schtasks /run /tn $taskName | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "schtasks /run failed: $taskName" }

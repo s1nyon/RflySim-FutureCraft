@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Manifest,
     [switch]$DryRun,
     [switch]$Execute,
-    [string]$Reason = '',
+    [string]$Reason = 'stack stop requested',
     [double]$IntWait = 5.0,
     [double]$TermWait = 5.0,
     [string]$Distro = 'RflySim-20.04'

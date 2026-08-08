@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import re
 from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
@@ -38,11 +39,23 @@ def find_by_pgid(processes: Sequence[ProcessInfo], pgid: int) -> List[ProcessInf
 
 
 def _cim_datetime_to_utc(cim_value: Optional[str]) -> str:
-    """Convert WMI CIM datetime (e.g. 20260808120003.123456+480) to UTC ISO."""
+    """Convert a serialized process start time to UTC ISO.
+
+    Handles both `\/Date(<epoch-ms>)\/` (PowerShell ConvertTo-Json output) and
+    WMI CIM datetime (e.g. 20260808120003.123456+480).
+    """
     if not cim_value:
         return ""
     text = str(cim_value).strip()
-    m = __import__("re").fullmatch(r"(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\.\d+)?([+-]\d{3,4})?", text)
+    date_ms = re.fullmatch(r"\\?/Date\((\d+)([+-]\d{4})?\)\\?/", text)
+    if date_ms:
+        import datetime as dt
+
+        epoch_ms = int(date_ms.group(1))
+        return dt.datetime.fromtimestamp(epoch_ms / 1000.0, tz=dt.timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+    m = re.fullmatch(r"(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\.\d+)?([+-]\d{3,4})?", text)
     if not m:
         return ""
     year, month, day, hour, minute, second, offset = m.groups()
