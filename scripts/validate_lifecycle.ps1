@@ -43,6 +43,14 @@ try {
     )
     Invoke-Checked $python @('tests\lifecycle_health_gate_check.py', '--health-module', "$lifecycle\health_gate.py")
     Invoke-Checked $python @('tests\lifecycle_fresh_instance_check.py', '--fresh-module', "$lifecycle\fresh_instance.py")
+    Invoke-Checked $python @(
+        'tests\lifecycle_spawn_attest_check.py',
+        '--attest-module', "$lifecycle\spawn_attest.py",
+        '--manifest-module', "$lifecycle\stack_manifest.py",
+        '--ownership-module', "$lifecycle\stack_ownership.py",
+        '--process-table-module', "$lifecycle\process_table.py",
+        '--stop-module', "$lifecycle\stack_stop.py"
+    )
     Invoke-Checked $python @('tests\lifecycle_banned_command_check.py', '--project-root', $ProjectRoot)
 
     # Hazard stubs must refuse with exit code 1.

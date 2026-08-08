@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import importlib
 import importlib.util
 import re
@@ -103,6 +104,38 @@ def main() -> int:
     try:
         manifest_mod.validate_manifest(broken)
         raise AssertionError("entry without ownership grant must be rejected")
+    except ValueError:
+        pass
+
+    # spawn_attested grant: full evidence required; missing evidence rejected.
+    spawn = ownership.register_process(
+        manifest,
+        side="wsl",
+        pid=521,
+        pgid=521,
+        role="wsl:px4_uav1",
+        name="px4",
+        command_line="/mnt/d/PX4PSP/Firmware/build/px4_sitl_default/bin/px4 -i 1 -d ...",
+        start_time_utc="2026-08-08T12:00:16Z",
+        reason="spawned by registered SITL session (marker-attested)",
+        ownership_extras={
+            "granted": "spawn_attested",
+            "ownership_parent_role": "wsl:px4_build_session",
+            "stack_marker": {"name": "RFLY_STACK_ID", "value": manifest["stack_id"]},
+            "ownership_evidence": {"marker_match": True, "px4_instance_index": 1},
+        },
+    )
+    assert spawn["ownership"]["granted"] == "spawn_attested"
+    manifest_mod.validate_manifest(manifest)
+
+    broken_spawn = dict(manifest)
+    broken_spawn["wsl_processes"] = [
+        copy.deepcopy(e) for e in manifest["wsl_processes"] if int(e["pid"]) == 521
+    ]
+    del broken_spawn["wsl_processes"][0]["ownership"]["ownership_evidence"]
+    try:
+        manifest_mod.validate_manifest(broken_spawn)
+        raise AssertionError("spawn_attested entry without ownership_evidence must be rejected")
     except ValueError:
         pass
 

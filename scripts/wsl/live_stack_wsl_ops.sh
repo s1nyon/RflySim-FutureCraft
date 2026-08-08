@@ -16,6 +16,7 @@ usage: live_stack_wsl_ops.sh <command> [args]
   signal <SIG> <pid>                send SIG (INT|TERM|KILL) to the explicit pid
   alive-group <pgid>                exit 0 if the explicit process group is alive
   signal-group <SIG> <pgid>         send SIG (INT|TERM|KILL) to the explicit process group
+  marker <pid> <stack_id>           exit 0 if /proc/<pid>/environ carries RFLY_STACK_ID=<stack_id>
 EOF
   exit 2
 }
@@ -63,6 +64,20 @@ case "${1:-}" in
       usage
     fi
     kill -"$sig" -- "-$pgid"
+    ;;
+  marker)
+    pid="${2:-}"
+    stack_id="${3:-}"
+    if [[ ! "$pid" =~ ^[0-9]+$ ]]; then
+      usage
+    fi
+    if [[ -z "$stack_id" ]]; then
+      usage
+    fi
+    if [[ -r "/proc/$pid/environ" ]] && tr '\0' '\n' < "/proc/$pid/environ" | grep -q "^RFLY_STACK_ID=$stack_id$"; then
+      exit 0
+    fi
+    exit 1
     ;;
   *)
     usage

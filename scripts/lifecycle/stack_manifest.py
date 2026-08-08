@@ -100,10 +100,23 @@ def validate_manifest(manifest: dict) -> None:
             if field not in entry:
                 raise ValueError(f"process entry missing '{field}': {entry}")
         ownership = entry.get("ownership")
-        if not isinstance(ownership, dict) or ownership.get("granted") != "at_creation":
-            raise ValueError(f"process entry without at_creation ownership grant: pid={entry.get('pid')}")
-        if not ownership.get("reason") or not ownership.get("granted_at_utc"):
-            raise ValueError(f"process entry ownership grant must include reason and granted_at_utc: pid={entry.get('pid')}")
+        if not isinstance(ownership, dict):
+            raise ValueError(f"process entry without ownership grant: pid={entry.get('pid')}")
+        grant = ownership.get("granted")
+        if grant == "at_creation":
+            if not ownership.get("reason") or not ownership.get("granted_at_utc"):
+                raise ValueError(
+                    f"at_creation grant must include reason and granted_at_utc: pid={entry.get('pid')}"
+                )
+        elif grant == "spawn_attested":
+            required = ("reason", "granted_at_utc", "ownership_parent_role", "stack_marker", "ownership_evidence")
+            missing = [field for field in required if not ownership.get(field)]
+            if missing:
+                raise ValueError(
+                    f"spawn_attested grant missing {missing} for pid={entry.get('pid')}"
+                )
+        else:
+            raise ValueError(f"unknown ownership grant '{grant}' for pid={entry.get('pid')}")
 
 
 def normalize_command_line(command_line: str) -> str:

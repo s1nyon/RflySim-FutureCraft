@@ -222,6 +222,11 @@ def main() -> int:
         command_line="/opt/ros/noetic/bin/roscore", start_time_utc=start, reason="t",
     )
     orphan_child = make_proc(777, "roscore", start, "/opt/ros/noetic/bin/roscore", pgid=500)
+    ownership.register_process(
+        manifest6, side="wsl", pid=777, pgid=500, role="wsl:roscore:orphan_child", name="roscore",
+        command_line="/opt/ros/noetic/bin/roscore", start_time_utc=start,
+        reason="orphan child of the registered group (registered member)",
+    )
     wsl_table = MutableTable([orphan_child])  # leader 500 exited
     backend = FakeStopBackend(win_table=MutableTable([]), wsl_table=wsl_table)
     report = stop.execute_stop(

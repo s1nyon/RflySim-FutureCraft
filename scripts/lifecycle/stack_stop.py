@@ -157,6 +157,47 @@ class WslStopBackend(StopBackend):
         return False
 
 
+class MarkerVerifier:
+    """Re-verification hook for spawn_attested entries before any signal."""
+
+    def verify(self, entry: dict, proc) -> bool:
+        raise NotImplementedError
+
+
+class WslMarkerVerifier(MarkerVerifier):
+    """Re-checks /proc/<pid>/environ RFLY_STACK_ID for spawn_attested entries."""
+
+    def __init__(self, distro: str = "RflySim-20.04", wsl: str = "wsl.exe"):
+        self.distro = distro
+        self.wsl = wsl
+
+    def verify(self, entry: dict, proc) -> bool:
+        if entry.get("ownership", {}).get("granted") != "spawn_attested":
+            return True
+        if not entry_matches_process(entry, proc):
+            return False
+        stack_id = entry.get("ownership", {}).get("stack_marker", {}).get("value")
+        if not stack_id:
+            return False
+        try:
+            result = subprocess.run(
+                [
+                    self.wsl, "-d", self.distro, "-e", "bash", "-lic",
+                    f"bash /mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/"
+                    f"e13.RobotCom26Adv/future_aircraft_sim/scripts/wsl/live_stack_wsl_ops.sh "
+                    f"marker {int(proc.pid)} {stack_id}",
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=30,
+            )
+            return result.returncode == 0
+        except (subprocess.SubprocessError, OSError):
+            return False
+
+
 def _ordered_entries(manifest: dict):
     for entry in manifest["windows_processes"]:
         yield "windows", entry
@@ -272,6 +313,7 @@ def execute_stop(
     int_wait_s: float = 5.0,
     term_wait_s: float = 5.0,
     wait_fn=None,
+    attest_verifier: Optional[MarkerVerifier] = None,
 ) -> StopReport:
     wait = wait_fn or time.sleep
     planned, refused = plan_stop(manifest, win_table, wsl_table)
@@ -314,28 +356,66 @@ def execute_stop(
                 )
                 continue
 
-            ok = backend.stop_group(int(pgid), "INT")
-            performed.append(_action(entry, side, "INT", "pgid", status="performed" if ok else "failed"))
-            if not ok:
-                failure_reasons.append(f"INT to PGID {pgid} ({entry['role']}) failed")
-            wait(int_wait_s)
-
-            if backend.alive_group(int(pgid)) or find_by_pgid(table.snapshot(), pgid):
-                ok = backend.stop_group(int(pgid), "TERM")
-                performed.append(_action(entry, side, "TERM", "pgid", status="performed" if ok else "failed"))
-                if not ok:
-                    failure_reasons.append(f"TERM to PGID {pgid} ({entry['role']}) failed")
-            wait(term_wait_s)
-
-            if find_by_pgid(table.snapshot(), pgid):
-                ok = backend.stop_group(int(pgid), "KILL")
-                performed.append(_action(entry, side, "KILL", "pgid", status="performed" if ok else "failed"))
-                if ok:
-                    force_reasons.append(
-                        f"PGID {pgid} ({entry['role']}) still alive after TERM; force-stopped after verification"
+            # spawn_attested marker re-verification (leader, or an owned group member).
+            if entry.get("ownership", {}).get("granted") == "spawn_attested" and attest_verifier is not None:
+                verify_proc = proc if leader_ok else (group[0] if group else None)
+                if verify_proc is None or not attest_verifier.verify(entry, verify_proc):
+                    refused.append(
+                        {
+                            "pid": pid,
+                            "role": entry["role"],
+                            "reason": "spawn_attested marker/identity re-verification failed before stop",
+                        }
                     )
+                    continue
+
+            owned_entries = {int(e["pid"]): e for e in manifest["wsl_processes"]}
+
+            def member_verified(member) -> bool:
+                member_entry = owned_entries.get(int(member.pid))
+                if member_entry is None or not entry_matches_process(member_entry, member):
+                    return False
+                if member_entry.get("ownership", {}).get("granted") == "spawn_attested" and attest_verifier is not None:
+                    return attest_verifier.verify(member_entry, member)
+                return True
+
+            unowned_members = [m for m in group if int(m.pid) not in owned_entries]
+            use_group = bool(group) and not unowned_members and all(member_verified(m) for m in group)
+
+            for signal in ("INT", "TERM", "KILL"):
+                snapshot = table.snapshot()
+                group = find_by_pgid(snapshot, pgid) if pgid is not None else []
+                if not group and not find_by_pid(snapshot, pid):
+                    break
+                if use_group and group:
+                    ok = backend.stop_group(int(pgid), signal)
+                    performed.append(
+                        _action(entry, side, signal, "pgid", status="performed" if ok else "failed")
+                    )
+                    if not ok:
+                        failure_reasons.append(f"{signal} to PGID {pgid} ({entry['role']}) failed")
                 else:
-                    failure_reasons.append(f"KILL to PGID {pgid} ({entry['role']}) failed")
+                    targets = [
+                        m for m in group if int(m.pid) in owned_entries and member_verified(m)
+                    ]
+                    for member in targets:
+                        ok = backend.stop(member, signal)
+                        performed.append(
+                            _action(entry, side, signal, "pid", status="performed" if ok else "failed")
+                        )
+                        if not ok:
+                            failure_reasons.append(
+                                f"{signal} to pid {int(member.pid)} ({entry['role']}) failed"
+                            )
+                        elif signal == "KILL":
+                            force_reasons.append(
+                                f"pid {int(member.pid)} ({entry['role']}) still alive after TERM; "
+                                "force-stopped after re-verification"
+                            )
+                if signal == "INT":
+                    wait(int_wait_s)
+                elif signal == "TERM":
+                    wait(term_wait_s)
             continue
 
         if proc is None:
@@ -481,6 +561,7 @@ def _cli_main() -> int:
         reason=args.reason,
         int_wait_s=args.int_wait,
         term_wait_s=args.term_wait,
+        attest_verifier=WslMarkerVerifier(args.distro) if not dry_run else None,
     )
     if not dry_run:
         save_manifest(manifest, args.manifest)

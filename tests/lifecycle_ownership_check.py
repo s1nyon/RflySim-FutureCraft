@@ -55,6 +55,20 @@ def main() -> int:
     assert len(manifest["wsl_processes"]) == 1
     assert manifest["wsl_processes"][0]["ownership"]["granted"] == "at_creation"
 
+    spawn = ownership.register_process(
+        manifest, side="wsl", pid=501, pgid=501, role="wsl:px4_uav1", name="px4",
+        command_line="/mnt/d/PX4PSP/Firmware/build/px4_sitl_default/bin/px4 -i 1",
+        start_time_utc="2026-08-08T12:00:16Z",
+        reason="spawned by registered SITL session (marker-attested)",
+        ownership_extras={
+            "granted": "spawn_attested",
+            "ownership_parent_role": "wsl:px4_build_session",
+            "stack_marker": {"name": "RFLY_STACK_ID", "value": manifest["stack_id"]},
+            "ownership_evidence": {"marker_match": True, "px4_instance_index": 1},
+        },
+    )
+    assert spawn["ownership"]["granted"] == "spawn_attested"
+
     # Launcher / ROS master / sim-id metadata helpers.
     ownership.set_launcher(manifest, kind="scheduled_task", identity="\\Task", pid=1000, command_line="cmd /c call start.bat")
     assert manifest["launcher"]["pid"] == 1000

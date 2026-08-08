@@ -64,6 +64,7 @@ def register_process(
     name: Optional[str] = None,
     pgid: Optional[int] = None,
     reason: Optional[str] = None,
+    ownership_extras: Optional[dict] = None,
 ) -> dict:
     """Grant ownership at creation. The caller must have obtained pid/pgid when it created the process."""
     if side not in ("windows", "wsl"):
@@ -80,6 +81,16 @@ def register_process(
     if int(pid) in existing:
         raise ValueError(f"duplicate registration for side={side} pid={pid}; fix the launcher")
 
+    ownership = {
+        "granted": "at_creation",
+        "reason": str(reason),
+        "granted_at_utc": utc_now_iso(),
+    }
+    if ownership_extras:
+        ownership.update(ownership_extras)
+        if "granted" not in ownership_extras:
+            ownership["granted"] = "spawn_attested"
+
     entry = {
         "pid": int(pid),
         "name": str(name or ""),
@@ -87,11 +98,7 @@ def register_process(
         "command_line": str(command_line),
         "role": str(role),
         "verified_at_utc": utc_now_iso(),
-        "ownership": {
-            "granted": "at_creation",
-            "reason": str(reason),
-            "granted_at_utc": utc_now_iso(),
-        },
+        "ownership": ownership,
     }
     if pgid is not None:
         entry["pgid"] = int(pgid)
