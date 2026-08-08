@@ -17,6 +17,10 @@ if /I "%~1"=="--manifest" set "STACK_MANIFEST=%~2"
 shift & goto parse_args
 :args_done
 
+if defined STACK_ID (
+  echo %TIME% mavros_wrapper: STACK_ID=%STACK_ID% HEALTH_DIR=%STACK_HEALTH_DIR% MANIFEST=%STACK_MANIFEST% >> "%FUTURE_AIRCRAFT_SIM_DIR%\logs\live_stack\%STACK_ID%\mavros_launch.log"
+)
+
 if "%DRY_RUN%"=="1" (
   echo [DRY-RUN] Launch WSL two-UAV MAVROS script: %FUTURE_AIRCRAFT_SIM_WSL_DIR%/scripts/wsl/stage2_two_mavros.sh
   echo [DRY-RUN] Expected topics: /uav1/mavros/* and /uav2/mavros/*
@@ -29,16 +33,20 @@ rem (for /f cannot handle quoted first tokens; keep goto structure, no parens).
 if not defined STACK_HEALTH_DIR goto no_health_dir
 powershell -NoLogo -NoProfile -Command "$p='%STACK_HEALTH_DIR%'; if($p -match '^([A-Za-z]):\\(.*)$'){ '/mnt/' + $matches[1].ToLower() + '/' + ($matches[2] -replace '\\','/') } else { $p.Replace('\','/') }" > "%TEMP%\stack_health_dir_wsl.txt"
 set /p STACK_HEALTH_DIR_WSL=<"%TEMP%\stack_health_dir_wsl.txt"
+if defined STACK_ID echo %TIME% mavros_wrapper: HEALTH_DIR_WSL=%STACK_HEALTH_DIR_WSL% >> "%FUTURE_AIRCRAFT_SIM_DIR%\logs\live_stack\%STACK_ID%\mavros_launch.log"
 :no_health_dir
 if not defined STACK_MANIFEST goto no_manifest
 powershell -NoLogo -NoProfile -Command "$p='%STACK_MANIFEST%'; if($p -match '^([A-Za-z]):\\(.*)$'){ '/mnt/' + $matches[1].ToLower() + '/' + ($matches[2] -replace '\\','/') } else { $p.Replace('\','/') }" > "%TEMP%\stack_manifest_wsl.txt"
 set /p STACK_MANIFEST_WSL=<"%TEMP%\stack_manifest_wsl.txt"
+if defined STACK_ID echo %TIME% mavros_wrapper: MANIFEST_WSL=%STACK_MANIFEST_WSL% >> "%FUTURE_AIRCRAFT_SIM_DIR%\logs\live_stack\%STACK_ID%\mavros_launch.log"
 :no_manifest
 
 if not defined STACK_HEALTH_DIR_WSL goto launch_plain
+if defined STACK_ID echo %TIME% mavros_wrapper: launching stage2 with env >> "%FUTURE_AIRCRAFT_SIM_DIR%\logs\live_stack\%STACK_ID%\mavros_launch.log"
 powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%..\scripts\lifecycle\launch_stage2.ps1" -HealthDirWsl "%STACK_HEALTH_DIR_WSL%" -StackId "%STACK_ID%" -ManifestWsl "%STACK_MANIFEST_WSL%"
 goto launch_done
 :launch_plain
+if defined STACK_ID echo %TIME% mavros_wrapper: launching stage2 plain >> "%FUTURE_AIRCRAFT_SIM_DIR%\logs\live_stack\%STACK_ID%\mavros_launch.log"
 powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%..\scripts\lifecycle\launch_stage2.ps1"
 :launch_done
 
