@@ -15,6 +15,13 @@ ROOT_COMPILE_COMMANDS = "${workspaceFolder}/future_aircraft_ws/build/compile_com
 ROS_COMPILE_COMMANDS = "${workspaceFolder}/build/compile_commands.json"
 OLD_EGO_PATH = "external/ego-planner-swarm"
 NEW_EGO_PATH = "third_party/ego-planner-swarm"
+SIM_TASK_ARGUMENTS = {
+    "sim: doctor": ["doctor"],
+    "sim: start (dry-run)": ["start"],
+    "sim: status": ["status"],
+    "sim: stop (dry-run)": ["stop"],
+    "validate: core": ["validate", "-Suite", "core"],
+}
 
 
 def load_json(path: Path, errors: list[str]) -> dict:
@@ -41,11 +48,42 @@ def build_task(tasks_json: dict, path: Path, errors: list[str]) -> dict:
     return matches[0]
 
 
+def check_sim_tasks(
+    tasks_json: dict,
+    path: Path,
+    expected_sim_script: str,
+    errors: list[str],
+) -> None:
+    tasks = tasks_json.get("tasks")
+    if not isinstance(tasks, list):
+        return
+    for label, command_arguments in SIM_TASK_ARGUMENTS.items():
+        matches = [task for task in tasks if task.get("label") == label]
+        if len(matches) != 1:
+            errors.append(f"{path} must contain exactly one {label!r} task; found {len(matches)}")
+            continue
+        task = matches[0]
+        expected_arguments = [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            expected_sim_script,
+            *command_arguments,
+        ]
+        if task.get("command") != "powershell.exe" or task.get("args") != expected_arguments:
+            errors.append(
+                f"{path} task {label!r} must invoke powershell.exe "
+                f"with arguments {expected_arguments!r}"
+            )
+
+
 def check_workspace(
     project_root: Path,
     workspace_root: Path,
     expected_build_script: str,
     expected_compile_commands: str,
+    expected_sim_script: str,
     errors: list[str],
 ) -> None:
     vscode_root = workspace_root / ".vscode"
@@ -58,12 +96,19 @@ def check_workspace(
         if not path.is_file():
             errors.append(f"missing developer workspace metadata: {path.relative_to(project_root)}")
 
-    task = build_task(load_json(tasks_path, errors), tasks_path.relative_to(project_root), errors)
+    tasks_json = load_json(tasks_path, errors)
+    task = build_task(tasks_json, tasks_path.relative_to(project_root), errors)
     args = task.get("args") if task else None
     if not isinstance(args, list) or not args or args[-1] != expected_build_script:
         errors.append(
             f"{tasks_path.relative_to(project_root)} build task must invoke {expected_build_script}"
         )
+    check_sim_tasks(
+        tasks_json,
+        tasks_path.relative_to(project_root),
+        expected_sim_script,
+        errors,
+    )
 
     settings = load_json(settings_path, errors)
     if settings.get("C_Cpp.default.compileCommands") != expected_compile_commands:
@@ -110,6 +155,7 @@ def main() -> int:
         project_root,
         ROOT_BUILD_SCRIPT,
         ROOT_COMPILE_COMMANDS,
+        "${workspaceFolder}/sim.ps1",
         errors,
     )
     check_workspace(
@@ -117,6 +163,7 @@ def main() -> int:
         ros_workspace,
         ROS_BUILD_SCRIPT,
         ROS_COMPILE_COMMANDS,
+        "${workspaceFolder}/../sim.ps1",
         errors,
     )
 

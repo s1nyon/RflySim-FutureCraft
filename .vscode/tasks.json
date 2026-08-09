@@ -21,6 +21,78 @@
         "reveal": "always",
         "panel": "dedicated"
       }
+    },
+    {
+      "label": "sim: doctor",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/sim.ps1",
+        "doctor"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "sim: start (dry-run)",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/sim.ps1",
+        "start"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "sim: status",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/sim.ps1",
+        "status"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "sim: stop (dry-run)",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/sim.ps1",
+        "stop"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "validate: core",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/sim.ps1",
+        "validate",
+        "-Suite",
+        "core"
+      ],
+      "problemMatcher": []
     }
   ]
 }
