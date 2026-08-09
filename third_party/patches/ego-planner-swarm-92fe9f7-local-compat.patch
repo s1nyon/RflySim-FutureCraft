@@ -1,0 +1,324 @@
+diff --git a/src/planner/bspline_opt/CMakeLists.txt b/src/planner/bspline_opt/CMakeLists.txt
+index e61c145..0ae7c4a 100755
+--- a/src/planner/bspline_opt/CMakeLists.txt
++++ b/src/planner/bspline_opt/CMakeLists.txt
+@@ -2,8 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
+ project(bspline_opt)
+ 
+ set(CMAKE_BUILD_TYPE "Release")
+-ADD_COMPILE_OPTIONS(-std=c++11 )
+-ADD_COMPILE_OPTIONS(-std=c++14 )
++ADD_COMPILE_OPTIONS(-std=c++17 )
+ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+ 
+ find_package(Eigen3 REQUIRED)
+diff --git a/src/planner/drone_detect/CMakeLists.txt b/src/planner/drone_detect/CMakeLists.txt
+index 1eacae4..c7466ed 100644
+--- a/src/planner/drone_detect/CMakeLists.txt
++++ b/src/planner/drone_detect/CMakeLists.txt
+@@ -2,8 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
+ project(drone_detect)
+ 
+ set(CMAKE_BUILD_TYPE "Release")
+-ADD_COMPILE_OPTIONS(-std=c++11 )
+-ADD_COMPILE_OPTIONS(-std=c++14 )
++ADD_COMPILE_OPTIONS(-std=c++17 )
+ ## By adding -Wall and -Werror, the compiler does not ignore warnings anymore,
+ ## enforcing cleaner code.
+ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+diff --git a/src/planner/path_searching/CMakeLists.txt b/src/planner/path_searching/CMakeLists.txt
+index 13f1f66..47cafbc 100755
+--- a/src/planner/path_searching/CMakeLists.txt
++++ b/src/planner/path_searching/CMakeLists.txt
+@@ -2,8 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
+ project(path_searching)
+ 
+ set(CMAKE_BUILD_TYPE "Release")
+-ADD_COMPILE_OPTIONS(-std=c++11 )
+-ADD_COMPILE_OPTIONS(-std=c++14 )
++ADD_COMPILE_OPTIONS(-std=c++17 )
+ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+ 
+ find_package(Eigen3 REQUIRED)
+diff --git a/src/planner/plan_env/CMakeLists.txt b/src/planner/plan_env/CMakeLists.txt
+index 701e9af..b536bee 100755
+--- a/src/planner/plan_env/CMakeLists.txt
++++ b/src/planner/plan_env/CMakeLists.txt
+@@ -2,8 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
+ project(plan_env)
+ 
+ set(CMAKE_BUILD_TYPE "Release")
+-ADD_COMPILE_OPTIONS(-std=c++11 )
+-ADD_COMPILE_OPTIONS(-std=c++14 )
++ADD_COMPILE_OPTIONS(-std=c++17 )
+ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+ 
+ find_package(OpenCV REQUIRED)
+diff --git a/src/planner/plan_manage/CMakeLists.txt b/src/planner/plan_manage/CMakeLists.txt
+index aa7c97e..e5fae12 100755
+--- a/src/planner/plan_manage/CMakeLists.txt
++++ b/src/planner/plan_manage/CMakeLists.txt
+@@ -2,8 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
+ project(ego_planner)
+ 
+ set(CMAKE_BUILD_TYPE "Release")
+-ADD_COMPILE_OPTIONS(-std=c++11 )
+-ADD_COMPILE_OPTIONS(-std=c++14 )
++ADD_COMPILE_OPTIONS(-std=c++17 )
+ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+ 
+ find_package(Eigen3 REQUIRED)
+diff --git a/src/planner/rosmsg_tcp_bridge/CMakeLists.txt b/src/planner/rosmsg_tcp_bridge/CMakeLists.txt
+index 30ec419..988a7d6 100755
+--- a/src/planner/rosmsg_tcp_bridge/CMakeLists.txt
++++ b/src/planner/rosmsg_tcp_bridge/CMakeLists.txt
+@@ -2,8 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
+ project(rosmsg_tcp_bridge)
+ 
+ set(CMAKE_BUILD_TYPE "Release")
+-ADD_COMPILE_OPTIONS(-std=c++11 )
+-ADD_COMPILE_OPTIONS(-std=c++14 )
++ADD_COMPILE_OPTIONS(-std=c++17 )
+ set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Wall -g")
+ 
+ find_package(Eigen3 REQUIRED)
+diff --git a/src/planner/traj_utils/CMakeLists.txt b/src/planner/traj_utils/CMakeLists.txt
+index 5f1f457..9a37b44 100755
+--- a/src/planner/traj_utils/CMakeLists.txt
++++ b/src/planner/traj_utils/CMakeLists.txt
+@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
+ project(traj_utils)
+ 
+ set(CMAKE_BUILD_TYPE "Release")
+-set(CMAKE_CXX_FLAGS "-std=c++11")
++set(CMAKE_CXX_FLAGS "-std=c++17")
+ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+ 
+ find_package(catkin REQUIRED COMPONENTS
+diff --git a/src/planner/traj_utils/include/traj_utils/polynomial_traj.h b/src/planner/traj_utils/include/traj_utils/polynomial_traj.h
+index 72bac9b..a1d5994 100644
+--- a/src/planner/traj_utils/include/traj_utils/polynomial_traj.h
++++ b/src/planner/traj_utils/include/traj_utils/polynomial_traj.h
+@@ -231,8 +231,8 @@ public:
+       /* jerk matrix */
+       Eigen::MatrixXd mat_jerk(order, order);
+       mat_jerk.setZero();
+-      for (double i = 3; i < order; i += 1)
+-        for (double j = 3; j < order; j += 1)
++      for (int i = 3; i < order; i += 1)
++        for (int j = 3; j < order; j += 1)
+         {
+           mat_jerk(i, j) =
+               i * (i - 1) * (i - 2) * j * (j - 1) * (j - 2) * pow(ts, i + j - 5) / (i + j - 5);
+@@ -333,4 +333,4 @@ public:
+                                              double t);
+ };
+ 
+-#endif
+\ No newline at end of file
++#endif
+diff --git a/src/uav_simulator/Utils/multi_map_server/CMakeLists.txt b/src/uav_simulator/Utils/multi_map_server/CMakeLists.txt
+index f467b0b..a4a9416 100755
+--- a/src/uav_simulator/Utils/multi_map_server/CMakeLists.txt
++++ b/src/uav_simulator/Utils/multi_map_server/CMakeLists.txt
+@@ -40,7 +40,7 @@ cmake_minimum_required(VERSION 2.8.3)
+ project(multi_map_server)
+ 
+ set(CMAKE_BUILD_TYPE "Release")
+-set(CMAKE_CXX_FLAGS "-std=c++11")
++set(CMAKE_CXX_FLAGS "-std=c++17")
+ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+ 
+ ## Find catkin macros and libraries
+diff --git a/src/uav_simulator/Utils/odom_visualization/CMakeLists.txt b/src/uav_simulator/Utils/odom_visualization/CMakeLists.txt
+index 4917db3..178a671 100755
+--- a/src/uav_simulator/Utils/odom_visualization/CMakeLists.txt
++++ b/src/uav_simulator/Utils/odom_visualization/CMakeLists.txt
+@@ -38,8 +38,7 @@ project(odom_visualization)
+ 
+ set(CMAKE_BUILD_TYPE "Release")
+ set(CMAKE_CXX_FLAGS "-O3 -Wall -g")
+-ADD_COMPILE_OPTIONS(-std=c++11 )
+-ADD_COMPILE_OPTIONS(-std=c++14 )
++ADD_COMPILE_OPTIONS(-std=c++17 )
+ 
+ ## Find catkin macros and libraries
+ ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
+diff --git a/src/uav_simulator/Utils/pose_utils/CMakeLists.txt b/src/uav_simulator/Utils/pose_utils/CMakeLists.txt
+index d65f182..22aed58 100755
+--- a/src/uav_simulator/Utils/pose_utils/CMakeLists.txt
++++ b/src/uav_simulator/Utils/pose_utils/CMakeLists.txt
+@@ -3,8 +3,7 @@ project(pose_utils)
+ 
+ set(CMAKE_BUILD_TYPE "Release")
+ set(CMAKE_CXX_FLAGS "-O3 -Wall -g")
+-ADD_COMPILE_OPTIONS(-std=c++11 )
+-ADD_COMPILE_OPTIONS(-std=c++14 )
++ADD_COMPILE_OPTIONS(-std=c++17 )
+ 
+ find_package(catkin REQUIRED COMPONENTS
+   #armadillo
+diff --git a/src/uav_simulator/Utils/rviz_plugins/CMakeLists.txt b/src/uav_simulator/Utils/rviz_plugins/CMakeLists.txt
+index 2732320..454358a 100644
+--- a/src/uav_simulator/Utils/rviz_plugins/CMakeLists.txt
++++ b/src/uav_simulator/Utils/rviz_plugins/CMakeLists.txt
+@@ -1,7 +1,7 @@
+ cmake_minimum_required(VERSION 2.8.3)
+ project(rviz_plugins)
+ 
+-add_compile_options(-std=c++11)
++add_compile_options(-std=c++17)
+ 
+ find_package(catkin REQUIRED COMPONENTS
+   roscpp
+diff --git a/src/uav_simulator/Utils/uav_utils/CMakeLists.txt b/src/uav_simulator/Utils/uav_utils/CMakeLists.txt
+index 6a90552..d83f29c 100644
+--- a/src/uav_simulator/Utils/uav_utils/CMakeLists.txt
++++ b/src/uav_simulator/Utils/uav_utils/CMakeLists.txt
+@@ -4,16 +4,16 @@ project(uav_utils)
+ ## Turn on verbose output
+ set(CMAKE_VERBOSE_MAKEFILE "false")
+ 
+-## Enable C++11
++## Enable C++17 for current ROS/log4cxx headers.
+ include(CheckCXXCompilerFlag)
+-CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
++CHECK_CXX_COMPILER_FLAG("-std=c++17" COMPILER_SUPPORTS_CXX17)
+ CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
+-if(COMPILER_SUPPORTS_CXX11)
+-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
++if(COMPILER_SUPPORTS_CXX17)
++    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+ elseif(COMPILER_SUPPORTS_CXX0X)
+     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
+ else()
+-        message(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
++        message(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++17 support. Please use a different C++ compiler.")
+ endif()
+ 
+ ## Add some compile flags
+diff --git a/src/uav_simulator/Utils/waypoint_generator/CMakeLists.txt b/src/uav_simulator/Utils/waypoint_generator/CMakeLists.txt
+index eb4e752..a67eacb 100755
+--- a/src/uav_simulator/Utils/waypoint_generator/CMakeLists.txt
++++ b/src/uav_simulator/Utils/waypoint_generator/CMakeLists.txt
+@@ -3,14 +3,14 @@ project(waypoint_generator)
+ 
+ set(CMAKE_VERBOSE_MAKEFILE "false")
+ include(CheckCXXCompilerFlag)
+-CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
++CHECK_CXX_COMPILER_FLAG("-std=c++17" COMPILER_SUPPORTS_CXX17)
+ CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
+-if(COMPILER_SUPPORTS_CXX11)
+-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
++if(COMPILER_SUPPORTS_CXX17)
++    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+ elseif(COMPILER_SUPPORTS_CXX0X)
+     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
+ else()
+-        message(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
++        message(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++17 support. Please use a different C++ compiler.")
+ endif()
+ 
+ set(ADDITIONAL_CXX_FLAG "-Wall -O3 -march=native")
+diff --git a/src/uav_simulator/fake_drone/CMakeLists.txt b/src/uav_simulator/fake_drone/CMakeLists.txt
+index 3ab9704..e68b295 100644
+--- a/src/uav_simulator/fake_drone/CMakeLists.txt
++++ b/src/uav_simulator/fake_drone/CMakeLists.txt
+@@ -3,8 +3,7 @@ project(poscmd_2_odom)
+ 
+ set(CMAKE_BUILD_TYPE "Release")
+ #set(CMAKE_CXX_FLAGS "-std=c++11")
+-ADD_COMPILE_OPTIONS(-std=c++11 )
+-ADD_COMPILE_OPTIONS(-std=c++14 )
++ADD_COMPILE_OPTIONS(-std=c++17 )
+ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+ 
+ find_package(catkin REQUIRED COMPONENTS
+diff --git a/src/uav_simulator/local_sensing/CMakeLists.txt b/src/uav_simulator/local_sensing/CMakeLists.txt
+index 13c9911..d1e9bbd 100644
+--- a/src/uav_simulator/local_sensing/CMakeLists.txt
++++ b/src/uav_simulator/local_sensing/CMakeLists.txt
+@@ -2,8 +2,7 @@ PROJECT(local_sensing_node)
+ CMAKE_MINIMUM_REQUIRED(VERSION 2.8.3)
+ SET(CMAKE_BUILD_TYPE Release) # Release, RelWithDebInfo
+ #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+-ADD_COMPILE_OPTIONS(-std=c++11 )
+-ADD_COMPILE_OPTIONS(-std=c++14 )
++ADD_COMPILE_OPTIONS(-std=c++17 )
+ 
+ #set(ENABLE_CUDA false)
+ set(ENABLE_CUDA false)
+diff --git a/src/uav_simulator/map_generator/CMakeLists.txt b/src/uav_simulator/map_generator/CMakeLists.txt
+index 4567da1..ad633d2 100644
+--- a/src/uav_simulator/map_generator/CMakeLists.txt
++++ b/src/uav_simulator/map_generator/CMakeLists.txt
+@@ -3,8 +3,7 @@ project(map_generator)
+ 
+ set(CMAKE_BUILD_TYPE "Release")
+ #set(CMAKE_CXX_FLAGS "-std=c++11")
+-ADD_COMPILE_OPTIONS(-std=c++11 )
+-ADD_COMPILE_OPTIONS(-std=c++14 )
++ADD_COMPILE_OPTIONS(-std=c++17 )
+ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+ 
+ find_package(catkin REQUIRED COMPONENTS
+diff --git a/src/uav_simulator/mockamap/CMakeLists.txt b/src/uav_simulator/mockamap/CMakeLists.txt
+index 2593c16..54c8102 100644
+--- a/src/uav_simulator/mockamap/CMakeLists.txt
++++ b/src/uav_simulator/mockamap/CMakeLists.txt
+@@ -2,11 +2,10 @@ cmake_minimum_required(VERSION 2.8.3)
+ project(mockamap)
+ 
+ ## Compile as C++11, supported in ROS Kinetic and newer
+-add_compile_options(-std=c++11)
++add_compile_options(-std=c++17)
+ 
+ set(CMAKE_BUILD_TYPE "Release")
+-ADD_COMPILE_OPTIONS(-std=c++11 )
+-ADD_COMPILE_OPTIONS(-std=c++14 )
++ADD_COMPILE_OPTIONS(-std=c++17 )
+ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+ 
+ ## Find catkin macros and libraries
+diff --git a/src/uav_simulator/mockamap/src/ces_randommap.cpp b/src/uav_simulator/mockamap/src/ces_randommap.cpp
+index ef5d027..b7ddfda 100644
+--- a/src/uav_simulator/mockamap/src/ces_randommap.cpp
++++ b/src/uav_simulator/mockamap/src/ces_randommap.cpp
+@@ -12,6 +12,7 @@
+ #include <pcl/search/kdtree.h>
+ #include <pcl_conversions/pcl_conversions.h>
+ 
++#include <deque>
+ #include <geometry_msgs/PoseStamped.h>
+ #include <geometry_msgs/Vector3.h>
+ #include <nav_msgs/Odometry.h>
+diff --git a/src/uav_simulator/so3_control/CMakeLists.txt b/src/uav_simulator/so3_control/CMakeLists.txt
+index bb6b0c7..a401c89 100755
+--- a/src/uav_simulator/so3_control/CMakeLists.txt
++++ b/src/uav_simulator/so3_control/CMakeLists.txt
+@@ -46,7 +46,7 @@ cmake_minimum_required(VERSION 2.8.3)
+ project(so3_control)
+ 
+ set(CMAKE_BUILD_TYPE "Release")
+-set(CMAKE_CXX_FLAGS "-std=c++11")
++set(CMAKE_CXX_FLAGS "-std=c++17")
+ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+ 
+ ## Find catkin macros and libraries
+diff --git a/src/uav_simulator/so3_quadrotor_simulator/CMakeLists.txt b/src/uav_simulator/so3_quadrotor_simulator/CMakeLists.txt
+index 6fd4e2f..d2dc117 100755
+--- a/src/uav_simulator/so3_quadrotor_simulator/CMakeLists.txt
++++ b/src/uav_simulator/so3_quadrotor_simulator/CMakeLists.txt
+@@ -1,10 +1,10 @@
+ cmake_minimum_required(VERSION 2.8.3)
+ project(so3_quadrotor_simulator)
+ 
+-add_compile_options(-std=c++11)
++add_compile_options(-std=c++17)
+ 
+ set(CMAKE_BUILD_TYPE "Release")
+-set(CMAKE_CXX_FLAGS "-std=c++11")
++set(CMAKE_CXX_FLAGS "-std=c++17")
+ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+ 
+ find_package(catkin REQUIRED COMPONENTS
