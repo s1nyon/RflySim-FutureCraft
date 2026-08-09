@@ -89,7 +89,7 @@ def check_submodule(project_root: Path, errors: list[str]) -> None:
         text=True,
         check=False,
     )
-    status = result.stdout.strip()
+    status = result.stdout.rstrip("\r\n")
     if result.returncode != 0:
         detail = result.stderr.strip() or f"exit {result.returncode}"
         errors.append(f"git submodule status failed: {detail}")
@@ -97,9 +97,30 @@ def check_submodule(project_root: Path, errors: list[str]) -> None:
     if not status:
         errors.append(f"git submodule status returned no entry for {EXPECTED_PATH}")
         return
-    if status[0] in "-+":
-        state = "uninitialized" if status[0] == "-" else "not pinned to the recorded gitlink"
+    if status[0] != " ":
+        states = {
+            "-": "uninitialized",
+            "+": "not pinned to the recorded gitlink",
+            "U": "in a merge-conflict state",
+        }
+        state = states.get(status[0], f"in an unknown state ({status[0]!r})")
         errors.append(f"submodule {EXPECTED_PATH} is {state}: {status}")
+        return
+
+    dirty_result = subprocess.run(
+        ["git", "-C", str(project_root / EXPECTED_PATH), "status", "--porcelain"],
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if dirty_result.returncode != 0:
+        detail = dirty_result.stderr.strip() or f"exit {dirty_result.returncode}"
+        errors.append(f"cannot inspect submodule cleanliness: {detail}")
+        return
+    dirty = dirty_result.stdout.strip()
+    if dirty:
+        errors.append(f"submodule {EXPECTED_PATH} is dirty: {dirty}")
 
 
 def main() -> int:

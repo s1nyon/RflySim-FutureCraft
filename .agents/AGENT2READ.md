@@ -464,7 +464,7 @@ README.md                  面向人的项目概览
 config/                    JSON 配置、地图和阶段契约
 scripts/                   Windows 启动、验证、WSL wrapper
 future_aircraft_ws/src/    项目 ROS1 源码
-external/                  独立算法仓库（谨慎修改）
+third_party/               固定版本的第三方算法子模块（谨慎修改）
 tests/                     离线 contract / regression tests
 docs/                      设计、事故记录、决策
 logs/                      live run evidence（运行生成）
