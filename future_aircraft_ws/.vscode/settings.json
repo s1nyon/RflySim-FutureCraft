@@ -1,0 +1,20 @@
+{
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+  "C_Cpp.default.compilerPath": "/usr/bin/g++",
+  "C_Cpp.default.cppStandard": "c++17",
+  "C_Cpp.default.intelliSenseMode": "linux-gcc-x64",
+  "ros.distro": "noetic",
+  "python.analysis.extraPaths": [
+    "/opt/ros/noetic/lib/python3/dist-packages",
+    "${workspaceFolder}/../third_party/ego-planner-swarm/devel/lib/python3/dist-packages",
+    "${workspaceFolder}/src/multi_uav_mission/scripts"
+  ],
+  "python.defaultInterpreterPath": "/usr/bin/python3",
+  "search.exclude": {
+    "build": true,
+    "devel": true
+  },
+  "files.exclude": {
+    "**/__pycache__": true
+  }
+}
