@@ -419,7 +419,7 @@ FAST-LIO 原始数据和项目 normalization/relay 的关键区分见后续 Coor
 局部规划使用项目外部算法仓库：
 
 ```text
-external/ego-planner-swarm
+third_party/ego-planner-swarm
 ```
 
 项目侧 integration 位于：
@@ -838,7 +838,7 @@ ODOMETRY    = 2
 - project wrapper/remap/config 无误；
 - last-known-good 与 current EGO build/params 有实际差异。
 
-只有这时才能建议修改 `external/ego-planner-swarm`。
+只有这时才能建议修改 `third_party/ego-planner-swarm`。
 
 ---
 
@@ -1376,7 +1376,7 @@ Agent 可自主：
 范围：
 
 ```text
-external/ego-planner-swarm
+third_party/ego-planner-swarm
 Faster-LIO core
 PX4 core / EKF policy
 shared-frame architecture

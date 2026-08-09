@@ -20,7 +20,7 @@ fi
 
 PROJECT_DIR="${FUTURE_AIRCRAFT_SIM_WSL_DIR:-/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/future_aircraft_sim}"
 REF_28COM_UAV_WSL_DIR="${REF_28COM_UAV_WSL_DIR:-/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/28com_sim/UAV_demo/28com_uav}"
-EGO_SWARM_WSL_DIR="${EGO_SWARM_WSL_DIR:-$PROJECT_DIR/external/ego-planner-swarm}"
+EGO_SWARM_WSL_DIR="${EGO_SWARM_WSL_DIR:-$PROJECT_DIR/third_party/ego-planner-swarm}"
 CURRENT_RUN_FILE="$PROJECT_DIR/logs/stage7_live/current_run.env"
 READINESS_MAX_AGE_SEC="${STAGE7_READINESS_MAX_AGE_SEC:-120}"
 
@@ -83,7 +83,7 @@ source /opt/ros/noetic/setup.bash
 source "$REF_28COM_UAV_WSL_DIR/devel/setup.bash"
 if [ ! -f "$EGO_SWARM_WSL_DIR/devel/setup.bash" ]; then
   echo "[ERROR] ego-planner-swarm is not built: $EGO_SWARM_WSL_DIR/devel/setup.bash" >&2
-  echo "[ERROR] Run scripts/clone_ego_swarm.bat, build it in WSL, or set EGO_SWARM_WSL_DIR." >&2
+  echo "[ERROR] Run git submodule update --init --recursive and build the EGO workspace, or set EGO_SWARM_WSL_DIR." >&2
   exit 1
 fi
 source "$EGO_SWARM_WSL_DIR/devel/setup.bash"

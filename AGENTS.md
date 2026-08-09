@@ -173,7 +173,7 @@ stop/clean 验证失败时禁止自动 force retry，直接停止并向用户报
 
 ### Yellow：可以调查，但修改前必须先向用户说明证据、影响面和设计
 
-- `external/ego-planner-swarm` 源码
+- `third_party/ego-planner-swarm` 源码
 - Faster-LIO 核心算法/核心配置语义
 - PX4 核心源码或 EKF 核心策略
 - 双机统一坐标系的大改

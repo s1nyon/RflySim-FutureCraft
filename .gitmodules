@@ -1,0 +1,4 @@
+[submodule "third_party/ego-planner-swarm"]
+	path = third_party/ego-planner-swarm
+	url = https://github.com/s1nyon/ego-planner-swarm.git
+	branch = rflysim-noetic-cxx17-compat

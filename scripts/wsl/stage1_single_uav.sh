@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REF_28COM_UAV_WSL_DIR="${REF_28COM_UAV_WSL_DIR:-/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/28com_sim/UAV_demo/28com_uav}"
-EGO_SWARM_WSL_DIR="${EGO_SWARM_WSL_DIR:-$PROJECT_ROOT/external/ego-planner-swarm}"
+EGO_SWARM_WSL_DIR="${EGO_SWARM_WSL_DIR:-$PROJECT_ROOT/third_party/ego-planner-swarm}"
 RFLYSIM_EGO_SWARM_LAUNCH="$PROJECT_ROOT/future_aircraft_ws/src/multi_uav_mission/launch/rflysim_ego_swarm_single.launch"
 
 if [[ "${1:-}" == "--dry-run" ]]; then

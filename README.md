@@ -26,7 +26,7 @@
 | 仿真 | RflySim3D + CopterSim，SLAMScene 基图 |
 | 飞控 | PX4 SITL（iris 机架），MAVROS 双命名空间 |
 | 定位 | Faster-LIO（Mid360 雷达 + IMU） |
-| 规划 | EGO-Swarm（`external/ego-planner-swarm`） |
+| 规划 | EGO-Swarm（`third_party/ego-planner-swarm`） |
 | 传感器 | Mid360、Intel RealSense D435i（RGB + 深度）、下视相机，与 28com UAV_demo 对齐 |
 | 环境 | Python / ROS1 Noetic / WSL（RflySim-20.04）/ Windows 启动编排 |
 

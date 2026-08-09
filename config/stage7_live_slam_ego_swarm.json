@@ -64,7 +64,7 @@
     "rviz": false
   },
   "ego_swarm": {
-    "source_dir": "external/ego-planner-swarm",
+    "source_dir": "third_party/ego-planner-swarm",
     "project_launch": "future_aircraft_ws/src/multi_uav_mission/launch/rflysim_ego_swarm_dual.launch",
     "fallback_reference_launch": "future_aircraft_ws/src/multi_uav_mission/launch/rflysim_ego_swarm_single.launch"
   },

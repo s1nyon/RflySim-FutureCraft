@@ -1,6 +1,5 @@
 logs/
 .worktrees/
-external/
 config/env_local.bat
 *.pyc
 __pycache__/

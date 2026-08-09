@@ -8,9 +8,8 @@ $ProjectRoot = Split-Path -Parent $PSScriptRoot
 
 $requiredPaths = @(
     'config/stage4_ego_swarm.json',
-    'external/ego-planner-swarm',
+    'third_party/ego-planner-swarm',
     'future_aircraft_ws/src/multi_uav_mission/scripts/ego_swarm_adapter.py',
-    'scripts/clone_ego_swarm.bat',
     'tests/fixtures/stage4/expected_ego_swarm_commands.json'
 )
 
@@ -60,14 +59,6 @@ if ($missing.Count -eq 0 -and $pythonRunner) {
                 }
             }
         }
-    }
-}
-
-$cloneScript = Join-Path $ProjectRoot 'scripts/clone_ego_swarm.bat'
-if (Test-Path -LiteralPath $cloneScript) {
-    $output = & cmd /c "`"$cloneScript`" --dry-run" 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        $contractErrors += "scripts/clone_ego_swarm.bat --dry-run failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
     }
 }
 

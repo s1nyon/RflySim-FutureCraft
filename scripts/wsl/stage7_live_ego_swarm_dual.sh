@@ -5,7 +5,7 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lifecycle_common.sh"
 PROJECT_DIR="${FUTURE_AIRCRAFT_SIM_WSL_DIR:-/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/future_aircraft_sim}"
-EGO_SWARM_WSL_DIR="${EGO_SWARM_WSL_DIR:-$PROJECT_DIR/external/ego-planner-swarm}"
+EGO_SWARM_WSL_DIR="${EGO_SWARM_WSL_DIR:-$PROJECT_DIR/third_party/ego-planner-swarm}"
 OUTPUT_DIR="$PROJECT_DIR/logs/stage7_live"
 CURRENT_RUN_FILE="$OUTPUT_DIR/current_run.env"
 READINESS_MAX_AGE_SEC="${STAGE7_READINESS_MAX_AGE_SEC:-120}"
@@ -25,7 +25,7 @@ python3 $PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/stage7_sen
 
 if [ ! -f "$EGO_SWARM_WSL_DIR/devel/setup.bash" ]; then
   echo "[ERROR] ego-planner-swarm is not built: $EGO_SWARM_WSL_DIR/devel/setup.bash" >&2
-  echo "[ERROR] Run scripts/clone_ego_swarm.bat, build it in WSL, or set EGO_SWARM_WSL_DIR." >&2
+  echo "[ERROR] Run git submodule update --init --recursive and build the EGO workspace, or set EGO_SWARM_WSL_DIR." >&2
   exit 1
 fi
 source "$EGO_SWARM_WSL_DIR/devel/setup.bash"

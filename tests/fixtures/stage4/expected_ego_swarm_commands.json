@@ -1,7 +1,7 @@
 {
   "fallback_mode": "fixed_waypoint",
   "planner": "ego-swarm",
-  "source_dir": "external/ego-planner-swarm",
+  "source_dir": "third_party/ego-planner-swarm",
   "uavs": [
     {
       "frame_id": "map",

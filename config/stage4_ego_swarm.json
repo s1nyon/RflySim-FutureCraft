@@ -1,7 +1,7 @@
 {
   "planner": "ego-swarm",
   "upstream_repo": "https://github.com/ZJU-FAST-Lab/ego-planner-swarm.git",
-  "source_dir": "external/ego-planner-swarm",
+  "source_dir": "third_party/ego-planner-swarm",
   "fallback_mode": "fixed_waypoint",
   "default_frame_id": "map",
   "uavs": [
