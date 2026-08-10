@@ -7,11 +7,11 @@
 ## Commit Boundary
 
 - Pre-implementation design baseline: `49bf7f75faee11a34eac523fd254cdc63cadbc58` (`49bf7f7`).
-- Verified implementation tip before this evidence-only commit: `9cd5ace2566fe34bbf51921d56e7ac24b998b39b`.
-- Exact root migration range: `49bf7f75faee11a34eac523fd254cdc63cadbc58..9cd5ace2566fe34bbf51921d56e7ac24b998b39b` (baseline excluded, verified tip included).
-- The evidence-only commit created from this document follows that range and uses the message `docs: record repository structure migration`.
+- Verified implementation tip before this final safety evidence update: `4b7decb9c1bcf0ccfa219bb7834a5d9b695c9331`.
+- Exact root migration range: `49bf7f75faee11a34eac523fd254cdc63cadbc58..4b7decb9c1bcf0ccfa219bb7834a5d9b695c9331` (baseline excluded, verified tip included).
+- The final safety evidence commit created from this revision follows that range and uses the message `docs: update migration safety verification`.
 
-The range contains the approved design, EGO preservation and submodule work, ROS package separation, developer-workspace metadata, unified simulation CLI, safe lifecycle delegation, bounded log maintenance, current-document reorganization, PBL-1 evidence/runtime cleanup, the curator preflight fix, and the Task 10 retired-path test correction.
+The range contains the approved design, EGO preservation and submodule work, ROS package separation, developer-workspace metadata, unified simulation CLI, safe lifecycle delegation, bounded log maintenance, current-document reorganization, PBL-1 evidence/runtime cleanup, the curator preflight fix, the Task 10 retired-path test correction, and final cleanup/manifest reparse-boundary hardening.
 
 ## EGO-Swarm Dependency
 
@@ -60,7 +60,15 @@ D:\PX4PSP\Python38\python.exe tests\developer_workspace_config_check.py --projec
 exit 0
 ```
 
-After that scoped fix, the entire required sequence below was rerun from Step 1 in exact order.
+After that scoped fix, the entire required sequence below was rerun from Step 1 in exact order. Final review then identified two additional fail-closed boundary gaps. Commit `4b7decb9c1bcf0ccfa219bb7834a5d9b695c9331` rejects a redirected canonical `logs` root and validates every direct live-stack entry, stack directory, and regular non-reparse manifest before selection. The focused tests, repository/mission suite, build, lifecycle suite, exact DryRun/read-only commands, and Stage 6C/6D/7/8 gates were rerun at that committed HEAD.
+
+## Final Safety Review Regression Evidence
+
+| Exact command | Exit | Fresh result |
+| --- | ---: | --- |
+| `D:\PX4PSP\Python38\python.exe tests\log_cleanup_check.py --project-root .` | 0 | Same-parent `logs` junction DryRun and Execute fixtures fail closed; Execute exits 2 before `[REMOVE]`, and the sibling sentinel remains untouched. |
+| `D:\PX4PSP\Python38\python.exe tests\sim_cli_check.py --project-root .` | 0 | Direct files, reparse entries/roots, missing manifests, manifest directories, reparse/escaping manifests, invalid JSON/schema/name, closed, one-active, and multiple-active cases all satisfy the resolver contract. |
+| `powershell -ExecutionPolicy Bypass -File scripts\validate_repository.ps1` | 0 | All repository contracts passed, including both focused safety suites. |
 
 ## Step 1 — Repository and Submodule State
 
@@ -71,6 +79,7 @@ After that scoped fix, the entire required sequence below was rerun from Step 1 
 | `git -C third_party/ego-planner-swarm status --short --branch` | 0 | `## HEAD (no branch)` and no dirty paths. |
 | `git diff --check` | 0 | No output. |
 | `git diff --name-only 49bf7f7..HEAD -- future_aircraft_ws/src/multi_uav_mission/scripts future_aircraft_ws/src/multi_uav_mission/launch` | 0 | No output. |
+| `git rev-parse HEAD` | 0 | `4b7decb9c1bcf0ccfa219bb7834a5d9b695c9331`. |
 
 The old-path gate was run exactly as specified in the Task 10 brief:
 
@@ -111,6 +120,7 @@ No `-Execute`, live stack, arming, real stop, or real cleanup command was run.
 - Dependency: `d0a7e653c71810c6a4656a11e366a0ffe837c3cf` is the safe preserved-patch point before the submodule commit. Revert `6070ade1eeb05ed604f09893904b32e0ade0225a` and then `a901c962f2eaf3c9a379a5be3e40b9f25fb0e40e` to undo the dependency contract and pin while retaining the compatibility patch record. Revert `d0a7e653c71810c6a4656a11e366a0ffe837c3cf` only after separately preserving that patch.
 - Package: `6070ade1eeb05ed604f09893904b32e0ade0225a` is the point before package separation; revert `d3e05f0722dff1d8b68ed2f6897c636e29199a16` to undo `future_aircraft_mission` separation. `b94d7b2a2e27501132af41a6e6ced22e08d9eb89` is the immediately following developer-workspace metadata commit and must be reviewed if package paths are rolled back.
 - CLI: `b94d7b2a2e27501132af41a6e6ced22e08d9eb89` is the point before the unified CLI. Revert, in reverse implementation order, `5387efe6285a100a3422a73810d8eb3a2136b954`, `4d8ae4a18e8a65ec6bb44f621477c36fdf7e9e0a`, `801ac1e48d3730b3c4b4073a0e009681d53511fc`, and `d37cbdcd02442816f80de19638e49f3c49172994`.
+- Final safety hardening: `b38d62e226b76728ff44736658424480e1d92e80` is the rollback point immediately before the final cleanup/manifest boundary fix. Revert `4b7decb9c1bcf0ccfa219bb7834a5d9b695c9331` to remove only that code/test hardening; this is not recommended unless the earlier unsafe acceptance behavior is deliberately restored.
 - Docs/runtime evidence: `5387efe6285a100a3422a73810d8eb3a2136b954` is the point before current-document reorganization. Revert `f5ab695c2c6c6eb2783fdf06808023b97c523303`, then `9602023e793d350371e17689efede6f7f12f26b5`, then `c654c010c97f0bc81bd9e000221cac7d7352ded4` to undo curator preflight, curated evidence/runtime cleanup commit, and documentation reorganization. Runtime deletions may require restoration from Git/history or backups rather than a blind cleanup reversal.
 
 ## Remaining Live Risk
