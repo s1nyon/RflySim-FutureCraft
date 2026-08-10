@@ -50,6 +50,7 @@
 | `scripts/lifecycle/stack_topology.py` | 双机 stack topology contract。 |
 | `scripts/lifecycle/to_wsl_path.ps1` | Windows 到 WSL 路径转换 helper。 |
 | `scripts/maintenance/clean_logs.ps1` | `sim.ps1 clean-logs` 的有界内部实现。 |
+| `scripts/maintenance/curate_pbl1_evidence.py` | PBL-1 三次批准 run 的确定性证据整理与脱敏实现。 |
 | `scripts/python_contract_runner.ps1` | PowerShell validator 的 Python contract helper。 |
 | `scripts/sim_cli.psm1` | 根 `sim.ps1` 的委托实现。 |
 | `scripts/wsl/build_future_aircraft_ws.sh` | `sim.ps1 build` 的 WSL Catkin helper。 |

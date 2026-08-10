@@ -1,0 +1,12 @@
+{
+  "base_map": "SLAMScene",
+  "course_name": "predicted_narrow_course_v1",
+  "course_spec": "config/maps/predicted_narrow_course_v1.json",
+  "course_spec_sha256": "d915dcbc73851b10ddffefc1dacb1390a7ef7550f759e205a2cbb73735cbb5a1",
+  "git_commit": null,
+  "phase": "starting",
+  "ros_master_uri": "http://localhost:11311",
+  "run_id": "stage7-20260807T134731Z-2508",
+  "simulation_instance_id": "px4-a4c78bd2184ea413",
+  "stage": "stage7_live_slam_ego_swarm_flight"
+}

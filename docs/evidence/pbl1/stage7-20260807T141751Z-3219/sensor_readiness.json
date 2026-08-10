@@ -1,0 +1,287 @@
+{
+  "backend": "ros",
+  "created_at": 1786112301.2000532,
+  "errors": [],
+  "gates": {
+    "freshness": "pass",
+    "identity": "pass",
+    "isolation": "pass",
+    "schema": "pass",
+    "stationary_stability": "pass"
+  },
+  "limits": {
+    "maximum_attitude_delta_rad": 0.1,
+    "maximum_position_delta_m": 0.15,
+    "maximum_velocity_mps": 0.1,
+    "minimum_observation_sec": 5.0
+  },
+  "ready": true,
+  "run_id": "stage7-20260807T141751Z-3219",
+  "simulation_instance_id": "px4-e4800172b9de02f7",
+  "vehicles": [
+    {
+      "adapter_diagnostics": {
+        "accepted_points": 17408,
+        "accepted_scans": 39,
+        "created_at": 1786112295.8681753,
+        "fields": [
+          "x",
+          "y",
+          "z",
+          "intensity",
+          "t",
+          "reflectivity",
+          "ring",
+          "ambient",
+          "range"
+        ],
+        "frame_id": "uav1_lidar",
+        "input_topic": "/rflysim/sensor0/mid360_lidar",
+        "output_topic": "/uav1/rflysim/lidar",
+        "point_step": 32,
+        "source_stamp": 1786112295.7920852,
+        "status": "ready",
+        "time_span_sec": 0.1
+      },
+      "bridge_identity": {
+        "copter_id": 1,
+        "identity_topic": "/uav1/rflysim/sensor_identity",
+        "node": "/uav1/rflysim_sensor_bridge",
+        "process_start_marker": "stage7-20260807T141751Z-3219:uav1:bridge",
+        "raw_imu_topic": "/uav1/rflysim/imu_raw",
+        "raw_imu_topic_verified": false,
+        "raw_lidar_topic": "/rflysim/sensor0/mid360_lidar",
+        "runtime_probe_required": true,
+        "sensor_mode": "lidar_only",
+        "sensor_seq_id": 0,
+        "target_ip": "127.0.0.1",
+        "udp_port": 9999
+      },
+      "cloud_time_spans_sec": [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+      ],
+      "expected_publishers": {
+        "/rflysim/sensor0/mid360_lidar": "/uav1/rflysim_sensor_bridge",
+        "/uav1/rflysim/imu": "/uav1/rflysim_imu_relay",
+        "/uav1/rflysim/imu_raw": "/uav1/rflysim_sensor_bridge",
+        "/uav1/rflysim/lidar": "/uav1/rflysim_pointcloud_adapter"
+      },
+      "mavros_state": {
+        "armed": false,
+        "mode": "MANUAL"
+      },
+      "publishers": {
+        "/rflysim/sensor0/mid360_lidar": [
+          "/uav1/rflysim_sensor_bridge"
+        ],
+        "/uav1/rflysim/imu": [
+          "/uav1/rflysim_imu_relay"
+        ],
+        "/uav1/rflysim/imu_raw": [
+          "/uav1/rflysim_sensor_bridge"
+        ],
+        "/uav1/rflysim/lidar": [
+          "/uav1/rflysim_pointcloud_adapter"
+        ]
+      },
+      "stationary": {
+        "attitude_delta_rad": 0.0012232817244581785,
+        "observation_sec": 5.228022899999999,
+        "position_delta_m": 0.0041069890424539415,
+        "velocity_max_mps": 0.0
+      },
+      "topic_stamps": {
+        "imu": [
+          1786112296.077085,
+          1786112296.682085,
+          1786112297.2820852,
+          1786112297.8020852,
+          1786112298.278085,
+          1786112298.8810852,
+          1786112299.196085,
+          1786112299.801085,
+          1786112300.206085,
+          1786112300.686085
+        ],
+        "lidar": [
+          1786112295.992085,
+          1786112296.5920851,
+          1786112297.192085,
+          1786112297.702085,
+          1786112298.191085,
+          1786112298.791085,
+          1786112299.1110852,
+          1786112299.711085,
+          1786112300.1110852,
+          1786112300.591085
+        ],
+        "mavros_feedback": [
+          1786112296.2591817,
+          1786112296.8590653,
+          1786112297.4588337,
+          1786112297.9270382,
+          1786112298.463117,
+          1786112298.9274395,
+          1786112299.327806,
+          1786112299.927655,
+          1786112300.3277757,
+          1786112300.8594077
+        ],
+        "slam_odom": [
+          1786112296.2120793,
+          1786112296.8120792,
+          1786112297.4120793,
+          1786112297.8920794,
+          1786112298.4110792,
+          1786112298.8910792,
+          1786112299.2910793,
+          1786112299.8910792,
+          1786112300.2910793,
+          1786112300.8110793
+        ]
+      },
+      "uav_id": "uav1"
+    },
+    {
+      "adapter_diagnostics": {
+        "accepted_points": 17408,
+        "accepted_scans": 39,
+        "created_at": 1786112295.8722408,
+        "fields": [
+          "x",
+          "y",
+          "z",
+          "intensity",
+          "t",
+          "reflectivity",
+          "ring",
+          "ambient",
+          "range"
+        ],
+        "frame_id": "uav2_lidar",
+        "input_topic": "/rflysim/sensor10/mid360_lidar",
+        "output_topic": "/uav2/rflysim/lidar",
+        "point_step": 32,
+        "source_stamp": 1786112295.7900681,
+        "status": "ready",
+        "time_span_sec": 0.1
+      },
+      "bridge_identity": {
+        "copter_id": 2,
+        "identity_topic": "/uav2/rflysim/sensor_identity",
+        "node": "/uav2/rflysim_sensor_bridge",
+        "process_start_marker": "stage7-20260807T141751Z-3219:uav2:bridge",
+        "raw_imu_topic": "/uav2/rflysim/imu_raw",
+        "raw_imu_topic_verified": false,
+        "raw_lidar_topic": "/rflysim/sensor10/mid360_lidar",
+        "runtime_probe_required": true,
+        "sensor_mode": "lidar_only",
+        "sensor_seq_id": 10,
+        "target_ip": "127.0.0.1",
+        "udp_port": 10009
+      },
+      "cloud_time_spans_sec": [
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1
+      ],
+      "expected_publishers": {
+        "/rflysim/sensor10/mid360_lidar": "/uav2/rflysim_sensor_bridge",
+        "/uav2/rflysim/imu": "/uav2/rflysim_imu_relay",
+        "/uav2/rflysim/imu_raw": "/uav2/rflysim_sensor_bridge",
+        "/uav2/rflysim/lidar": "/uav2/rflysim_pointcloud_adapter"
+      },
+      "mavros_state": {
+        "armed": false,
+        "mode": "MANUAL"
+      },
+      "publishers": {
+        "/rflysim/sensor10/mid360_lidar": [
+          "/uav2/rflysim_sensor_bridge"
+        ],
+        "/uav2/rflysim/imu": [
+          "/uav2/rflysim_imu_relay"
+        ],
+        "/uav2/rflysim/imu_raw": [
+          "/uav2/rflysim_sensor_bridge"
+        ],
+        "/uav2/rflysim/lidar": [
+          "/uav2/rflysim_pointcloud_adapter"
+        ]
+      },
+      "stationary": {
+        "attitude_delta_rad": 0.001375250285449153,
+        "observation_sec": 5.228022899999999,
+        "position_delta_m": 0.010468097198126575,
+        "velocity_max_mps": 0.0
+      },
+      "topic_stamps": {
+        "imu": [
+          1786112296.4170682,
+          1786112297.0220683,
+          1786112297.6020682,
+          1786112298.0220683,
+          1786112298.6120682,
+          1786112299.0020683,
+          1786112299.4820683,
+          1786112300.0120683,
+          1786112300.4020681,
+          1786112301.0060682
+        ],
+        "lidar": [
+          1786112296.314068,
+          1786112296.9140682,
+          1786112297.5140681,
+          1786112297.9140682,
+          1786112298.5140681,
+          1786112298.9140682,
+          1786112299.3940682,
+          1786112299.9140682,
+          1786112300.3090682,
+          1786112300.9130683
+        ],
+        "mavros_feedback": [
+          1786112296.525303,
+          1786112297.1572242,
+          1786112297.7247622,
+          1786112298.1578948,
+          1786112298.7573316,
+          1786112299.1252277,
+          1786112299.660041,
+          1786112300.0952797,
+          1786112300.5256062,
+          1786112301.1576335
+        ],
+        "slam_odom": [
+          1786112296.4940624,
+          1786112297.0940623,
+          1786112297.6940625,
+          1786112298.0940623,
+          1786112298.6940625,
+          1786112299.0940623,
+          1786112299.6140623,
+          1786112300.0140624,
+          1786112300.4940624,
+          1786112301.0930624
+        ]
+      },
+      "uav_id": "uav2"
+    }
+  ]
+}

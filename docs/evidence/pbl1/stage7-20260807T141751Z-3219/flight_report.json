@@ -1,0 +1,165 @@
+{
+  "checks": {
+    "arming_confirmed": {
+      "uav1": true,
+      "uav2": true
+    },
+    "landing_confirmed": {
+      "uav1": true,
+      "uav2": true
+    },
+    "navigation_confirmed": {
+      "uav1": true,
+      "uav2": true
+    },
+    "offboard_confirmed": {
+      "uav1": true,
+      "uav2": true
+    },
+    "takeoff_altitude_confirmed": {
+      "uav1": true,
+      "uav2": true
+    }
+  },
+  "executor": {
+    "exit_code": 0,
+    "log": "logs/stage7_live/stage7-20260807T141751Z-3219/executor.log"
+  },
+  "executor_trace": "logs/stage7_live/stage7-20260807T141751Z-3219/executor_trace.json",
+  "mission_events": "logs/stage7_live/stage7-20260807T141751Z-3219/mission_events.jsonl",
+  "phase": "complete",
+  "provenance": {
+    "base_map": "SLAMScene",
+    "course_name": "predicted_narrow_course_v1",
+    "course_spec": "config/maps/predicted_narrow_course_v1.json",
+    "course_spec_sha256": "d915dcbc73851b10ddffefc1dacb1390a7ef7550f759e205a2cbb73735cbb5a1",
+    "git_commit": null,
+    "phase": "starting",
+    "ros_master_uri": "http://localhost:11311",
+    "run_id": "stage7-20260807T141751Z-3219",
+    "simulation_instance_id": "px4-e4800172b9de02f7",
+    "stage": "stage7_live_slam_ego_swarm_flight"
+  },
+  "ready": true,
+  "run_id": "stage7-20260807T141751Z-3219",
+  "score": {
+    "collision_count": 0,
+    "duration_s": 41.5,
+    "failure_reasons": [],
+    "min_uav_distance_m": 0.85,
+    "mission_end_time": 41.5,
+    "mission_start_time": 0.0,
+    "offboard_loss_count": 0,
+    "success": true,
+    "targets_detected_count": 0,
+    "timeout_count": 0
+  },
+  "score_summary": "logs/stage7_live/stage7-20260807T141751Z-3219/score_summary.json",
+  "smoke": {
+    "backend": "ros",
+    "mission_mode": "live_slam_ego_swarm_flight",
+    "ready": true,
+    "uavs": [
+      {
+        "checks": [
+          {
+            "kind": "inbound_topic",
+            "name": "mavros_state_topic",
+            "ready": true,
+            "status": "available",
+            "target": "/uav1/mavros/state"
+          },
+          {
+            "kind": "inbound_topic",
+            "name": "slam_odom_topic",
+            "ready": true,
+            "status": "available",
+            "target": "/uav1/mavros/odometry/out"
+          },
+          {
+            "kind": "advertised_topic",
+            "name": "planner_cmd_topic",
+            "ready": true,
+            "status": "available",
+            "target": "/uav1/planning/pos_cmd"
+          },
+          {
+            "kind": "outbound_topic",
+            "name": "mavros_setpoint_topic",
+            "ready": true,
+            "status": "configured",
+            "target": "/uav1/mavros/setpoint_raw/local"
+          },
+          {
+            "kind": "service",
+            "name": "mavros_set_mode_service",
+            "ready": true,
+            "status": "available",
+            "target": "/uav1/mavros/set_mode"
+          },
+          {
+            "kind": "service",
+            "name": "mavros_arming_service",
+            "ready": true,
+            "status": "available",
+            "target": "/uav1/mavros/cmd/arming"
+          }
+        ],
+        "namespace": "/uav1",
+        "ready": true,
+        "uav_id": "uav1"
+      },
+      {
+        "checks": [
+          {
+            "kind": "inbound_topic",
+            "name": "mavros_state_topic",
+            "ready": true,
+            "status": "available",
+            "target": "/uav2/mavros/state"
+          },
+          {
+            "kind": "inbound_topic",
+            "name": "slam_odom_topic",
+            "ready": true,
+            "status": "available",
+            "target": "/uav2/mavros/odometry/out"
+          },
+          {
+            "kind": "advertised_topic",
+            "name": "planner_cmd_topic",
+            "ready": true,
+            "status": "available",
+            "target": "/uav2/planning/pos_cmd"
+          },
+          {
+            "kind": "outbound_topic",
+            "name": "mavros_setpoint_topic",
+            "ready": true,
+            "status": "configured",
+            "target": "/uav2/mavros/setpoint_raw/local"
+          },
+          {
+            "kind": "service",
+            "name": "mavros_set_mode_service",
+            "ready": true,
+            "status": "available",
+            "target": "/uav2/mavros/set_mode"
+          },
+          {
+            "kind": "service",
+            "name": "mavros_arming_service",
+            "ready": true,
+            "status": "available",
+            "target": "/uav2/mavros/cmd/arming"
+          }
+        ],
+        "namespace": "/uav2",
+        "ready": true,
+        "uav_id": "uav2"
+      }
+    ]
+  },
+  "smoke_report": "logs/stage7_live/stage7-20260807T141751Z-3219/slam_ego_swarm_smoke_report.json",
+  "stage": "stage7_live_slam_ego_swarm_flight"
+}

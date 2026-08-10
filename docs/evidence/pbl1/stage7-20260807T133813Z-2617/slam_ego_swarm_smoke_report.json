@@ -1,0 +1,105 @@
+{
+  "backend": "ros",
+  "mission_mode": "live_slam_ego_swarm_flight",
+  "ready": true,
+  "uavs": [
+    {
+      "checks": [
+        {
+          "kind": "inbound_topic",
+          "name": "mavros_state_topic",
+          "ready": true,
+          "status": "available",
+          "target": "/uav1/mavros/state"
+        },
+        {
+          "kind": "inbound_topic",
+          "name": "slam_odom_topic",
+          "ready": true,
+          "status": "available",
+          "target": "/uav1/mavros/odometry/out"
+        },
+        {
+          "kind": "advertised_topic",
+          "name": "planner_cmd_topic",
+          "ready": true,
+          "status": "available",
+          "target": "/uav1/planning/pos_cmd"
+        },
+        {
+          "kind": "outbound_topic",
+          "name": "mavros_setpoint_topic",
+          "ready": true,
+          "status": "configured",
+          "target": "/uav1/mavros/setpoint_raw/local"
+        },
+        {
+          "kind": "service",
+          "name": "mavros_set_mode_service",
+          "ready": true,
+          "status": "available",
+          "target": "/uav1/mavros/set_mode"
+        },
+        {
+          "kind": "service",
+          "name": "mavros_arming_service",
+          "ready": true,
+          "status": "available",
+          "target": "/uav1/mavros/cmd/arming"
+        }
+      ],
+      "namespace": "/uav1",
+      "ready": true,
+      "uav_id": "uav1"
+    },
+    {
+      "checks": [
+        {
+          "kind": "inbound_topic",
+          "name": "mavros_state_topic",
+          "ready": true,
+          "status": "available",
+          "target": "/uav2/mavros/state"
+        },
+        {
+          "kind": "inbound_topic",
+          "name": "slam_odom_topic",
+          "ready": true,
+          "status": "available",
+          "target": "/uav2/mavros/odometry/out"
+        },
+        {
+          "kind": "advertised_topic",
+          "name": "planner_cmd_topic",
+          "ready": true,
+          "status": "available",
+          "target": "/uav2/planning/pos_cmd"
+        },
+        {
+          "kind": "outbound_topic",
+          "name": "mavros_setpoint_topic",
+          "ready": true,
+          "status": "configured",
+          "target": "/uav2/mavros/setpoint_raw/local"
+        },
+        {
+          "kind": "service",
+          "name": "mavros_set_mode_service",
+          "ready": true,
+          "status": "available",
+          "target": "/uav2/mavros/set_mode"
+        },
+        {
+          "kind": "service",
+          "name": "mavros_arming_service",
+          "ready": true,
+          "status": "available",
+          "target": "/uav2/mavros/cmd/arming"
+        }
+      ],
+      "namespace": "/uav2",
+      "ready": true,
+      "uav_id": "uav2"
+    }
+  ]
+}

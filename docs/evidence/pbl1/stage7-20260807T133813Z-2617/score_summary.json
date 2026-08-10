@@ -1,0 +1,12 @@
+{
+  "collision_count": 0,
+  "duration_s": 41.5,
+  "failure_reasons": [],
+  "min_uav_distance_m": 0.85,
+  "mission_end_time": 41.5,
+  "mission_start_time": 0.0,
+  "offboard_loss_count": 0,
+  "success": true,
+  "targets_detected_count": 0,
+  "timeout_count": 0
+}
