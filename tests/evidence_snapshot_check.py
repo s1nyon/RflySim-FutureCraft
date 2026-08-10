@@ -175,6 +175,14 @@ def run_curator(script: Path, logs_root: Path, output_root: Path) -> subprocess.
     )
 
 
+def snapshot_output_bytes(output_root: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(output_root).as_posix(): path.read_bytes()
+        for path in output_root.rglob("*")
+        if path.is_file()
+    }
+
+
 def check_curator_contract(project_root: Path) -> None:
     script = project_root / "scripts" / "maintenance" / "curate_pbl1_evidence.py"
     with tempfile.TemporaryDirectory(prefix="pbl1-curator-") as directory:
@@ -251,6 +259,27 @@ def check_curator_contract(project_root: Path) -> None:
             "curator wrote partial output before rejecting an unapproved run"
         )
         assert marker.read_text(encoding="utf-8") == "untouched"
+
+    with tempfile.TemporaryDirectory(prefix="pbl1-curator-late-invalid-run-") as directory:
+        fixture = Path(directory)
+        logs_root = fixture / "logs" / "stage7_live"
+        output_root = fixture / "docs" / "evidence" / "pbl1"
+        for run_id in APPROVED_RUN_IDS:
+            write_source_run(logs_root, run_id)
+            destination_run = output_root / run_id
+            destination_run.mkdir(parents=True)
+            for name in REQUIRED:
+                (destination_run / name).write_bytes(
+                    f"sentinel:{run_id}:{name}".encode("utf-8")
+                )
+        (output_root / APPROVED_RUN_IDS[1] / "unexpected.txt").write_bytes(
+            b"must remain untouched"
+        )
+        before = snapshot_output_bytes(output_root)
+        result = run_curator(script, logs_root, output_root)
+        assert result.returncode != 0, "curator accepted an unexpected file in a later run"
+        after = snapshot_output_bytes(output_root)
+        assert after == before, "curator modified output before completing all-run preflight"
 
     for case, mutation in (
         ("failed-score", lambda root: (root / APPROVED_RUN_IDS[0] / "score_summary.json").write_text(

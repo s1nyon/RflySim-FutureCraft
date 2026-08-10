@@ -184,6 +184,41 @@ def validate_output_root(output_candidate: Path) -> Path:
     return output_root
 
 
+def preflight_destinations(output_root: Path) -> dict[str, Path]:
+    destinations: dict[str, Path] = {}
+    for run_id in APPROVED_RUN_IDS:
+        destination_run = output_root / run_id
+        if destination_run.is_symlink():
+            raise ValueError(f"output run is a symlink: {destination_run}")
+        resolved_run = destination_run.resolve(strict=False)
+        if not is_contained(resolved_run, output_root):
+            raise ValueError(f"output run escapes resolved output root: {resolved_run}")
+        if destination_run.exists():
+            if not destination_run.is_dir():
+                raise ValueError(f"output run path is not a directory: {destination_run}")
+            unexpected = {
+                path.name for path in destination_run.iterdir()
+            } - set(ALLOWED_FILES)
+            if unexpected:
+                raise ValueError(
+                    f"unexpected existing output for {run_id}: "
+                    + ", ".join(sorted(unexpected))
+                )
+        for name in ALLOWED_FILES:
+            destination = destination_run / name
+            if destination.is_symlink():
+                raise ValueError(f"output evidence is a symlink: {destination}")
+            resolved_destination = destination.resolve(strict=False)
+            if not is_contained(resolved_destination, resolved_run):
+                raise ValueError(
+                    f"output evidence escapes run directory: {resolved_destination}"
+                )
+            if destination.exists() and not destination.is_file():
+                raise ValueError(f"output evidence is not a file: {destination}")
+        destinations[run_id] = destination_run
+    return destinations
+
+
 def curate(logs_candidate: Path, output_candidate: Path) -> None:
     if logs_candidate.is_symlink():
         raise ValueError(f"logs root is a symlink: {logs_candidate}")
@@ -199,23 +234,14 @@ def curate(logs_candidate: Path, output_candidate: Path) -> None:
         run_id: validate_source_run(logs_root, run_id) for run_id in APPROVED_RUN_IDS
     }
     prepared = prepare_output(logs_root, project_root, parsed_runs)
+    destinations = preflight_destinations(output_root)
 
     output_root.mkdir(parents=True, exist_ok=True)
     for run_id in APPROVED_RUN_IDS:
-        destination_run = output_root / run_id
-        if destination_run.exists() and not destination_run.is_dir():
-            raise ValueError(f"output run path is not a directory: {destination_run}")
+        destination_run = destinations[run_id]
         destination_run.mkdir(exist_ok=True)
-        unexpected = {path.name for path in destination_run.iterdir()} - set(ALLOWED_FILES)
-        if unexpected:
-            raise ValueError(
-                f"unexpected existing output for {run_id}: {', '.join(sorted(unexpected))}"
-            )
         for name in ALLOWED_FILES:
-            destination = (destination_run / name).resolve(strict=False)
-            if not is_contained(destination, output_root):
-                raise ValueError(f"output escapes resolved output root: {destination}")
-            destination.write_bytes(prepared[run_id][name])
+            (destination_run / name).write_bytes(prepared[run_id][name])
 
 
 def main() -> int:
