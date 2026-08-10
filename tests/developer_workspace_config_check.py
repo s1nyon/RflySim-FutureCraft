@@ -13,7 +13,7 @@ ROOT_BUILD_SCRIPT = "${workspaceFolder}/scripts/wsl/build_future_aircraft_ws.sh"
 ROS_BUILD_SCRIPT = "${workspaceFolder}/../scripts/wsl/build_future_aircraft_ws.sh"
 ROOT_COMPILE_COMMANDS = "${workspaceFolder}/future_aircraft_ws/build/compile_commands.json"
 ROS_COMPILE_COMMANDS = "${workspaceFolder}/build/compile_commands.json"
-OLD_EGO_PATH = "external/ego-planner-swarm"
+OLD_EGO_PATH = "/".join(("external", "ego-planner-swarm"))
 NEW_EGO_PATH = "third_party/ego-planner-swarm"
 SIM_TASK_ARGUMENTS = {
     "sim: doctor": ["doctor"],
