@@ -76,7 +76,7 @@ function Test-PathContained {
 function Assert-CleanStackManifests {
     param(
         [Parameter(Mandatory = $true)][string]$LogRoot,
-        [Parameter(Mandatory = $true)][object[]]$VerifiedChildren
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$VerifiedChildren
     )
 
     $liveStack = @($VerifiedChildren | Where-Object { $_.Item.Name -eq 'live_stack' })

@@ -232,6 +232,18 @@ def main() -> int:
             assert result.returncode == 0, result.stdout + result.stderr
             assert root.is_dir(), "cleanup changed a project root without logs"
 
+    def check_empty_logs_execute_is_idempotent() -> None:
+        with tempfile.TemporaryDirectory(prefix="log-cleanup-empty-") as directory:
+            root = Path(directory)
+            logs = root / "logs"
+            logs.mkdir()
+            first = run_cleanup(script, root, execute=True)
+            assert first.returncode == 0, first.stdout + first.stderr
+            assert logs.is_dir() and not any(logs.iterdir()), "first cleanup changed the empty logs root"
+            second = run_cleanup(script, root, execute=True)
+            assert second.returncode == 0, second.stdout + second.stderr
+            assert logs.is_dir() and not any(logs.iterdir()), "repeated cleanup was not idempotent"
+
     def check_module_delegates_to_maintenance_script() -> None:
         with tempfile.TemporaryDirectory(prefix="log-cleanup-module-") as directory:
             root = Path(directory)
@@ -278,6 +290,7 @@ def main() -> int:
     check("reparse escape fails before deletion", check_reparse_escape_blocks_all_deletion)
     check("redirected logs root is rejected", check_reparse_log_root_is_rejected)
     check("missing logs succeeds", check_missing_logs_is_success)
+    check("empty logs Execute is idempotent", check_empty_logs_execute_is_idempotent)
     check("module delegates cleanup", check_module_delegates_to_maintenance_script)
 
     if failures:
