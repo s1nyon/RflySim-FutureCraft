@@ -1,6 +1,10 @@
 # Competition Capability Roadmap（比赛能力开发主索引）
 
-> 状态基准：2026-08-08（lifecycle P0 已冻结、PBL-1 full-stack regression 已 CLOSED）
+> 状态基准：2026-08-11（lifecycle P0 已冻结、PBL-1 full-stack regression 已 CLOSED、
+> 迁移后 `dev` live 链 armed 验证已恢复，证据
+> `docs/evidence/2026-08-11-live-import-and-pwsh-compat-armed-verified.md`；
+> 已知 OPEN：WSL 进程组 stop 失效，见
+> `docs/incidents/2026-08-11-wsl-pgid-stop-ineffective.md`）
 > 依据：正式赛题文件
 > `docs/reference/competition-guide-2026.pdf`，赛题 2.1
 > 「室内狭窄通道环境下多飞行器智能协同导航与作业挑战赛」。
@@ -65,7 +69,7 @@
 
 | 能力 | 状态 | 证据 / 说明 |
 |---|---:|---|
-| Lifecycle（启动/停止/fresh-instance/ownership/topology/安全 stop） | **DONE** | 5 次连续 closure + 3 次 full regression；`docs/evidence/2026-08-08-lifecycle-p0-fix-live-validated.md` |
+| Lifecycle（启动/停止/fresh-instance/ownership/topology/安全 stop） | **DONE\*** | 5 次连续 closure + 3 次 full regression；`docs/evidence/2026-08-08-lifecycle-p0-fix-live-validated.md`；\*2026-08-11 复验发现 `stack_stop.py` WSL PGID kill 失效（stop 报 NOT clean，需显式 PID 补清），待 Yellow Zone 修复，见 `docs/incidents/2026-08-11-wsl-pgid-stop-ineffective.md` |
 | 双机 PX4/MAVROS/FAST-LIO/EGO 软件栈 | **BASELINE** | 3× fresh-instance 完整飞行 success（`docs/evidence/2026-08-08-pbl1-fullstack-regression-closure.md`） |
 | OFFBOARD / arming / takeoff / landing(AUTO.LAND) | **BASELINE** | 每轮 41.5 s 全程 14 段确认；但按比赛 20 s 起飞窗验收未做 |
 | 窄通道导航（当前已知路线） | **BASELINE** | PBL 已知隧道 14/14 段；比赛几何（宽≤1.5m、3 段、转弯）未按赛题验收 |
@@ -267,5 +271,6 @@ wall clearance、collision count、planner failure count。
 - 正式赛题 PDF：`docs/reference/competition-guide-2026.pdf`
 - lifecycle closure：`docs/evidence/2026-08-08-lifecycle-p0-fix-live-validated.md`
 - PBL regression closure：`docs/evidence/2026-08-08-pbl1-fullstack-regression-closure.md`
+- 迁移后 armed live 恢复：`docs/evidence/2026-08-11-live-import-and-pwsh-compat-armed-verified.md`
 - lifecycle 设计：`docs/architecture/2026-08-08-live-stack-lifecycle-design.md`
 - Agent 入口：`.agents/AGENT2READ.md`

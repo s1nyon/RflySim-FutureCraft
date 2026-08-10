@@ -3,6 +3,17 @@
 ## Current Truth
 
 - Lifecycle 是 **FROZEN / CLOSED**：5 次 fresh start→READY→stop-clean closure 与 3 次 PBL-1 full regression 已通过。
+- 2026-08-11 仓库结构迁移后，`dev` live 链的 armed 验证已恢复并通过
+  （fresh-instance：双机 OFFBOARD/arm/起飞/14 段导航/降落，`success=true` 41.5s，
+  证据 `../docs/evidence/2026-08-11-live-import-and-pwsh-compat-armed-verified.md`）。
+  两项兼容修复（adapter 模块解析、PS5.1/PS7 schema-v2 整数判定）已随修复提交验证。
+- **已知 OPEN 缺陷（Yellow Zone，待修）**：`stack_stop.py` 对 WSL 进程组
+  `kill -- -PGID` 无效（返回 0 但进程组存活），stop 报 NOT clean，需要按显式 PID
+  补清后再收尾记录 `clean: true`；2 个 fresh 栈均 2/2 复现。
+  详见 `../docs/incidents/2026-08-11-wsl-pgid-stop-ineffective.md`。
+- 2026-08-11 旧栈 OFFBOARD 失败已定位为运行时序问题（旧栈重试窗口内 setpoint
+  流中断），**不是代码回归**；恢复靠「完整清理 → fresh 栈背靠背启动」，
+  见 `../docs/incidents/2026-08-11-offboard-stale-retry-setpoint-stream.md`。
 - PBL-1 是受保护的 `lidar_only` 双机 RflySim/PX4/MAVROS/Faster-LIO/EGO-Swarm/OFFBOARD 错时穿越基线，不是完整比赛 mission strategy。
 - 当前阶段是 Phase 2「Competition-Grade Narrow-Corridor Navigation」；权威路线见 [`docs/current/competition-roadmap.md`](../docs/current/competition-roadmap.md)。
 - 当前无 P0/P1 blocker。下一缺口是按比赛几何/障碍验收导航，以及真实视觉目标感知。

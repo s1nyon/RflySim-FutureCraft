@@ -8,6 +8,11 @@
 
 - PBL-1（`lidar_only` 双机 RflySim/PX4/MAVROS/Faster-LIO/EGO-Swarm/OFFBOARD 错时穿越基线）已通过 3 次 fresh-instance 完整 live 回归并冻结。
 - manifest 化 lifecycle 已通过 5 次 start/READY/stop closure 与 PBL-1 回归；启动、检查、停止和 fresh-instance 均 fail closed。
+- 2026-08-11 仓库结构迁移后的 `dev` live 链已恢复：fresh-instance armed 验证
+  （双机 OFFBOARD/arm/起飞/14 段导航/降落，`success=true` 41.5s）通过，
+  证据见 `docs/evidence/2026-08-11-live-import-and-pwsh-compat-armed-verified.md`。
+  已知待修缺陷：WSL 进程组 stop 在 `stack_stop.py` 中失效（stop 报 NOT clean，
+  需显式 PID 补清），见 `docs/incidents/2026-08-11-wsl-pgid-stop-ineffective.md`。
 - 当前开发阶段是 Phase 2：按比赛几何、静态/动态障碍和运动指标验收窄通道导航；PBL-1 是回归基线，不等于比赛完整能力。
 - D435i RGB/Depth 接口已保留，但 `full` 多传感器模式的 live 飞行稳定性尚未闭环；默认飞行配置仍为 `lidar_only`。
 - `future_aircraft_mission` 是新 C++ 比赛任务代码的工作区；`multi_uav_mission` Python 与 lifecycle 是受保护基线。
