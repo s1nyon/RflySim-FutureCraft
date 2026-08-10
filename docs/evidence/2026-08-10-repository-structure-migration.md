@@ -70,8 +70,15 @@ After that scoped fix, the entire required sequence below was rerun from Step 1 
 | `git submodule status` | 0 | Pinned `451d10308fa48f59623ad2d760c96cdccbfc2eff third_party/ego-planner-swarm (remotes/origin/rflysim-noetic-cxx17-compat)` with a leading blank status marker, not `-` or `+`. |
 | `git -C third_party/ego-planner-swarm status --short --branch` | 0 | `## HEAD (no branch)` and no dirty paths. |
 | `git diff --check` | 0 | No output. |
-| `rg -n "external/ego-planner-swarm\|external\\\\ego-planner-swarm" config scripts tests README.md AGENTS.md .agents` | 1 | No output; exit 1 is the expected ripgrep no-match result, proving the active old-path search is empty. |
 | `git diff --name-only 49bf7f7..HEAD -- future_aircraft_ws/src/multi_uav_mission/scripts future_aircraft_ws/src/multi_uav_mission/launch` | 0 | No output. |
+
+The old-path gate was run exactly as specified in the Task 10 brief:
+
+```powershell
+rg -n "external/ego-planner-swarm|external\\ego-planner-swarm" config scripts tests README.md AGENTS.md .agents
+```
+
+It produced no output and exited 1, the expected ripgrep no-match result, proving the active old-path search is empty.
 
 The protected `multi_uav_mission` Python/launch files are unchanged from the `49bf7f7` pre-implementation design baseline.
 
@@ -101,8 +108,8 @@ No `-Execute`, live stack, arming, real stop, or real cleanup command was run.
 
 ## Rollback Points
 
-- Dependency: `d0a7e653c71810c6a4656a11e366a0ffe837c3cf` is the safe preserved-patch point before the submodule commit. Revert `6070ade1eeb05ed604f09893904b32e0ade0225a16` and then `a901c962f2eaf3c9a379a5be3e40b9f25fb0e40e` to undo the dependency contract and pin while retaining the compatibility patch record. Revert `d0a7e653c71810c6a4656a11e366a0ffe837c3cf` only after separately preserving that patch.
-- Package: `6070ade1eeb05ed604f09893904b32e0ade0225a16` is the point before package separation; revert `d3e05f0722dff1d8b68ed2f6897c636e29199a16` to undo `future_aircraft_mission` separation. `b94d7b2a2e27501132af41a6e6ced22e08d9eb89` is the immediately following developer-workspace metadata commit and must be reviewed if package paths are rolled back.
+- Dependency: `d0a7e653c71810c6a4656a11e366a0ffe837c3cf` is the safe preserved-patch point before the submodule commit. Revert `6070ade1eeb05ed604f09893904b32e0ade0225a` and then `a901c962f2eaf3c9a379a5be3e40b9f25fb0e40e` to undo the dependency contract and pin while retaining the compatibility patch record. Revert `d0a7e653c71810c6a4656a11e366a0ffe837c3cf` only after separately preserving that patch.
+- Package: `6070ade1eeb05ed604f09893904b32e0ade0225a` is the point before package separation; revert `d3e05f0722dff1d8b68ed2f6897c636e29199a16` to undo `future_aircraft_mission` separation. `b94d7b2a2e27501132af41a6e6ced22e08d9eb89` is the immediately following developer-workspace metadata commit and must be reviewed if package paths are rolled back.
 - CLI: `b94d7b2a2e27501132af41a6e6ced22e08d9eb89` is the point before the unified CLI. Revert, in reverse implementation order, `5387efe6285a100a3422a73810d8eb3a2136b954`, `4d8ae4a18e8a65ec6bb44f621477c36fdf7e9e0a`, `801ac1e48d3730b3c4b4073a0e009681d53511fc`, and `d37cbdcd02442816f80de19638e49f3c49172994`.
 - Docs/runtime evidence: `5387efe6285a100a3422a73810d8eb3a2136b954` is the point before current-document reorganization. Revert `f5ab695c2c6c6eb2783fdf06808023b97c523303`, then `9602023e793d350371e17689efede6f7f12f26b5`, then `c654c010c97f0bc81bd9e000221cac7d7352ded4` to undo curator preflight, curated evidence/runtime cleanup commit, and documentation reorganization. Runtime deletions may require restoration from Git/history or backups rather than a blind cleanup reversal.
 
