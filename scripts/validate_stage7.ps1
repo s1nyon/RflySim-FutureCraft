@@ -324,6 +324,9 @@ if (Test-Path -LiteralPath $fastLioRunnerPath) {
     if ($fastLioRunner -notmatch 'topic_has_publisher') {
         $contractErrors += 'stage7_live_fastlio_dual.sh must validate ROS sensor topic publishers, not only sensor bridge process existence'
     }
+    if ($fastLioRunner -notmatch 'source "\$PROJECT_DIR/future_aircraft_ws/devel/setup\.bash" --extend') {
+        $contractErrors += 'stage7_live_fastlio_dual.sh must preserve the validated 28com_uav Faster-LIO overlay when sourcing the project workspace'
+    }
     if ($fastLioRunner -notmatch 'Publishers: None') {
         $contractErrors += 'stage7_live_fastlio_dual.sh must detect stale sensor bridge registrations with no ROS publishers'
     }
@@ -687,6 +690,31 @@ if ($missing.Count -eq 0) {
                 ($output -join ' ') -notmatch 'readiness max age: 120 seconds') {
             $contractErrors += 'topic probe dry-run must expose its 120-second readiness age limit'
         }
+    }
+
+    foreach ($manifestLauncher in @(
+        'scripts/run_live_fastlio_dual.bat',
+        'scripts/run_live_ego_swarm_dual.bat',
+        'scripts/run_live_slam_ego_swarm_flight.bat'
+    )) {
+        $manifestLauncherText = Get-Content -LiteralPath (Join-Path $ProjectRoot $manifestLauncher) -Raw
+        if ($manifestLauncherText -notmatch '(?im)^setlocal EnableDelayedExpansion\s*$' -or
+            $manifestLauncherText -notmatch "STACK_MANIFEST='!STACK_MANIFEST_WSL!'") {
+            $contractErrors += "$manifestLauncher must use delayed expansion when passing the manifest converted inside its parenthesized block"
+        }
+    }
+    $fastlioWslText = Get-Content -LiteralPath (Join-Path $ProjectRoot 'scripts/wsl/stage7_live_fastlio_dual.sh') -Raw
+    if ($fastlioWslText -notmatch 'MAVROS_FEEDBACK_INIT_TIMEOUT_SEC' -or
+        $fastlioWslText -notmatch 'rostopic echo -n 1' -or
+        $fastlioWslText -notmatch 'mavros/local_position/odom') {
+        $contractErrors += 'FAST-LIO runner must wait for actual MAVROS local-position feedback before sampling readiness'
+    }
+    if ($fastlioWslText -notmatch 'wsl:fastlio_session') {
+        $contractErrors += 'FAST-LIO runner must register its own long-lived shell before creating child processes'
+    }
+    $egoWslText = Get-Content -LiteralPath (Join-Path $ProjectRoot 'scripts/wsl/stage7_live_ego_swarm_dual.sh') -Raw
+    if ($egoWslText -notmatch 'exec roslaunch .* > >\(tee ' -or $egoWslText -match 'exec roslaunch .*\| tee') {
+        $contractErrors += 'EGO runner must preserve its registered PID across exec while teeing logs via process substitution'
     }
 }
 

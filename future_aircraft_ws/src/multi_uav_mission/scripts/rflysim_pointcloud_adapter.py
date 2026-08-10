@@ -2,6 +2,12 @@
 """ROS adapter from RflySim XYZ/seg clouds to faster_lio Ouster clouds."""
 
 import json
+import sys
+from pathlib import Path
+
+SCRIPT_DIR = str(Path(__file__).resolve().parent)
+if not sys.path or sys.path[0] != SCRIPT_DIR:
+    sys.path.insert(0, SCRIPT_DIR)
 
 from rflysim_cloud_contract import convert_cloud
 

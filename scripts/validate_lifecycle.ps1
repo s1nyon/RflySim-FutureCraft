@@ -64,6 +64,13 @@ try {
         '--generator', "$lifecycle\generate_sitl_wrapper.ps1"
     )
 
+    $startText = Get-Content -LiteralPath (Join-Path $ProjectRoot 'scripts\live_stack_start.ps1') -Raw
+    $healthGateIndex = $startText.IndexOf("health_probe.py') check")
+    $simIdIndex = $startText.IndexOf("live_stack_wsl_ops.sh' sim-id")
+    if ($healthGateIndex -lt 0 -or $simIdIndex -lt 0 -or $simIdIndex -lt $healthGateIndex) {
+        throw 'live_stack_start.ps1 must compute simulation_instance_id only after the PX4/MAVROS health gate'
+    }
+
     # Hazard stubs must refuse with exit code 1.
     & powershell -ExecutionPolicy Bypass -File (Join-Path $ProjectRoot 'scripts\cleanup_sim_stack.ps1') 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 1) { throw "cleanup_sim_stack.ps1 hazard stub must exit 1 (got $LASTEXITCODE)" }

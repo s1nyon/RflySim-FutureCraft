@@ -104,7 +104,7 @@ def write_validator_fixtures(root: Path) -> None:
 
 
 def write_fake_wsl(bin_dir: Path) -> None:
-    bin_dir.mkdir(parents=True)
+    bin_dir.mkdir(parents=True, exist_ok=True)
     (bin_dir / "wsl.cmd").write_text(
         "@echo off\n"
         "echo %*>>\"%SIM_CLI_WSL_LOG%\"\n"
@@ -136,6 +136,7 @@ def invoke_module(
     *,
     fail_script: str = "",
     wsl_exit: int = 0,
+    powershell_host: str = "powershell.exe",
 ) -> tuple[subprocess.CompletedProcess[str], list[str], list[str]]:
     log_path = project_root / "validator.log"
     wsl_log_path = project_root / "wsl.log"
@@ -157,7 +158,7 @@ def invoke_module(
         f"{expression}"
     )
     result = run_process(
-        ["powershell.exe", "-NoProfile", "-Command", command],
+        [powershell_host, "-NoProfile", "-Command", command],
         cwd=project_root,
         env=env,
     )
@@ -254,7 +255,7 @@ def write_ego_role_fixtures(root: Path, inspect_status: str) -> tuple[Path, Path
         "$readiness = Join-Path $runDir 'sensor_readiness.json'\n"
         "$context = Join-Path $env:SIM_CLI_FIXTURE_ROOT 'logs\\stage7_live\\current_run.env'\n"
         "New-Item -ItemType Directory -Force -Path $runDir | Out-Null\n"
-        "'{}' | Set-Content -LiteralPath $readiness -Encoding UTF8\n"
+        "'{\"ready\":true}' | Set-Content -LiteralPath $readiness -Encoding UTF8\n"
         "@(\"STAGE7_RUN_ID=run-fixture\", \"STAGE7_READINESS_REPORT=$readiness\") | "
         "Set-Content -LiteralPath $context -Encoding UTF8\n"
         "Add-Content -LiteralPath $env:SIM_CLI_WRAPPER_LOG -Value 'fastlio exit=0'\n"
@@ -380,6 +381,20 @@ def main() -> int:
             )
             assert result.returncode == 0, result.stderr or result.stdout
             assert str(active).lower() in result.stdout.lower(), result.stdout
+
+            pwsh = shutil.which("pwsh.exe") or shutil.which("pwsh")
+            if pwsh:
+                pwsh_result, _, _ = invoke_module(
+                    module,
+                    root,
+                    (
+                        f"$manifest=Resolve-ActiveStackManifest -ProjectRoot '{quote_ps(root)}'; "
+                        "Write-Output $manifest.FullName"
+                    ),
+                    powershell_host=pwsh,
+                )
+                assert pwsh_result.returncode == 0, pwsh_result.stderr or pwsh_result.stdout
+                assert str(active).lower() in pwsh_result.stdout.lower(), pwsh_result.stdout
 
         with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-multiple-") as directory:
             root = Path(directory)
@@ -780,6 +795,31 @@ def main() -> int:
             payload = json.loads(manifest.read_text(encoding="utf-8-sig"))
             assert payload["wsl_processes"] == [{"role": "wsl:ego_swarm_session"}], payload
 
+    def check_dev_start_rejects_failed_readiness() -> None:
+        with tempfile.TemporaryDirectory(prefix="sim-cli-readiness-failed-") as directory:
+            root = Path(directory)
+            _, log_path = write_ego_role_fixtures(root, "owned_and_alive")
+            fastlio = root / "scripts" / "fixture_fastlio.ps1"
+            fastlio.write_text(
+                fastlio.read_text(encoding="utf-8").replace(
+                    "'{\"ready\":true}'", "'{\"ready\":false}'"
+                ),
+                encoding="utf-8",
+            )
+            env = os.environ.copy()
+            env.update({"SIM_CLI_FIXTURE_ROOT": str(root), "SIM_CLI_WRAPPER_LOG": str(log_path)})
+            expression = (
+                f"$result=Invoke-SimStart -ProjectRoot '{quote_ps(root)}' "
+                "-Profile dev -Execute:$true; "
+                'Write-Output "__RESULT__=$result"'
+            )
+            command = "$ErrorActionPreference='Stop'; " + f"Import-Module -Force '{quote_ps(module)}'; {expression}"
+            result = run_process(["powershell.exe", "-NoProfile", "-Command", command], cwd=root, env=env)
+            assert result.returncode == 0, result.stderr or result.stdout
+            assert result_marker(result) != 0, result.stdout
+            assert "sensor readiness rejected" in result.stdout.lower(), result.stdout
+            assert log_path.read_text(encoding="utf-8").splitlines() == ["start exit=0", "fastlio exit=0"]
+
     def check_dev_start_accepts_live_ego_role() -> None:
         with tempfile.TemporaryDirectory(prefix="sim-cli-ego-alive-") as directory:
             root = Path(directory)
@@ -923,6 +963,7 @@ def main() -> int:
     check("root CLI contract", check_root_contract)
     check("active manifest resolution", check_active_manifest_resolution)
     check("Stage 7 fail-closed helpers", check_stage7_fail_closed_helpers)
+    check("dev start rejects failed readiness", check_dev_start_rejects_failed_readiness)
     check("dry-run repository dispatch", check_dry_run_repository_dispatch)
     check("protected wrapper exit propagation", check_protected_wrapper_exit_propagation)
     check("dev start rejects immediate EGO exit", check_dev_start_rejects_immediate_ego_exit)

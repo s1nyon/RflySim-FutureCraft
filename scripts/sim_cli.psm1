@@ -450,8 +450,10 @@ function Resolve-ActiveStackManifest {
         try {
             $manifest = Get-Content -LiteralPath $resolvedManifestPath -Raw -ErrorAction Stop |
                 ConvertFrom-Json -ErrorAction Stop
+            $schemaVersionIsInteger = $manifest.schema_version -is [int] -or
+                $manifest.schema_version -is [long]
             if ($manifest -isnot [pscustomobject] -or
-                $manifest.schema_version -isnot [int] -or
+                -not $schemaVersionIsInteger -or
                 $manifest.schema_version -ne 2 -or
                 $manifest.stack_id -isnot [string] -or
                 -not $manifest.stack_id.Trim() -or
@@ -741,6 +743,20 @@ function Invoke-SimStart {
     }
     if ($null -eq $readiness) {
         Write-SimCheck -Status FAIL -Message 'Stage 7 sensor readiness wait (exit 2)'
+        return 2
+    }
+    try {
+        $readinessPayload = Get-Content -LiteralPath $readinessPath -Raw -ErrorAction Stop |
+            ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        Write-SimCheck -Status FAIL -Message "Stage 7 sensor readiness rejected (exit 2): malformed report"
+        return 2
+    }
+    if ($readinessPayload -isnot [pscustomobject] -or
+        $readinessPayload.ready -isnot [bool] -or
+        $readinessPayload.ready -ne $true) {
+        Write-SimCheck -Status FAIL -Message 'Stage 7 sensor readiness rejected (exit 2)'
         return 2
     }
 

@@ -40,4 +40,4 @@ EGO_SESSION_PGID="$(ps -o pgid= -p $$ | tr -d ' ')"
 stack_register wsl "$$" "$EGO_SESSION_PGID" "wsl:ego_swarm_session" \
   "stage7_live_ego_swarm_dual.sh -> roslaunch multi_uav_mission rflysim_ego_swarm_dual.launch" \
   "created by stage7_live_ego_swarm_dual.sh (self session registration before exec)"
-exec roslaunch multi_uav_mission rflysim_ego_swarm_dual.launch 2>&1 | tee "$EGO_LOG"
+exec roslaunch multi_uav_mission rflysim_ego_swarm_dual.launch > >(tee "$EGO_LOG") 2>&1

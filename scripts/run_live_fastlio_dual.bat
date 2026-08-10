@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableDelayedExpansion
 set SCRIPT_DIR=%~dp0
 call "%SCRIPT_DIR%..\config\env_template.bat"
 if exist "%SCRIPT_DIR%..\config\env_local.bat" call "%SCRIPT_DIR%..\config\env_local.bat"
@@ -32,7 +32,7 @@ if defined STACK_MANIFEST_ARG set "STACK_MANIFEST=%STACK_MANIFEST_ARG%"
 if not defined STACK_MANIFEST if defined STACK_ID_ARG set "STACK_MANIFEST=%FUTURE_AIRCRAFT_SIM_DIR%\logs\live_stack\%STACK_ID_ARG%\stack_manifest.json"
 if defined STACK_MANIFEST (
   for /f "delims=" %%m in ('powershell -NoLogo -NoProfile -Command "$p='%STACK_MANIFEST%'; if($p -match '^([A-Za-z]):\\(.*)$'){ '/mnt/' + $matches[1].ToLower() + '/' + ($matches[2] -replace '\\','/') } else { $p.Replace('\','/') }"') do set "STACK_MANIFEST_WSL=%%m"
-  start "futureAircraftSim Stage 7 dual FAST-LIO" wsl -d %RFLYSIM_WSL_DISTRO% -e bash -lic "STACK_ID='%STACK_ID_ARG%' STACK_MANIFEST='%STACK_MANIFEST_WSL%' bash '%FUTURE_AIRCRAFT_SIM_WSL_DIR%/scripts/wsl/stage7_live_fastlio_dual.sh'"
+  start "futureAircraftSim Stage 7 dual FAST-LIO" wsl -d %RFLYSIM_WSL_DISTRO% -e bash -lic "STACK_ID='%STACK_ID_ARG%' STACK_MANIFEST='!STACK_MANIFEST_WSL!' bash '%FUTURE_AIRCRAFT_SIM_WSL_DIR%/scripts/wsl/stage7_live_fastlio_dual.sh'"
 ) else (
   start "futureAircraftSim Stage 7 dual FAST-LIO" wsl -d %RFLYSIM_WSL_DISTRO% -e bash -lic "bash '%FUTURE_AIRCRAFT_SIM_WSL_DIR%/scripts/wsl/stage7_live_fastlio_dual.sh'"
 )

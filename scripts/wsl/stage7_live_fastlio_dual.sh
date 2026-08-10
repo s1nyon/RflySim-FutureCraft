@@ -16,6 +16,12 @@ FASTLIO_LOG="$RUN_DIR/fastlio_dual.log"
 SENSOR_STARTUP_TIMEOUT_SEC="${STAGE7_SENSOR_STARTUP_TIMEOUT_SEC:-120}"
 READINESS_TOPIC_TIMEOUT_SEC="${STAGE7_READINESS_TOPIC_TIMEOUT_SEC:-10}"
 ODOM_INIT_TIMEOUT_SEC="${STAGE7_ODOM_INIT_TIMEOUT_SEC:-60}"
+MAVROS_FEEDBACK_INIT_TIMEOUT_SEC="${STAGE7_MAVROS_FEEDBACK_INIT_TIMEOUT_SEC:-90}"
+
+FASTLIO_SESSION_PGID="$(ps -o pgid= -p $$ | tr -d ' ')"
+stack_register wsl "$$" "$FASTLIO_SESSION_PGID" "wsl:fastlio_session" \
+  "stage7_live_fastlio_dual.sh" \
+  "self-registered Stage 7 FAST-LIO launcher before creating child processes"
 
 if ! [[ "$SENSOR_STARTUP_TIMEOUT_SEC" =~ ^[1-9][0-9]*$ ]]; then
   echo "[ERROR] STAGE7_SENSOR_STARTUP_TIMEOUT_SEC must be a positive integer" >&2
@@ -29,13 +35,17 @@ if ! [[ "$ODOM_INIT_TIMEOUT_SEC" =~ ^[1-9][0-9]*$ ]]; then
   echo "[ERROR] STAGE7_ODOM_INIT_TIMEOUT_SEC must be a positive integer" >&2
   exit 2
 fi
+if ! [[ "$MAVROS_FEEDBACK_INIT_TIMEOUT_SEC" =~ ^[1-9][0-9]*$ ]]; then
+  echo "[ERROR] STAGE7_MAVROS_FEEDBACK_INIT_TIMEOUT_SEC must be a positive integer" >&2
+  exit 2
+fi
 
 mkdir -p "$RUN_DIR"
 source /opt/ros/noetic/setup.bash
 source "$REF_28COM_UAV_WSL_DIR/devel/setup.bash"
 source "$PROJECT_DIR/scripts/wsl/stage7_run_context.sh"
 if [ -f "$PROJECT_DIR/future_aircraft_ws/devel/setup.bash" ]; then
-  source "$PROJECT_DIR/future_aircraft_ws/devel/setup.bash"
+  source "$PROJECT_DIR/future_aircraft_ws/devel/setup.bash" --extend
 else
   export ROS_PACKAGE_PATH="$PROJECT_DIR/future_aircraft_ws/src:${ROS_PACKAGE_PATH:-}"
 fi
@@ -213,6 +223,31 @@ for topic in /uav1/mavros/odometry/out /uav2/mavros/odometry/out; do
   fi
 done
 echo "[INFO] FAST-LIO odometry relay publishers ready after $((SECONDS))s"
+
+# PX4 needs several external-odometry samples before MAVROS emits local
+# position.  Publisher presence alone is insufficient: wait for a real
+# feedback message before the strict, run-scoped readiness sampler starts.
+MAVROS_FEEDBACK_DEADLINE=$((SECONDS + MAVROS_FEEDBACK_INIT_TIMEOUT_SEC))
+while (( SECONDS < MAVROS_FEEDBACK_DEADLINE )); do
+  feedback_ready=true
+  for topic in /uav1/mavros/local_position/odom /uav2/mavros/local_position/odom; do
+    if ! timeout 2s rostopic echo -n 1 "$topic" >/dev/null 2>&1; then
+      feedback_ready=false
+      break
+    fi
+  done
+  if [ "$feedback_ready" = true ]; then
+    break
+  fi
+  sleep 1
+done
+for topic in /uav1/mavros/local_position/odom /uav2/mavros/local_position/odom; do
+  if ! timeout 3s rostopic echo -n 1 "$topic" >/dev/null 2>&1; then
+    echo "[ERROR] MAVROS local-position feedback did not publish $topic within ${MAVROS_FEEDBACK_INIT_TIMEOUT_SEC}s" >&2
+    exit 1
+  fi
+done
+echo "[INFO] MAVROS local-position feedback ready after $((SECONDS))s"
 
 set +e
 python3 "$PROJECT_DIR/future_aircraft_ws/src/multi_uav_mission/scripts/stage7_sensor_readiness.py" \

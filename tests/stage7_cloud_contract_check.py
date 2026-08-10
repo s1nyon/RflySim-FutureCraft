@@ -6,7 +6,10 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import math
+import runpy
 import struct
+import sys
+import tempfile
 from pathlib import Path
 
 
@@ -56,11 +59,32 @@ def converted_values(converted, format_string: str, offset: int):
     ]
 
 
+def assert_adapter_prefers_source_helper(adapter_path: Path) -> None:
+    """Catch Catkin devel relays shadowing the adapter's sibling helper."""
+    with tempfile.TemporaryDirectory(prefix="stage7-catkin-relay-") as directory:
+        relay_dir = Path(directory)
+        (relay_dir / "rflysim_cloud_contract.py").write_text(
+            "BROKEN_CATKIN_RELAY = True\n",
+            encoding="utf-8",
+        )
+        previous_path = list(sys.path)
+        previous_module = sys.modules.pop("rflysim_cloud_contract", None)
+        try:
+            sys.path.insert(0, str(relay_dir))
+            runpy.run_path(str(adapter_path), run_name="rflysim_pointcloud_adapter_test")
+        finally:
+            sys.path[:] = previous_path
+            sys.modules.pop("rflysim_cloud_contract", None)
+            if previous_module is not None:
+                sys.modules["rflysim_cloud_contract"] = previous_module
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--module", type=Path, required=True)
     args = parser.parse_args()
     module = load_module(args.module)
+    assert_adapter_prefers_source_helper(args.module.parent / "rflysim_pointcloud_adapter.py")
 
     points = [
         (1.0, 0.0, 0.0, 12.4),
