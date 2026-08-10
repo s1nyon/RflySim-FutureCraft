@@ -7,6 +7,8 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $python (Join-Path $ProjectRoot 'tests\developer_workspace_config_check.py') --project-root $ProjectRoot
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& $python (Join-Path $ProjectRoot 'tests\log_cleanup_check.py') --project-root $ProjectRoot
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $python (Join-Path $ProjectRoot 'tests\sim_cli_check.py') --project-root $ProjectRoot
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host '[PASS] repository dependency contracts'

@@ -287,13 +287,6 @@ def main() -> int:
         unknown = run_cli(project_root, "unknown-command")
         assert unknown.returncode != 0
 
-    def check_deferred_commands_fail_closed() -> None:
-        result = run_cli(project_root, "clean-logs")
-        assert result.returncode != 0, "clean-logs unexpectedly succeeded"
-        assert "not implemented" in (result.stdout + result.stderr).lower(), (
-            "clean-logs did not explain its safe refusal"
-        )
-
     def check_active_manifest_resolution() -> None:
         with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-none-") as directory:
             root = Path(directory)
@@ -772,7 +765,6 @@ def main() -> int:
             assert any("build_future_aircraft_ws.sh" in call for call in wsl_calls), wsl_calls
 
     check("root CLI contract", check_root_contract)
-    check("deferred commands fail closed", check_deferred_commands_fail_closed)
     check("active manifest resolution", check_active_manifest_resolution)
     check("Stage 7 fail-closed helpers", check_stage7_fail_closed_helpers)
     check("dry-run repository dispatch", check_dry_run_repository_dispatch)

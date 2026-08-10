@@ -724,8 +724,28 @@ function Invoke-SimLogCleanup {
         [bool]$Execute = $false
     )
 
-    Write-SimCheck -Status FAIL -Message "command 'clean-logs' is not implemented yet; no files were removed"
-    return 2
+    try {
+        $activeManifest = Resolve-ActiveStackManifest -ProjectRoot $ProjectRoot
+    }
+    catch {
+        Write-SimCheck -Status FAIL -Message $_.Exception.Message
+        return 2
+    }
+    if ($null -ne $activeManifest) {
+        Write-SimCheck -Status FAIL -Message "active stack manifest blocks log cleanup: $($activeManifest.FullName)"
+        return 2
+    }
+
+    $cleanupScript = Join-Path $ProjectRoot 'scripts\maintenance\clean_logs.ps1'
+    $arguments = @('-ProjectRoot', $ProjectRoot)
+    if ($Execute) {
+        $arguments += '-Execute'
+    }
+    $exitCode = Invoke-ProtectedScript -ScriptPath $cleanupScript -Arguments $arguments
+    if ($exitCode -ne 0) {
+        Write-SimCheck -Status FAIL -Message "log cleanup (exit $exitCode)"
+    }
+    return [int]$exitCode
 }
 
 Export-ModuleMember -Function @(
