@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -172,6 +173,97 @@ def result_marker(result: subprocess.CompletedProcess[str]) -> int:
     raise AssertionError(f"missing result marker\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}")
 
 
+def write_stack_manifest(root: Path, stack_id: str, payload: dict[str, object] | str) -> Path:
+    manifest = root / "logs" / "live_stack" / stack_id / "stack_manifest.json"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    text = payload if isinstance(payload, str) else json.dumps(payload)
+    manifest.write_text(text, encoding="utf-8")
+    return manifest
+
+
+def write_lifecycle_wrapper_fixtures(root: Path) -> Path:
+    scripts = root / "scripts"
+    scripts.mkdir(parents=True, exist_ok=True)
+    log_path = root / "wrapper.log"
+    wrappers = {
+        "live_stack_start.ps1": "SIM_CLI_START_EXIT",
+        "live_stack_inspect.ps1": "SIM_CLI_INSPECT_EXIT",
+        "end_live_stack.ps1": "SIM_CLI_STOP_EXIT",
+    }
+    for name, exit_variable in wrappers.items():
+        (scripts / name).write_text(
+            f"Add-Content -LiteralPath $env:SIM_CLI_WRAPPER_LOG -Value ('{name} ' + ($args -join ' '))\n"
+            f"exit [int]$env:{exit_variable}\n",
+            encoding="utf-8",
+        )
+    return log_path
+
+
+def write_ego_role_fixtures(root: Path, inspect_status: str) -> tuple[Path, Path]:
+    scripts = root / "scripts"
+    scripts.mkdir(parents=True, exist_ok=True)
+    manifest = root / "logs" / "live_stack" / "stack-fixture" / "stack_manifest.json"
+    log_path = root / "wrapper.log"
+
+    (scripts / "live_stack_start.ps1").write_text(
+        "param([switch]$Execute, [switch]$DryRun)\n"
+        "$manifest = Join-Path $env:SIM_CLI_FIXTURE_ROOT "
+        "'logs\\live_stack\\stack-fixture\\stack_manifest.json'\n"
+        "New-Item -ItemType Directory -Force -Path (Split-Path -Parent $manifest) | Out-Null\n"
+        "'{\"schema_version\":2,\"stack_id\":\"stack-fixture\","
+        "\"stop\":{\"clean\":false},\"wsl_processes\":[]}' | "
+        "Set-Content -LiteralPath $manifest -Encoding UTF8\n"
+        "Add-Content -LiteralPath $env:SIM_CLI_WRAPPER_LOG -Value 'start exit=0'\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    (scripts / "fixture_fastlio.ps1").write_text(
+        "$runDir = Join-Path $env:SIM_CLI_FIXTURE_ROOT 'logs\\stage7_live\\run-fixture'\n"
+        "$readiness = Join-Path $runDir 'sensor_readiness.json'\n"
+        "$context = Join-Path $env:SIM_CLI_FIXTURE_ROOT 'logs\\stage7_live\\current_run.env'\n"
+        "New-Item -ItemType Directory -Force -Path $runDir | Out-Null\n"
+        "'{}' | Set-Content -LiteralPath $readiness -Encoding UTF8\n"
+        "@(\"STAGE7_RUN_ID=run-fixture\", \"STAGE7_READINESS_REPORT=$readiness\") | "
+        "Set-Content -LiteralPath $context -Encoding UTF8\n"
+        "Add-Content -LiteralPath $env:SIM_CLI_WRAPPER_LOG -Value 'fastlio exit=0'\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    (scripts / "run_live_fastlio_dual.bat").write_text(
+        "@echo off\n"
+        'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0fixture_fastlio.ps1"\n'
+        "exit /b %errorlevel%\n",
+        encoding="ascii",
+    )
+    (scripts / "fixture_ego.ps1").write_text(
+        "$manifest = Join-Path $env:SIM_CLI_FIXTURE_ROOT "
+        "'logs\\live_stack\\stack-fixture\\stack_manifest.json'\n"
+        "$payload = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json\n"
+        "$payload.wsl_processes = @([pscustomobject]@{role='wsl:ego_swarm_session'})\n"
+        "$payload | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $manifest -Encoding UTF8\n"
+        "Add-Content -LiteralPath $env:SIM_CLI_WRAPPER_LOG -Value "
+        "'ego registered role runner exit=0'\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    (scripts / "run_live_ego_swarm_dual.bat").write_text(
+        "@echo off\n"
+        'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0fixture_ego.ps1"\n'
+        "exit /b %errorlevel%\n",
+        encoding="ascii",
+    )
+    (scripts / "live_stack_inspect.ps1").write_text(
+        "param([string]$Manifest)\n"
+        "Add-Content -LiteralPath $env:SIM_CLI_WRAPPER_LOG -Value "
+        f"'inspect {inspect_status} exit=0'\n"
+        "Write-Output '{\"owned\":[{\"entry\":{\"role\":\"wsl:ego_swarm_session\"},"
+        f"\"status\":\"{inspect_status}\"}}]}}'\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    return manifest, log_path
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project-root", required=True, type=Path)
@@ -196,12 +288,381 @@ def main() -> int:
         assert unknown.returncode != 0
 
     def check_deferred_commands_fail_closed() -> None:
-        for command in ("start", "status", "stop", "clean-logs"):
-            result = run_cli(project_root, command)
-            assert result.returncode != 0, f"{command} unexpectedly succeeded"
-            assert "not implemented" in (result.stdout + result.stderr).lower(), (
-                f"{command} did not explain its safe refusal"
+        result = run_cli(project_root, "clean-logs")
+        assert result.returncode != 0, "clean-logs unexpectedly succeeded"
+        assert "not implemented" in (result.stdout + result.stderr).lower(), (
+            "clean-logs did not explain its safe refusal"
+        )
+
+    def check_active_manifest_resolution() -> None:
+        with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-none-") as directory:
+            root = Path(directory)
+            result, _, _ = invoke_module(
+                module,
+                root,
+                (
+                    f"$manifest=Resolve-ActiveStackManifest -ProjectRoot '{quote_ps(root)}'; "
+                    "if ($null -eq $manifest) { Write-Output '__EMPTY__' } else { Write-Output $manifest.FullName }"
+                ),
             )
+            assert result.returncode == 0, result.stderr or result.stdout
+            assert "__EMPTY__" in result.stdout, result.stdout
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-closed-") as directory:
+            root = Path(directory)
+            write_stack_manifest(
+                root,
+                "stack-closed",
+                {"schema_version": 2, "stack_id": "stack-closed", "stop": {"clean": True}},
+            )
+            result, _, _ = invoke_module(
+                module,
+                root,
+                (
+                    f"$manifest=Resolve-ActiveStackManifest -ProjectRoot '{quote_ps(root)}'; "
+                    "if ($null -eq $manifest) { Write-Output '__EMPTY__' } else { Write-Output $manifest.FullName }"
+                ),
+            )
+            assert result.returncode == 0, result.stderr or result.stdout
+            assert "__EMPTY__" in result.stdout, result.stdout
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-active-") as directory:
+            root = Path(directory)
+            active = write_stack_manifest(
+                root,
+                "stack-active",
+                {"schema_version": 2, "stack_id": "stack-active", "stop": {"clean": False}},
+            )
+            result, _, _ = invoke_module(
+                module,
+                root,
+                (
+                    f"$manifest=Resolve-ActiveStackManifest -ProjectRoot '{quote_ps(root)}'; "
+                    "Write-Output $manifest.FullName"
+                ),
+            )
+            assert result.returncode == 0, result.stderr or result.stdout
+            assert str(active).lower() in result.stdout.lower(), result.stdout
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-multiple-") as directory:
+            root = Path(directory)
+            for stack_id in ("stack-active-a", "stack-active-b"):
+                write_stack_manifest(
+                    root,
+                    stack_id,
+                    {"schema_version": 2, "stack_id": stack_id, "stop": {"clean": False}},
+                )
+            result, _, _ = invoke_module(
+                module,
+                root,
+                f"Resolve-ActiveStackManifest -ProjectRoot '{quote_ps(root)}'",
+            )
+            assert result.returncode != 0, result.stdout
+            assert "multiple active stack manifests" in (result.stdout + result.stderr).lower()
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-malformed-") as directory:
+            root = Path(directory)
+            active = write_stack_manifest(
+                root,
+                "stack-active",
+                {"schema_version": 2, "stack_id": "stack-active", "stop": {"clean": False}},
+            )
+            write_stack_manifest(root, "stack-malformed", "{not-json")
+            result, _, _ = invoke_module(
+                module,
+                root,
+                f"Resolve-ActiveStackManifest -ProjectRoot '{quote_ps(root)}'",
+            )
+            assert result.returncode != 0, result.stdout
+            combined = result.stdout + result.stderr
+            assert "malformed stack manifest" in combined.lower(), combined
+            assert str(active).lower() not in result.stdout.lower(), result.stdout
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-schema-") as directory:
+            root = Path(directory)
+            write_stack_manifest(
+                root,
+                "stack-wrong-schema",
+                {"schema_version": "2", "stack_id": "stack-wrong-schema", "stop": {"clean": False}},
+            )
+            result, _, _ = invoke_module(
+                module,
+                root,
+                f"Resolve-ActiveStackManifest -ProjectRoot '{quote_ps(root)}'",
+            )
+            assert result.returncode != 0, result.stdout
+            assert "malformed stack manifest" in (result.stdout + result.stderr).lower()
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-hidden-") as directory:
+            root = Path(directory)
+            active = write_stack_manifest(
+                root,
+                "stack-hidden",
+                {"schema_version": 2, "stack_id": "stack-hidden", "stop": {}},
+            )
+            hidden = run_process(["attrib", "+h", str(active.parent)], cwd=root)
+            assert hidden.returncode == 0, hidden.stderr or hidden.stdout
+            try:
+                result, _, _ = invoke_module(
+                    module,
+                    root,
+                    (
+                        f"$manifest=Resolve-ActiveStackManifest -ProjectRoot '{quote_ps(root)}'; "
+                        "Write-Output $manifest.FullName"
+                    ),
+                )
+                assert result.returncode == 0, result.stderr or result.stdout
+                assert str(active).lower() in result.stdout.lower(), result.stdout
+            finally:
+                run_process(["attrib", "-h", str(active.parent)], cwd=root)
+
+    def check_stage7_fail_closed_helpers() -> None:
+        with tempfile.TemporaryDirectory(prefix="sim-cli-stage7-context-") as directory:
+            root = Path(directory)
+            context = root / "current_run.env"
+            context.write_text("NOT_A_STAGE7_CONTEXT\n", encoding="utf-8")
+            expression = (
+                "& (Get-Module sim_cli) { param($path) "
+                "Get-Stage7RunContext -ContextPath $path } "
+                f"'{quote_ps(context)}'"
+            )
+            result, _, _ = invoke_module(module, root, expression)
+            assert result.returncode != 0, result.stdout
+            assert "malformed Stage 7 run context" in (result.stdout + result.stderr)
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-stage7-role-") as directory:
+            root = Path(directory)
+            manifest = write_stack_manifest(
+                root,
+                "stack-active",
+                {
+                    "schema_version": 2,
+                    "stack_id": "stack-active",
+                    "stop": {"clean": False},
+                    "wsl_processes": [{"role": "wsl:ego_swarm_session"}],
+                },
+            )
+            expression = (
+                "$found=& (Get-Module sim_cli) { param($path) "
+                "Wait-StackManifestRole -ManifestPath $path -Role 'wsl:ego_swarm_session' "
+                "-TimeoutSeconds 0 } "
+                f"'{quote_ps(manifest)}'; Write-Output \"__RESULT__=$found\""
+            )
+            result, _, _ = invoke_module(module, root, expression)
+            assert result.returncode == 0, result.stderr or result.stdout
+            assert "__RESULT__=True" in result.stdout, result.stdout
+
+    def check_dry_run_repository_dispatch() -> None:
+        start = run_cli(project_root, "start")
+        assert start.returncode == 0, start.stderr or start.stdout
+        assert "[DRY-RUN]" in start.stdout, start.stdout
+        assert "profile dev" in start.stdout.lower(), start.stdout
+
+        status = run_cli(project_root, "status")
+        assert status.returncode == 0, status.stderr or status.stdout
+
+        stop = run_cli(project_root, "stop")
+        assert stop.returncode in (0, 2), stop.stderr or stop.stdout
+        assert "DryRun" in stop.stdout or "no active stack" in stop.stdout, stop.stdout
+
+        source = module.read_text(encoding="utf-8")
+        lowered = source.lower()
+        for protected_wrapper in (
+            "live_stack_start.ps1",
+            "live_stack_inspect.ps1",
+            "end_live_stack.ps1",
+        ):
+            assert protected_wrapper.lower() in lowered, protected_wrapper
+        for banned in (
+            "wsl --shutdown",
+            "pkill -9",
+            "taskkill /F",
+            "Stop-Process -Force",
+        ):
+            assert banned.lower() not in lowered, banned
+
+    def check_protected_wrapper_exit_propagation() -> None:
+        with tempfile.TemporaryDirectory(prefix="sim-cli-wrapper-start-") as directory:
+            root = Path(directory)
+            log_path = write_lifecycle_wrapper_fixtures(root)
+            env = os.environ.copy()
+            env.update(
+                {
+                    "SIM_CLI_WRAPPER_LOG": str(log_path),
+                    "SIM_CLI_START_EXIT": "41",
+                    "SIM_CLI_INSPECT_EXIT": "0",
+                    "SIM_CLI_STOP_EXIT": "0",
+                }
+            )
+            expression = (
+                f"$result=Invoke-SimStart -ProjectRoot '{quote_ps(root)}' -Profile dev -Execute:$false; "
+                'Write-Output "__RESULT__=$result"'
+            )
+            command = (
+                "$ErrorActionPreference='Stop'; "
+                f"Import-Module -Force '{quote_ps(module)}'; {expression}"
+            )
+            result = run_process(
+                ["powershell.exe", "-NoProfile", "-Command", command], cwd=root, env=env
+            )
+            assert result.returncode == 0, result.stderr or result.stdout
+            assert result_marker(result) == 41, result.stdout
+            assert "live stack start" in result.stdout.lower(), result.stdout
+            calls = log_path.read_text(encoding="utf-8").splitlines()
+            assert calls == ["live_stack_start.ps1 -DryRun"], calls
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-wrapper-status-") as directory:
+            root = Path(directory)
+            log_path = write_lifecycle_wrapper_fixtures(root)
+            manifest = write_stack_manifest(
+                root,
+                "stack-active",
+                {"schema_version": 2, "stack_id": "stack-active", "stop": {"clean": False}},
+            )
+            env = os.environ.copy()
+            env.update(
+                {
+                    "SIM_CLI_WRAPPER_LOG": str(log_path),
+                    "SIM_CLI_START_EXIT": "0",
+                    "SIM_CLI_INSPECT_EXIT": "31",
+                    "SIM_CLI_STOP_EXIT": "0",
+                }
+            )
+            expression = (
+                f"$result=Invoke-SimStatus -ProjectRoot '{quote_ps(root)}'; "
+                'Write-Output "__RESULT__=$result"'
+            )
+            command = (
+                "$ErrorActionPreference='Stop'; "
+                f"Import-Module -Force '{quote_ps(module)}'; {expression}"
+            )
+            result = run_process(
+                ["powershell.exe", "-NoProfile", "-Command", command], cwd=root, env=env
+            )
+            assert result.returncode == 0, result.stderr or result.stdout
+            assert result_marker(result) == 31, result.stdout
+            calls = log_path.read_text(encoding="utf-8").splitlines()
+            assert len(calls) == 1 and calls[0].startswith("live_stack_inspect.ps1 -Manifest "), calls
+            assert str(manifest).lower() in calls[0].lower(), calls
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-wrapper-stop-") as directory:
+            root = Path(directory)
+            log_path = write_lifecycle_wrapper_fixtures(root)
+            manifest = write_stack_manifest(
+                root,
+                "stack-active",
+                {"schema_version": 2, "stack_id": "stack-active", "stop": {"clean": False}},
+            )
+            env = os.environ.copy()
+            env.update(
+                {
+                    "SIM_CLI_WRAPPER_LOG": str(log_path),
+                    "SIM_CLI_START_EXIT": "0",
+                    "SIM_CLI_INSPECT_EXIT": "0",
+                    "SIM_CLI_STOP_EXIT": "37",
+                }
+            )
+            expression = (
+                f"$result=Invoke-SimStop -ProjectRoot '{quote_ps(root)}' -Execute:$false; "
+                'Write-Output "__RESULT__=$result"'
+            )
+            command = (
+                "$ErrorActionPreference='Stop'; "
+                f"Import-Module -Force '{quote_ps(module)}'; {expression}"
+            )
+            result = run_process(
+                ["powershell.exe", "-NoProfile", "-Command", command], cwd=root, env=env
+            )
+            assert result.returncode == 0, result.stderr or result.stdout
+            assert result_marker(result) == 37, result.stdout
+            calls = log_path.read_text(encoding="utf-8").splitlines()
+            assert len(calls) == 1 and calls[0].startswith("end_live_stack.ps1 -Manifest "), calls
+            assert str(manifest).lower() in calls[0].lower(), calls
+            assert calls[0].endswith(" -DryRun"), calls
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-wrapper-none-") as directory:
+            root = Path(directory)
+            result, _, _ = invoke_module(
+                module,
+                root,
+                (
+                    f"$status=Invoke-SimStatus -ProjectRoot '{quote_ps(root)}'; "
+                    f"$stop=Invoke-SimStop -ProjectRoot '{quote_ps(root)}' -Execute:$false; "
+                    'Write-Output "__RESULT__=$status,$stop"'
+                ),
+            )
+            assert result.returncode == 0, result.stderr or result.stdout
+            assert "__RESULT__=0,0" in result.stdout, result.stdout
+            assert result.stdout.lower().count("no active stack") == 2, result.stdout
+
+    def check_dev_start_rejects_immediate_ego_exit() -> None:
+        with tempfile.TemporaryDirectory(prefix="sim-cli-ego-exit-") as directory:
+            root = Path(directory)
+            manifest, log_path = write_ego_role_fixtures(root, "owned_but_exited")
+            env = os.environ.copy()
+            env.update(
+                {
+                    "SIM_CLI_FIXTURE_ROOT": str(root),
+                    "SIM_CLI_WRAPPER_LOG": str(log_path),
+                }
+            )
+            expression = (
+                f"$result=Invoke-SimStart -ProjectRoot '{quote_ps(root)}' "
+                "-Profile dev -Execute:$true; "
+                'Write-Output "__RESULT__=$result"'
+            )
+            command = (
+                "$ErrorActionPreference='Stop'; "
+                f"Import-Module -Force '{quote_ps(module)}'; {expression}"
+            )
+            result = run_process(
+                ["powershell.exe", "-NoProfile", "-Command", command], cwd=root, env=env
+            )
+            assert result.returncode == 0, result.stderr or result.stdout
+            assert result_marker(result) != 0, result.stdout
+            assert "stage 7 dual ego-swarm launch" in result.stdout.lower(), result.stdout
+            calls = log_path.read_text(encoding="utf-8").splitlines()
+            assert calls == [
+                "start exit=0",
+                "fastlio exit=0",
+                "ego registered role runner exit=0",
+                "inspect owned_but_exited exit=0",
+            ], calls
+            payload = json.loads(manifest.read_text(encoding="utf-8-sig"))
+            assert payload["wsl_processes"] == [{"role": "wsl:ego_swarm_session"}], payload
+
+    def check_dev_start_accepts_live_ego_role() -> None:
+        with tempfile.TemporaryDirectory(prefix="sim-cli-ego-alive-") as directory:
+            root = Path(directory)
+            _, log_path = write_ego_role_fixtures(root, "owned_and_alive")
+            env = os.environ.copy()
+            env.update(
+                {
+                    "SIM_CLI_FIXTURE_ROOT": str(root),
+                    "SIM_CLI_WRAPPER_LOG": str(log_path),
+                }
+            )
+            expression = (
+                f"$result=Invoke-SimStart -ProjectRoot '{quote_ps(root)}' "
+                "-Profile dev -Execute:$true; "
+                'Write-Output "__RESULT__=$result"'
+            )
+            command = (
+                "$ErrorActionPreference='Stop'; "
+                f"Import-Module -Force '{quote_ps(module)}'; {expression}"
+            )
+            result = run_process(
+                ["powershell.exe", "-NoProfile", "-Command", command], cwd=root, env=env
+            )
+            assert result.returncode == 0, result.stderr or result.stdout
+            assert result_marker(result) == 0, result.stdout
+            calls = log_path.read_text(encoding="utf-8").splitlines()
+            assert calls == [
+                "start exit=0",
+                "fastlio exit=0",
+                "ego registered role runner exit=0",
+                "inspect owned_and_alive exit=0",
+            ], calls
 
     def check_doctor_accepts_nul_terminated_distro_name() -> None:
         with tempfile.TemporaryDirectory(prefix="sim-cli-doctor-") as directory:
@@ -312,6 +773,12 @@ def main() -> int:
 
     check("root CLI contract", check_root_contract)
     check("deferred commands fail closed", check_deferred_commands_fail_closed)
+    check("active manifest resolution", check_active_manifest_resolution)
+    check("Stage 7 fail-closed helpers", check_stage7_fail_closed_helpers)
+    check("dry-run repository dispatch", check_dry_run_repository_dispatch)
+    check("protected wrapper exit propagation", check_protected_wrapper_exit_propagation)
+    check("dev start rejects immediate EGO exit", check_dev_start_rejects_immediate_ego_exit)
+    check("dev start accepts live EGO role", check_dev_start_accepts_live_ego_role)
     check("doctor handles NUL-terminated distro names", check_doctor_accepts_nul_terminated_distro_name)
     check("validation suite mapping", check_validation_mapping)
     check("mission mapping and focused build", check_mission_mapping_and_build)

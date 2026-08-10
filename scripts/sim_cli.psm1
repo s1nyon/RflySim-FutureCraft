@@ -320,6 +320,235 @@ function Invoke-SimValidation {
     return 0
 }
 
+function Resolve-ActiveStackManifest {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$ProjectRoot)
+
+    $manifestRoot = Join-Path $ProjectRoot 'logs\live_stack'
+    if (-not (Test-Path -LiteralPath $manifestRoot -PathType Container)) {
+        return $null
+    }
+
+    $activeCandidates = @()
+    $stackDirectories = @(Get-ChildItem -LiteralPath $manifestRoot -Directory -Force -ErrorAction Stop)
+    foreach ($stackDirectory in $stackDirectories) {
+        $manifestPath = Join-Path $stackDirectory.FullName 'stack_manifest.json'
+        if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+            continue
+        }
+
+        try {
+            $manifest = Get-Content -LiteralPath $manifestPath -Raw -ErrorAction Stop |
+                ConvertFrom-Json -ErrorAction Stop
+            if ($manifest -isnot [pscustomobject] -or
+                $manifest.schema_version -isnot [int] -or
+                $manifest.schema_version -ne 2 -or
+                $manifest.stack_id -isnot [string] -or
+                -not $manifest.stack_id.Trim() -or
+                $manifest.stack_id -ne $stackDirectory.Name) {
+                throw 'manifest must be a schema v2 JSON object'
+            }
+        }
+        catch {
+            throw "malformed stack manifest: $manifestPath ($($_.Exception.Message))"
+        }
+
+        $isClean = $manifest.stop.clean -is [bool] -and $manifest.stop.clean -eq $true
+        if (-not $isClean) {
+            try {
+                $activeCandidates += Get-Item -LiteralPath $manifestPath -ErrorAction Stop
+            }
+            catch {
+                throw "malformed stack manifest: $manifestPath ($($_.Exception.Message))"
+            }
+        }
+    }
+
+    if ($activeCandidates.Count -gt 1) {
+        $paths = ($activeCandidates | ForEach-Object { $_.FullName }) -join ', '
+        throw "multiple active stack manifests: $paths"
+    }
+    if ($activeCandidates.Count -eq 1) {
+        return $activeCandidates[0]
+    }
+    return $null
+}
+
+function Invoke-ProtectedScript {
+    param(
+        [Parameter(Mandatory = $true)][string]$ScriptPath,
+        [string[]]$Arguments = @()
+    )
+
+    if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
+        Write-SimCheck -Status FAIL -Message "protected wrapper not found: $ScriptPath"
+        return 2
+    }
+
+    $ErrorActionPreference = 'Continue'
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @Arguments 2>&1 |
+        ForEach-Object { Write-Host $_ }
+    return [int]$LASTEXITCODE
+}
+
+function Invoke-ProtectedBatch {
+    param(
+        [Parameter(Mandatory = $true)][string]$ScriptPath,
+        [string[]]$Arguments = @()
+    )
+
+    if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
+        Write-SimCheck -Status FAIL -Message "protected runner not found: $ScriptPath"
+        return 2
+    }
+
+    $ErrorActionPreference = 'Continue'
+    & $ScriptPath @Arguments 2>&1 | ForEach-Object { Write-Host $_ }
+    return [int]$LASTEXITCODE
+}
+
+function Get-Stage7RunContext {
+    param(
+        [Parameter(Mandatory = $true)][string]$ContextPath,
+        [switch]$AllowIncomplete
+    )
+
+    if (-not (Test-Path -LiteralPath $ContextPath -PathType Leaf)) {
+        return $null
+    }
+
+    try {
+        $item = Get-Item -LiteralPath $ContextPath -ErrorAction Stop
+        $values = @{}
+        foreach ($line in @(Get-Content -LiteralPath $ContextPath -ErrorAction Stop)) {
+            if ($line -match '^([A-Z0-9_]+)=(.*)$') {
+                $value = $Matches[2].Trim()
+                if (($value.StartsWith("'") -and $value.EndsWith("'")) -or
+                    ($value.StartsWith('"') -and $value.EndsWith('"'))) {
+                    $value = $value.Substring(1, $value.Length - 2)
+                }
+                $values[$Matches[1]] = $value.Replace('\ ', ' ')
+            }
+        }
+        $context = [pscustomobject]@{
+            RunId = $values['STAGE7_RUN_ID']
+            ReadinessReport = $values['STAGE7_READINESS_REPORT']
+            WriteTimeUtc = $item.LastWriteTimeUtc
+        }
+        if (-not $context.RunId -or -not $context.ReadinessReport) {
+            if ($AllowIncomplete) {
+                return $context
+            }
+            throw "malformed Stage 7 run context: $ContextPath"
+        }
+        return $context
+    }
+    catch {
+        if ($AllowIncomplete) {
+            return $null
+        }
+        if ($_.Exception.Message -like 'malformed Stage 7 run context:*') {
+            throw
+        }
+        throw "malformed Stage 7 run context: $ContextPath ($($_.Exception.Message))"
+    }
+}
+
+function Wait-StackManifestRole {
+    param(
+        [Parameter(Mandatory = $true)][string]$ManifestPath,
+        [Parameter(Mandatory = $true)][string]$Role,
+        [ValidateRange(0, 3600)][int]$TimeoutSeconds
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        try {
+            $manifest = Get-Content -LiteralPath $ManifestPath -Raw -ErrorAction Stop |
+                ConvertFrom-Json -ErrorAction Stop
+            if ($manifest -isnot [pscustomobject] -or $manifest.wsl_processes -isnot [array]) {
+                throw 'wsl_processes must be an array'
+            }
+        }
+        catch {
+            throw "malformed stack manifest during Stage 7 role wait: $ManifestPath ($($_.Exception.Message))"
+        }
+        if (@($manifest.wsl_processes | Where-Object { $_.role -eq $Role }).Count -gt 0) {
+            return $true
+        }
+        if ((Get-Date) -ge $deadline) {
+            break
+        }
+        Start-Sleep -Seconds 1
+    } while ($true)
+    return $false
+}
+
+function Test-ProtectedManifestRoleAlive {
+    param(
+        [Parameter(Mandatory = $true)][string]$InspectWrapper,
+        [Parameter(Mandatory = $true)][string]$ManifestPath,
+        [Parameter(Mandatory = $true)][string]$Role
+    )
+
+    if (-not (Test-Path -LiteralPath $InspectWrapper -PathType Leaf)) {
+        return [pscustomobject]@{ ExitCode = 2; RoleAlive = $false }
+    }
+
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = 'powershell.exe'
+    $startInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$InspectWrapper`" -Manifest `"$ManifestPath`""
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+    try {
+        $null = $process.Start()
+        $stdout = $process.StandardOutput.ReadToEnd()
+        $stderr = $process.StandardError.ReadToEnd()
+        $process.WaitForExit()
+        $exitCode = [int]$process.ExitCode
+    }
+    catch {
+        Write-SimCheck -Status FAIL -Message "protected inspect failed to run: $($_.Exception.Message)"
+        return [pscustomobject]@{ ExitCode = 2; RoleAlive = $false }
+    }
+    finally {
+        $process.Dispose()
+    }
+
+    if ($stdout.Trim()) { Write-Host $stdout.TrimEnd() }
+    if ($stderr.Trim()) { Write-Host $stderr.TrimEnd() }
+    if ($exitCode -ne 0) {
+        return [pscustomobject]@{ ExitCode = $exitCode; RoleAlive = $false }
+    }
+    try {
+        $report = $stdout | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        Write-SimCheck -Status FAIL -Message 'protected inspect returned malformed output'
+        return [pscustomobject]@{ ExitCode = 2; RoleAlive = $false }
+    }
+    $roleAlive = @(
+        $report.owned | Where-Object {
+            $_.entry.role -eq $Role -and $_.status -eq 'owned_and_alive'
+        }
+    ).Count -gt 0
+    return [pscustomobject]@{ ExitCode = 0; RoleAlive = $roleAlive }
+}
+
+function Convert-WslPathToWindows {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if ($Path -match '^/mnt/([A-Za-z])(/.*)?$') {
+        $suffix = if ($Matches[2]) { $Matches[2].Replace('/', '\') } else { '' }
+        return "$($Matches[1].ToUpperInvariant()):$suffix"
+    }
+    return $Path
+}
+
 function Invoke-SimStart {
     [CmdletBinding()]
     param(
@@ -328,16 +557,139 @@ function Invoke-SimStart {
         [bool]$Execute = $false
     )
 
-    Write-SimCheck -Status FAIL -Message "command 'start' is not implemented yet; no simulation was started"
-    return 2
+    $startWrapper = Join-Path $ProjectRoot 'scripts\live_stack_start.ps1'
+    if (-not $Execute) {
+        $exitCode = Invoke-ProtectedScript -ScriptPath $startWrapper -Arguments @('-DryRun')
+        if ($exitCode -ne 0) {
+            Write-SimCheck -Status FAIL -Message "live stack start (exit $exitCode)"
+            return [int]$exitCode
+        }
+        if ($Profile -eq 'base') {
+            Write-Host '[profile base] protected live stack start -> health gate'
+        }
+        else {
+            Write-Host '[profile dev] protected live stack start -> health gate -> dual FAST-LIO readiness -> dual EGO-Swarm'
+        }
+        return 0
+    }
+
+    $activeManifest = Resolve-ActiveStackManifest -ProjectRoot $ProjectRoot
+    if ($null -ne $activeManifest) {
+        Write-SimCheck -Status FAIL -Message "active stack manifest blocks start: $($activeManifest.FullName)"
+        return 2
+    }
+
+    $exitCode = Invoke-ProtectedScript -ScriptPath $startWrapper -Arguments @('-Execute')
+    if ($exitCode -ne 0) {
+        Write-SimCheck -Status FAIL -Message "live stack start (exit $exitCode)"
+        return [int]$exitCode
+    }
+    if ($Profile -eq 'base') {
+        return 0
+    }
+
+    $devManifest = Resolve-ActiveStackManifest -ProjectRoot $ProjectRoot
+    if ($null -eq $devManifest) {
+        Write-SimCheck -Status FAIL -Message 'active stack manifest resolution (exit 2)'
+        return 2
+    }
+    try {
+        $devStackId = (Get-Content -LiteralPath $devManifest.FullName -Raw -ErrorAction Stop |
+            ConvertFrom-Json -ErrorAction Stop).stack_id
+    }
+    catch {
+        Write-SimCheck -Status FAIL -Message 'active stack manifest resolution (exit 2)'
+        return 2
+    }
+
+    $currentRunPath = Join-Path $ProjectRoot 'logs\stage7_live\current_run.env'
+    try {
+        $previousRun = Get-Stage7RunContext -ContextPath $currentRunPath
+    }
+    catch {
+        Write-SimCheck -Status FAIL -Message "Stage 7 current-run snapshot (exit 2): $($_.Exception.Message)"
+        return 2
+    }
+    $fastlioRunner = Join-Path $ProjectRoot 'scripts\run_live_fastlio_dual.bat'
+    $runnerArguments = @('--stack-id', $devStackId, '--manifest', $devManifest.FullName)
+    $exitCode = Invoke-ProtectedBatch -ScriptPath $fastlioRunner -Arguments $runnerArguments
+    if ($exitCode -ne 0) {
+        Write-SimCheck -Status FAIL -Message "Stage 7 dual FAST-LIO launch (exit $exitCode)"
+        return [int]$exitCode
+    }
+
+    $readiness = $null
+    $deadline = (Get-Date).AddSeconds(180)
+    while ((Get-Date) -lt $deadline) {
+        $candidate = Get-Stage7RunContext -ContextPath $currentRunPath -AllowIncomplete
+        $isNewRun = $null -ne $candidate -and $candidate.RunId -and
+            ($null -eq $previousRun -or $candidate.RunId -ne $previousRun.RunId) -and
+            ($null -eq $previousRun -or $candidate.WriteTimeUtc -ne $previousRun.WriteTimeUtc)
+        if ($isNewRun -and $candidate.ReadinessReport) {
+            $readinessPath = Convert-WslPathToWindows -Path $candidate.ReadinessReport
+            if (Test-Path -LiteralPath $readinessPath -PathType Leaf) {
+                $readiness = $candidate
+                break
+            }
+        }
+        Start-Sleep -Seconds 1
+    }
+    if ($null -eq $readiness) {
+        Write-SimCheck -Status FAIL -Message 'Stage 7 sensor readiness wait (exit 2)'
+        return 2
+    }
+
+    $egoRunner = Join-Path $ProjectRoot 'scripts\run_live_ego_swarm_dual.bat'
+    $exitCode = Invoke-ProtectedBatch -ScriptPath $egoRunner -Arguments $runnerArguments
+    if ($exitCode -ne 0) {
+        Write-SimCheck -Status FAIL -Message "Stage 7 dual EGO-Swarm launch (exit $exitCode)"
+        return [int]$exitCode
+    }
+    try {
+        $egoRegistered = Wait-StackManifestRole -ManifestPath $devManifest.FullName `
+            -Role 'wsl:ego_swarm_session' -TimeoutSeconds 180
+    }
+    catch {
+        Write-SimCheck -Status FAIL -Message "Stage 7 dual EGO-Swarm launch (exit 2): $($_.Exception.Message)"
+        return 2
+    }
+    if (-not $egoRegistered) {
+        Write-SimCheck -Status FAIL -Message 'Stage 7 dual EGO-Swarm launch (exit 2)'
+        return 2
+    }
+    # The protected runner registers its shell immediately before exec roslaunch.
+    # Give immediate exec/roslaunch failures time to surface, then require the
+    # registered identity to remain alive according to the protected inspector.
+    Start-Sleep -Seconds 2
+    $inspectWrapper = Join-Path $ProjectRoot 'scripts\live_stack_inspect.ps1'
+    $egoInspection = Test-ProtectedManifestRoleAlive -InspectWrapper $inspectWrapper `
+        -ManifestPath $devManifest.FullName -Role 'wsl:ego_swarm_session'
+    if ($egoInspection.ExitCode -ne 0 -or -not $egoInspection.RoleAlive) {
+        $failureCode = if ($egoInspection.ExitCode -ne 0) { $egoInspection.ExitCode } else { 2 }
+        Write-SimCheck -Status FAIL -Message "Stage 7 dual EGO-Swarm launch (exit $failureCode)"
+        return [int]$failureCode
+    }
+    return 0
 }
 
 function Invoke-SimStatus {
     [CmdletBinding()]
     param([Parameter(Mandatory = $true)][string]$ProjectRoot)
 
-    Write-SimCheck -Status FAIL -Message "command 'status' is not implemented yet; no lifecycle action was taken"
-    return 2
+    $activeManifest = Resolve-ActiveStackManifest -ProjectRoot $ProjectRoot
+    if ($null -eq $activeManifest) {
+        Write-Host 'no active stack'
+        return 0
+    }
+
+    $inspectWrapper = Join-Path $ProjectRoot 'scripts\live_stack_inspect.ps1'
+    $exitCode = Invoke-ProtectedScript -ScriptPath $inspectWrapper -Arguments @(
+        '-Manifest', $activeManifest.FullName
+    )
+    if ($exitCode -ne 0) {
+        Write-SimCheck -Status FAIL -Message "live stack inspect (exit $exitCode)"
+    }
+    return [int]$exitCode
 }
 
 function Invoke-SimStop {
@@ -347,8 +699,22 @@ function Invoke-SimStop {
         [bool]$Execute = $false
     )
 
-    Write-SimCheck -Status FAIL -Message "command 'stop' is not implemented yet; no process was stopped"
-    return 2
+    $activeManifest = Resolve-ActiveStackManifest -ProjectRoot $ProjectRoot
+    if ($null -eq $activeManifest) {
+        Write-Host 'no active stack'
+        return 0
+    }
+
+    $stopWrapper = Join-Path $ProjectRoot 'scripts\end_live_stack.ps1'
+    $arguments = @('-Manifest', $activeManifest.FullName)
+    if (-not $Execute) {
+        $arguments += '-DryRun'
+    }
+    $exitCode = Invoke-ProtectedScript -ScriptPath $stopWrapper -Arguments $arguments
+    if ($exitCode -ne 0) {
+        Write-SimCheck -Status FAIL -Message "live stack stop (exit $exitCode)"
+    }
+    return [int]$exitCode
 }
 
 function Invoke-SimLogCleanup {
@@ -363,6 +729,7 @@ function Invoke-SimLogCleanup {
 }
 
 Export-ModuleMember -Function @(
+    'Resolve-ActiveStackManifest',
     'Invoke-SimDoctor',
     'Invoke-SimBuild',
     'Invoke-SimValidation',
