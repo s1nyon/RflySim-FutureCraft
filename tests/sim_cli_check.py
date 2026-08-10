@@ -181,6 +181,38 @@ def write_stack_manifest(root: Path, stack_id: str, payload: dict[str, object] |
     return manifest
 
 
+def create_junction(link: Path, target: Path, cwd: Path) -> None:
+    result = run_process(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-Command",
+            (
+                f"New-Item -ItemType Junction -Path '{quote_ps(link)}' "
+                f"-Target '{quote_ps(target)}' -ErrorAction Stop | Out-Null"
+            ),
+        ],
+        cwd=cwd,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
+def create_file_symlink(link: Path, target: Path, cwd: Path) -> None:
+    result = run_process(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-Command",
+            (
+                f"New-Item -ItemType SymbolicLink -Path '{quote_ps(link)}' "
+                f"-Target '{quote_ps(target)}' -ErrorAction Stop | Out-Null"
+            ),
+        ],
+        cwd=cwd,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
 def write_lifecycle_wrapper_fixtures(root: Path) -> Path:
     scripts = root / "scripts"
     scripts.mkdir(parents=True, exist_ok=True)
@@ -288,6 +320,18 @@ def main() -> int:
         assert unknown.returncode != 0
 
     def check_active_manifest_resolution() -> None:
+        def assert_resolution_fails(root: Path, expected: str) -> None:
+            result, _, _ = invoke_module(
+                module,
+                root,
+                f"Resolve-ActiveStackManifest -ProjectRoot '{quote_ps(root)}'",
+            )
+            combined = result.stdout + result.stderr
+            assert result.returncode != 0, combined or (
+                f"resolver accepted invalid direct entry under {root / 'logs' / 'live_stack'}"
+            )
+            assert expected.lower() in combined.lower(), combined
+
         with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-none-") as directory:
             root = Path(directory)
             result, _, _ = invoke_module(
@@ -385,6 +429,118 @@ def main() -> int:
             )
             assert result.returncode != 0, result.stdout
             assert "malformed stack manifest" in (result.stdout + result.stderr).lower()
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-name-") as directory:
+            root = Path(directory)
+            write_stack_manifest(
+                root,
+                "stack-path-name",
+                {"schema_version": 2, "stack_id": "stack-other-name", "stop": {"clean": False}},
+            )
+            assert_resolution_fails(root, "malformed stack manifest")
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-direct-file-") as directory:
+            root = Path(directory)
+            direct_file = root / "logs" / "live_stack" / "unexpected.txt"
+            direct_file.parent.mkdir(parents=True)
+            direct_file.write_text("unexpected", encoding="utf-8")
+            assert_resolution_fails(root, "not a directory")
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-missing-file-") as directory:
+            root = Path(directory)
+            (root / "logs" / "live_stack" / "stack-missing").mkdir(parents=True)
+            assert_resolution_fails(root, "missing or not a file")
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-directory-") as directory:
+            root = Path(directory)
+            (root / "logs" / "live_stack" / "stack-directory" / "stack_manifest.json").mkdir(
+                parents=True
+            )
+            assert_resolution_fails(root, "missing or not a file")
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-entry-reparse-") as directory:
+            root = Path(directory)
+            target = root / "redirected-stack"
+            target.mkdir()
+            (target / "stack_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "stack_id": "stack-linked",
+                        "stop": {"clean": False},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            manifest_root = root / "logs" / "live_stack"
+            manifest_root.mkdir(parents=True)
+            create_junction(manifest_root / "stack-linked", target, root)
+            assert_resolution_fails(root, "reparse")
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-file-reparse-") as directory:
+            root = Path(directory)
+            stack_dir = root / "logs" / "live_stack" / "stack-linked"
+            stack_dir.mkdir(parents=True)
+            target = stack_dir / "stack_manifest.real.json"
+            target.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "stack_id": "stack-linked",
+                        "stop": {"clean": False},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            create_file_symlink(stack_dir / "stack_manifest.json", target, root)
+            assert_resolution_fails(root, "reparse")
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-file-escape-") as directory:
+            root = Path(directory) / "project"
+            root.mkdir()
+            stack_dir = root / "logs" / "live_stack" / "stack-escape"
+            stack_dir.mkdir(parents=True)
+            target = Path(directory) / "outside-manifest.json"
+            target.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "stack_id": "stack-escape",
+                        "stop": {"clean": False},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            create_file_symlink(stack_dir / "stack_manifest.json", target, root)
+            assert_resolution_fails(root, "reparse")
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-root-reparse-") as directory:
+            root = Path(directory) / "project"
+            root.mkdir()
+            target = Path(directory) / "outside-live-stack"
+            target.mkdir()
+            outside_stack = target / "stack-outside"
+            outside_stack.mkdir()
+            (outside_stack / "stack_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "stack_id": "stack-outside",
+                        "stop": {"clean": False},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (root / "logs").mkdir()
+            create_junction(root / "logs" / "live_stack", target, root)
+            assert_resolution_fails(root, "reparse")
+
+        with tempfile.TemporaryDirectory(prefix="sim-cli-project-root-reparse-") as directory:
+            target = Path(directory) / "real-project"
+            (target / "logs" / "live_stack").mkdir(parents=True)
+            root = Path(directory) / "linked-project"
+            create_junction(root, target, Path(directory))
+            assert_resolution_fails(root, "reparse")
 
         with tempfile.TemporaryDirectory(prefix="sim-cli-manifest-hidden-") as directory:
             root = Path(directory)

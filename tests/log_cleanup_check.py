@@ -225,6 +225,48 @@ def main() -> int:
             assert link.exists(), "cleanup removed the redirected logs root"
             assert protected.read_text(encoding="utf-8") == "keep", "cleanup followed the redirected logs root"
 
+    def check_same_parent_reparse_log_root_is_rejected() -> None:
+        with tempfile.TemporaryDirectory(prefix="log-cleanup-root-sibling-reparse-") as directory:
+            root = Path(directory) / "project"
+            root.mkdir()
+            target = root / "docs"
+            target.mkdir()
+            sentinel = root / "generated" / "sentinel.txt"
+            sentinel.parent.mkdir()
+            sentinel.write_text("keep", encoding="utf-8")
+            link = root / "logs"
+            create = run_process(
+                [
+                    POWERSHELL,
+                    "-NoProfile",
+                    "-Command",
+                    (
+                        f"New-Item -ItemType Junction -Path '{quote_ps(link)}' "
+                        f"-Target '{quote_ps(target)}' -ErrorAction Stop | Out-Null"
+                    ),
+                ],
+                root,
+            )
+            assert create.returncode == 0, create.stderr or create.stdout
+
+            # Probe without mutation first. On a vulnerable implementation this
+            # assertion stops the test before Execute can reach the sentinel.
+            probe = run_cleanup(script, root)
+            probe_output = probe.stdout + probe.stderr
+            assert probe.returncode == 2, probe_output or (
+                f"cleanup accepted logs junction redirected to same-parent sibling {target}"
+            )
+            assert "reparse" in probe_output.lower(), probe_output
+
+            result = run_cleanup(script, root, execute=True)
+            combined = result.stdout + result.stderr
+            assert result.returncode == 2, combined
+            assert "[REMOVE]" not in combined, combined
+            assert link.exists(), "cleanup removed the same-parent redirected logs root"
+            assert sentinel.read_text(encoding="utf-8") == "keep", (
+                "cleanup followed the same-parent redirected logs root"
+            )
+
     def check_missing_logs_is_success() -> None:
         with tempfile.TemporaryDirectory(prefix="log-cleanup-missing-") as directory:
             root = Path(directory)
@@ -289,6 +331,10 @@ def main() -> int:
     check("Execute removes only log children", check_execute_removes_only_log_children)
     check("reparse escape fails before deletion", check_reparse_escape_blocks_all_deletion)
     check("redirected logs root is rejected", check_reparse_log_root_is_rejected)
+    check(
+        "same-parent redirected logs root is rejected before Execute",
+        check_same_parent_reparse_log_root_is_rejected,
+    )
     check("missing logs succeeds", check_missing_logs_is_success)
     check("empty logs Execute is idempotent", check_empty_logs_execute_is_idempotent)
     check("module delegates cleanup", check_module_delegates_to_maintenance_script)

@@ -320,25 +320,135 @@ function Invoke-SimValidation {
     return 0
 }
 
+function Get-SimNormalizedPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $root = [System.IO.Path]::GetPathRoot($fullPath)
+    if ($fullPath.Length -gt $root.Length) {
+        return $fullPath.TrimEnd(
+            [System.IO.Path]::DirectorySeparatorChar,
+            [System.IO.Path]::AltDirectorySeparatorChar
+        )
+    }
+    return $fullPath
+}
+
+function Test-SimPathEqual {
+    param(
+        [Parameter(Mandatory = $true)][string]$Left,
+        [Parameter(Mandatory = $true)][string]$Right
+    )
+
+    return [string]::Equals(
+        (Get-SimNormalizedPath -Path $Left),
+        (Get-SimNormalizedPath -Path $Right),
+        [System.StringComparison]::OrdinalIgnoreCase
+    )
+}
+
+function Test-SimPathContained {
+    param(
+        [Parameter(Mandatory = $true)][string]$Child,
+        [Parameter(Mandatory = $true)][string]$Parent
+    )
+
+    $normalizedChild = Get-SimNormalizedPath -Path $Child
+    $normalizedParent = Get-SimNormalizedPath -Path $Parent
+    $prefix = $normalizedParent + [System.IO.Path]::DirectorySeparatorChar
+    return $normalizedChild.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
 function Resolve-ActiveStackManifest {
     [CmdletBinding()]
     param([Parameter(Mandatory = $true)][string]$ProjectRoot)
 
-    $manifestRoot = Join-Path $ProjectRoot 'logs\live_stack'
-    if (-not (Test-Path -LiteralPath $manifestRoot -PathType Container)) {
+    $resolvedProjectRoot = Get-SimNormalizedPath -Path (
+        (Resolve-Path -LiteralPath $ProjectRoot -ErrorAction Stop).Path
+    )
+    $projectItem = Get-Item -LiteralPath $resolvedProjectRoot -Force -ErrorAction Stop
+    if (-not $projectItem.PSIsContainer) {
+        throw "project root is not a directory: $ProjectRoot"
+    }
+    if (($projectItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "project root is a reparse point: $ProjectRoot"
+    }
+
+    $logsRoot = Join-Path $resolvedProjectRoot 'logs'
+    if (-not (Test-Path -LiteralPath $logsRoot)) {
         return $null
+    }
+    $logsItem = Get-Item -LiteralPath $logsRoot -Force -ErrorAction Stop
+    if (-not $logsItem.PSIsContainer) {
+        throw "live stack logs root is not a directory: $logsRoot"
+    }
+    if (($logsItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "live stack logs root is a reparse point: $logsRoot"
+    }
+    $resolvedLogsRoot = Get-SimNormalizedPath -Path (
+        (Resolve-Path -LiteralPath $logsRoot -ErrorAction Stop).Path
+    )
+    if (-not (Test-SimPathEqual -Left $resolvedLogsRoot -Right $logsRoot)) {
+        throw "live stack logs root is redirected: $logsRoot -> $resolvedLogsRoot"
+    }
+
+    $manifestRoot = Join-Path $resolvedLogsRoot 'live_stack'
+    if (-not (Test-Path -LiteralPath $manifestRoot)) {
+        return $null
+    }
+    $manifestRootItem = Get-Item -LiteralPath $manifestRoot -Force -ErrorAction Stop
+    if (-not $manifestRootItem.PSIsContainer) {
+        throw "live stack manifest root is not a directory: $manifestRoot"
+    }
+    if (($manifestRootItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "live stack manifest root is a reparse point: $manifestRoot"
+    }
+    $resolvedManifestRoot = Get-SimNormalizedPath -Path (
+        (Resolve-Path -LiteralPath $manifestRoot -ErrorAction Stop).Path
+    )
+    if (-not (Test-SimPathEqual -Left $resolvedManifestRoot -Right $manifestRoot) -or
+        -not (Test-SimPathContained -Child $resolvedManifestRoot -Parent $resolvedProjectRoot)) {
+        throw "live stack manifest root escapes project root: $manifestRoot -> $resolvedManifestRoot"
     }
 
     $activeCandidates = @()
-    $stackDirectories = @(Get-ChildItem -LiteralPath $manifestRoot -Directory -Force -ErrorAction Stop)
-    foreach ($stackDirectory in $stackDirectories) {
-        $manifestPath = Join-Path $stackDirectory.FullName 'stack_manifest.json'
-        if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
-            continue
+    $stackEntries = @(Get-ChildItem -LiteralPath $resolvedManifestRoot -Force -ErrorAction Stop)
+    foreach ($stackDirectory in $stackEntries) {
+        if (-not $stackDirectory.PSIsContainer) {
+            throw "stack manifest entry is not a directory: $($stackDirectory.FullName)"
+        }
+        if (($stackDirectory.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "stack manifest entry is a reparse point: $($stackDirectory.FullName)"
+        }
+
+        $resolvedStackDirectory = Get-SimNormalizedPath -Path (
+            (Resolve-Path -LiteralPath $stackDirectory.FullName -ErrorAction Stop).Path
+        )
+        if (-not (Test-SimPathContained -Child $resolvedStackDirectory -Parent $resolvedManifestRoot)) {
+            throw "stack manifest entry escapes manifest root: $($stackDirectory.FullName) -> $resolvedStackDirectory"
+        }
+
+        $manifestPath = Join-Path $resolvedStackDirectory 'stack_manifest.json'
+        if (-not (Test-Path -LiteralPath $manifestPath)) {
+            throw "stack manifest is missing or not a file: $manifestPath"
+        }
+        $manifestItem = Get-Item -LiteralPath $manifestPath -Force -ErrorAction Stop
+        if ($manifestItem.PSIsContainer) {
+            throw "stack manifest is missing or not a file: $manifestPath"
+        }
+        if (($manifestItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "stack manifest is a reparse point: $manifestPath"
+        }
+        $resolvedManifestPath = Get-SimNormalizedPath -Path (
+            (Resolve-Path -LiteralPath $manifestPath -ErrorAction Stop).Path
+        )
+        if (-not (Test-SimPathEqual -Left $resolvedManifestPath -Right $manifestPath) -or
+            -not (Test-SimPathContained -Child $resolvedManifestPath -Parent $resolvedStackDirectory)) {
+            throw "stack manifest escapes its stack directory: $manifestPath -> $resolvedManifestPath"
         }
 
         try {
-            $manifest = Get-Content -LiteralPath $manifestPath -Raw -ErrorAction Stop |
+            $manifest = Get-Content -LiteralPath $resolvedManifestPath -Raw -ErrorAction Stop |
                 ConvertFrom-Json -ErrorAction Stop
             if ($manifest -isnot [pscustomobject] -or
                 $manifest.schema_version -isnot [int] -or
@@ -355,12 +465,7 @@ function Resolve-ActiveStackManifest {
 
         $isClean = $manifest.stop.clean -is [bool] -and $manifest.stop.clean -eq $true
         if (-not $isClean) {
-            try {
-                $activeCandidates += Get-Item -LiteralPath $manifestPath -ErrorAction Stop
-            }
-            catch {
-                throw "malformed stack manifest: $manifestPath ($($_.Exception.Message))"
-            }
+            $activeCandidates += $manifestItem
         }
     }
 

@@ -140,7 +140,16 @@ try {
         throw "logs path is not a directory: $logsCandidate"
     }
 
+    $logsItem = Get-Item -LiteralPath $logsCandidate -Force -ErrorAction Stop
+    if (($logsItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "logs root is a reparse point: $logsCandidate"
+    }
+
+    $expectedLogRoot = Get-NormalizedPath -Path $logsCandidate
     $resolvedLogRoot = Resolve-FinalItemPath -Path $logsCandidate
+    if (-not (Test-PathEqual -Left $resolvedLogRoot -Right $expectedLogRoot)) {
+        throw "resolved logs directory is not the canonical project logs root: $logsCandidate -> $resolvedLogRoot"
+    }
     $resolvedLogParent = Get-NormalizedPath -Path (Split-Path -Parent $resolvedLogRoot)
     if (-not (Test-PathEqual -Left $resolvedLogParent -Right $resolvedProjectRoot)) {
         throw "resolved logs directory is not a direct child of the project root: $logsCandidate -> $resolvedLogRoot"
