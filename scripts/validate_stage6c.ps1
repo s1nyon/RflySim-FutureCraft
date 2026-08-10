@@ -69,6 +69,13 @@ if ($missing.Count -eq 0 -and $pythonRunner) {
         else {
             $actual = Get-Content -Raw -LiteralPath $runbookOutputPath | ConvertFrom-Json
             $expected = Get-Content -Raw -LiteralPath $fixturePath | ConvertFrom-Json
+            $expectedWorkspace = @($expected.environment.windows_paths | Where-Object { $_.key -eq 'FUTURE_AIRCRAFT_WS' })
+            if ($expectedWorkspace.Count -ne 1) {
+                $contractErrors += 'Stage 6C fixture must contain exactly one FUTURE_AIRCRAFT_WS entry'
+            }
+            else {
+                $expectedWorkspace[0].value = Join-Path $ProjectRoot 'future_aircraft_ws'
+            }
             if (($actual | ConvertTo-Json -Depth 16 -Compress) -ne ($expected | ConvertTo-Json -Depth 16 -Compress)) {
                 $contractErrors += 'live_smoke_runbook.json does not match Stage 6C fixture'
             }

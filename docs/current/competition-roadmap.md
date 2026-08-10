@@ -2,7 +2,7 @@
 
 > 状态基准：2026-08-08（lifecycle P0 已冻结、PBL-1 full-stack regression 已 CLOSED）
 > 依据：正式赛题文件
-> `第十二届中国研究生未来飞行器创新大赛参赛指南.pdf`（仓库根目录），赛题 2.1
+> `docs/reference/competition-guide-2026.pdf`，赛题 2.1
 > 「室内狭窄通道环境下多飞行器智能协同导航与作业挑战赛」。
 > 本文档是比赛能力开发的**主设计索引**；历史调试细节保留在各 development log，
 > 不重复复制到本文档。
@@ -65,8 +65,8 @@
 
 | 能力 | 状态 | 证据 / 说明 |
 |---|---:|---|
-| Lifecycle（启动/停止/fresh-instance/ownership/topology/安全 stop） | **DONE** | 5 次连续 closure + 3 次 full regression；`docs/2026-08-08-lifecycle-p0-fix-live-validated.md` |
-| 双机 PX4/MAVROS/FAST-LIO/EGO 软件栈 | **BASELINE** | 3× fresh-instance 完整飞行 success（`docs/2026-08-08-pbl1-fullstack-regression-closure.md`） |
+| Lifecycle（启动/停止/fresh-instance/ownership/topology/安全 stop） | **DONE** | 5 次连续 closure + 3 次 full regression；`docs/evidence/2026-08-08-lifecycle-p0-fix-live-validated.md` |
+| 双机 PX4/MAVROS/FAST-LIO/EGO 软件栈 | **BASELINE** | 3× fresh-instance 完整飞行 success（`docs/evidence/2026-08-08-pbl1-fullstack-regression-closure.md`） |
 | OFFBOARD / arming / takeoff / landing(AUTO.LAND) | **BASELINE** | 每轮 41.5 s 全程 14 段确认；但按比赛 20 s 起飞窗验收未做 |
 | 窄通道导航（当前已知路线） | **BASELINE** | PBL 已知隧道 14/14 段；比赛几何（宽≤1.5m、3 段、转弯）未按赛题验收 |
 | 静态障碍避障（锥桶/支架） | **NOT IMPLEMENTED** | 当前场景只有墙体/赛道静态物；锥桶/支架类目标障碍未建 |
@@ -264,8 +264,8 @@ wall clearance、collision count、planner failure count。
 
 ## 15. 来源与链接
 
-- 正式赛题 PDF：`第十二届中国研究生未来飞行器创新大赛参赛指南.pdf`（仓库根目录）
-- lifecycle closure：`docs/2026-08-08-lifecycle-p0-fix-live-validated.md`
-- PBL regression closure：`docs/2026-08-08-pbl1-fullstack-regression-closure.md`
-- lifecycle 设计：`docs/2026-08-08-live-stack-lifecycle-design.md`
+- 正式赛题 PDF：`docs/reference/competition-guide-2026.pdf`
+- lifecycle closure：`docs/evidence/2026-08-08-lifecycle-p0-fix-live-validated.md`
+- PBL regression closure：`docs/evidence/2026-08-08-pbl1-fullstack-regression-closure.md`
+- lifecycle 设计：`docs/architecture/2026-08-08-live-stack-lifecycle-design.md`
 - Agent 入口：`.agents/AGENT2READ.md`

@@ -2,7 +2,7 @@
 
 > 状态：**Resolved**（修复已实施并经 5 次连续 live cycle 验证，2026-08-08）
 > 关联任务：P0 Live Stack Lifecycle 第一次完整真实 closure
-> 关联文档：`docs/2026-08-08-live-stack-lifecycle-design.md`、`docs/2026-08-08-cleanup-script-hazard.md`
+> 关联文档：`docs/architecture/2026-08-08-live-stack-lifecycle-design.md`、`docs/incidents/2026-08-08-cleanup-script-hazard.md`
 > 取证时间：2026-08-08 16:25 前后（Session 1 真实宿主进程状态）
 > 修复提交：`0f5af43`（CopterSim 实例化）、`a84c44f`（stage2 fail-fast/批次根因）、
 >  `d787480`（拓扑健康门）、`2c21b88`（ownership/stop 硬化）、`fd54835`（回归测试接入）
@@ -123,7 +123,7 @@ RflySim3D / QGC 的“已运行则跳过”逻辑保留（GUI 本来就应单实
 
 ## 6. 状态与下一步
 
-- **已修复并 live 验证**（见 `docs/2026-08-08-lifecycle-p0-fix-live-validated.md`）：
+- **已修复并 live 验证**（见 `docs/evidence/2026-08-08-lifecycle-p0-fix-live-validated.md`）：
   - §5.1 双 CopterSim 实例化已落地（stack-scoped pid 文件 + `gui:CopterSim/uavN` role +
     `--instance-marker`，循环内不再有全局名称守卫）；
   - §5.2 `%~dp0\UAVSITL.py` 已改为经 `UAV_SITL_DIR`（28com_SITL 真实绝对路径）解析；

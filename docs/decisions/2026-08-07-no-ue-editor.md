@@ -9,7 +9,7 @@
 
 ## 背景
 
-- `docs/prompts/2026-08-03-continue-stage8-static-map.md` 曾要求用 UE4
+- 已删除的 superseded UE4 Editor prompt 曾要求用 UE4
   Editor 生成自有静态地图；本机没有 UE4 Editor，用户明确表示不打算安装。
 - RflySim3D 是 UE4 4.27 运行时工程，Cook 版本必须匹配，不能用 UE5 资源
   混用；在没有编辑器的情况下无法按原 prompt 流程 Cook 静态关卡。

@@ -9,10 +9,13 @@ Do not scan the entire RflySim installation. Read the smallest relevant project 
 ## Working Boundary
 
 - Treat `future_aircraft_sim` as the editable project.
+- Treat `future_aircraft_ws/src/future_aircraft_mission` competition behavior and control intent as human-owned by default; simulation orchestration, project adapters, diagnostics, maintenance, and tests are Agent-owned by default.
+- Treat ROS interfaces, launch composition, package manifests, lifecycle/launcher code, and any PBL-1-impacting file as a change-gated shared boundary.
 - Treat `28com_sim/UAV_demo/28com_uav` as a reference implementation. Do not copy, rewrite, or edit it unless the user explicitly requests a change there.
 - Treat `RflySim3D`, `CopterSim`, `Firmware`, `WinWSL`, and general `RflySimAPIs` examples as installed-toolchain material. Inspect them to understand behavior; do not modify them for a project-local fix.
 - Preserve `/uav1` and `/uav2`, the Stage 5 event contract, and the simulation-only arming gates described in `AGENT2READ.md`.
 - For a behavior or integration question, distinguish verified local evidence from assumptions and from vendor/example behavior.
+- Use the [current competition roadmap](../docs/current/competition-roadmap.md) for active priorities and [incidents](../docs/incidents/) only for historical diagnosis.
 
 ## Required Reading Sequence
 

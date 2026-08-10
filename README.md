@@ -1,110 +1,76 @@
 # future_aircraft_sim
 
-面向未来飞行器创新大赛的双机协同仿真工程。项目以 RflySim、PX4 SITL 和 MAVROS 为底座，在 28com FS-310 无人机链路之上搭建定位、规划、感知与任务执行闭环，目标是把仿真验证过的链路平滑迁移回真实硬件。
+## Competition Goal
 
-## 比赛目标（North Star）
+本项目面向未来飞行器创新大赛赛题 2.1「室内狭窄通道环境下多飞行器智能协同导航与作业挑战赛」。目标是让不少于两架自主飞行器在狭窄、带转弯并含静态/动态障碍的通道中完成起飞、定位避障、未知目标协同作业、穿越和 ArUco 平台精准降落。正式要求以[参赛指南](docs/reference/competition-guide-2026.pdf)为准，阶段路线与验收标准见[当前竞赛路线图](docs/current/competition-roadmap.md)。
 
-本项目面向正式赛题 **2.1「室内狭窄通道环境下多飞行器智能协同导航与作业挑战赛」**
-（《第十二届中国研究生未来飞行器创新大赛参赛指南.pdf》，仓库根目录）：
+## Current Capability
 
-> 使用不少于两架全自主飞行器，在狭窄（宽 ≤1.5 m、长 ≥3 m、转弯半径 ≤1 m）、
-> 含静态（锥桶/支架）与动态（摆动悬挂物）障碍的通道中，于 12 分钟时限内完成
-> 集群起飞（20 s 内）→ 双机进入通道（20 s 内）→ 在线定位与避障 →
-> 未知目标（彩色标签/二维码/温度异常点）协同作业 → 穿越通道 →
-> ArUco 平台精准降落；除启动/急停外不依赖人工遥控。
+- PBL-1（`lidar_only` 双机 RflySim/PX4/MAVROS/Faster-LIO/EGO-Swarm/OFFBOARD 错时穿越基线）已通过 3 次 fresh-instance 完整 live 回归并冻结。
+- manifest 化 lifecycle 已通过 5 次 start/READY/stop closure 与 PBL-1 回归；启动、检查、停止和 fresh-instance 均 fail closed。
+- 当前开发阶段是 Phase 2：按比赛几何、静态/动态障碍和运动指标验收窄通道导航；PBL-1 是回归基线，不等于比赛完整能力。
+- D435i RGB/Depth 接口已保留，但 `full` 多传感器模式的 live 飞行稳定性尚未闭环；默认飞行配置仍为 `lidar_only`。
+- `future_aircraft_mission` 是新 C++ 比赛任务代码的工作区；`multi_uav_mission` Python 与 lifecycle 是受保护基线。
 
-评分：集群起飞 10 + 协同导航避障 30（3 段，碰撞每次 -5）+ 协同目标作业 30 +
-穿越并降落 20 + 技术汇报 10；同分比时间。任务阶段超 12 分钟终止。
+## Repository Layout
 
-**本仓库当前状态是“可重复的仿真基线”，不是“比赛完整能力”**。完整能力路线与
-每阶段验收标准见 [docs/competition-roadmap.md](docs/competition-roadmap.md)。
-
-## 技术栈
-
-| 层 | 选型 |
+| Path | Purpose |
 | --- | --- |
-| 仿真 | RflySim3D + CopterSim，SLAMScene 基图 |
-| 飞控 | PX4 SITL（iris 机架），MAVROS 双命名空间 |
-| 定位 | Faster-LIO（Mid360 雷达 + IMU） |
-| 规划 | EGO-Swarm（`third_party/ego-planner-swarm`） |
-| 传感器 | Mid360、Intel RealSense D435i（RGB + 深度）、下视相机，与 28com UAV_demo 对齐 |
-| 环境 | Python / ROS1 Noetic / WSL（RflySim-20.04）/ Windows 启动编排 |
+| `future_aircraft_ws/src/future_aircraft_mission/` | 新比赛任务与控制 C++ 代码 |
+| `future_aircraft_ws/src/multi_uav_mission/` | 受保护的 live-validated Python/launch 基线 |
+| `third_party/ego-planner-swarm/` | 固定 team-fork commit 的独立 Catkin overlay |
+| `config/` | 环境模板、阶段契约、传感器与赛道定义 |
+| `scripts/` | 入口、生命周期内部实现和诊断脚本；分类见[脚本索引](scripts/README.md) |
+| `tests/` | 离线 contract 与 regression 检查 |
+| `docs/` | 当前状态、架构、证据、事故、决策和参考资料；见[文档索引](docs/README.md) |
+| `logs/`, `generated/` | 被忽略的运行态证据和确定性生成产物；路径属于受保护运行契约 |
+| `.agents/`, `.vscode/` | Agent 入口规则与双 workspace 开发配置 |
 
-## 当前状态
+## Quick Start
 
-- Stage 7 最小双机闭环已通过现场验收（2026-08-01）：OFFBOARD、解锁、起飞、ego-swarm 短航段、降落、自动卸锁，报告 `ready=true`，最小机间距 0.85 m。
-- 双机错时穿隧道全程成功：UAV1 领先、UAV2 落后，7 段全部到达，无碰撞、无急停。
-- 机间防撞以感知为主：UAV1 被 UAV2 的 Mid360 grid_map 标记为障碍，UAV2 在 0.2 m 触发 `EMERGENCY_STOP`。两机 FAST-LIO 坐标系相互独立，ego-swarm 的轨迹广播不参与防撞决策。
-- 仿真传感器载荷已补齐 D435i 并接入 EGO-Swarm 深度融合（离线验证通过，live 验证待下次仿真确认）。深度链路 transport 契约（唯一 publisher、约 30 Hz、mono16/640x480、时间戳单调、非全零）已纳入 `run_stage7_topic_probe.bat` 的 `sensor_bridge` 层；与赛道墙体/天花板几何一致性仍需 live 确认。
-- 2026-08-07 live 复测：传感器 bridge 默认改为 `lidar_only`（只加载 Mid360），双机 OFFBOARD/arming/**起飞高度确认已通过**。导航阶段 `planner_commands=0` 已根因定位为 `quadrotor_msgs/PositionCommand` md5 不一致（EGO 发布端 `4712f060…` vs 28com_uav devel `44d620d9…`），修复为 flight runner / stage8 recorder 在 28com_uav 之后、project overlay 之前 source ego-planner-swarm devel；**该修复已 live 验证**（run `stage7-20260807T124153Z-22785`：UAV1 导航 `planner_commands=190/383/116`，ego 日志无 md5 drop）。
-- 2026-08-08 executor subscriber 修复：`mission_executor.py` 导航验证改为持久 `rospy.Subscriber` + 内存缓存（`TopicCache`），不再循环 `wait_for_message()`；新增离线回归测试并纳入 `validate_stage7.ps1`；cold-start readiness 新增 odom relay 初始化等待（`STAGE7_ODOM_INIT_TIMEOUT_SEC`），与消息超时分离。离线 Stage 6C/6D/7/8 验证通过；**live 完整双机错时穿隧道已通过**（3 次 fresh-instance 干净成功：`stage7-20260807T133813Z-2617`、`T134731Z-2508`、`T141751Z-3219`，各 14 段导航确认、41.5 s、零失败），另 1 次实例因 EGO 侧 UAV2 pos_cmd 偶发未发布失败（非 executor 回归）。D435i 多传感器载荷会拖垮 UE4 渲染导致 odom 断流，live 集成暂缓（`--sensor-mode full` 保留给后续视觉任务）。
-- 2026-08-08 P0 Safe Live Stack Lifecycle：live 仿真启动/停止/fresh-instance 改为 manifest 化安全流程（`stack_id` + 进程指纹 ownership、只读 inspect、graceful stop、健康门 fail-closed），`scripts/cleanup_sim_stack.ps1` / `restart_live_stack.ps1` 已封禁为 fail-fast hazard stub。设计见 `docs/2026-08-08-live-stack-lifecycle-design.md`；**已 live 闭环**（5× fresh closure + 3× full regression），lifecycle 冻结。
-- 2026-08-08 P0.1/P0.2 Safety Hardening：ownership 创建时登记（`stack_register.py`）、WSL 独立 PGID 停止、`clean` 来自 stop 最终验证、每状态独立健康文件、spawn_attested PX4（`RFLY_STACK_ID` /proc 证据）；离线回归全 PASS，live 验证通过。
-- 2026-08-08 PBL-1 full-stack regression：**3× fresh-instance 完整双机飞行全部 success**
-  （FAST-LIO→EGO→OFFBOARD→穿隧道→landing，各 14 段确认、0 碰撞、0 OFFBOARD loss），
-  evidence 见 `docs/2026-08-08-pbl1-fullstack-regression-closure.md`；这是 regression
-  baseline，不是比赛 mission strategy。
-- 地图：SLAMScene + 动态砖块方案已 live 验证可用；**不安装 UE Editor**，静态 UE 地图方案搁置（见 `docs/decisions/2026-08-07-no-ue-editor.md`）。
+先做只读环境检查和 DryRun：
 
-待办（按比赛能力路线）：Phase 2 窄通道比赛几何/静态+动态障碍验收 →
-Phase 3 双机同时进通道协同 → Phase 4 真实视觉目标感知 → Phase 5 协同目标作业 →
-Phase 6 ArUco 精准降落 → Phase 7 全自主比赛任务 → Phase 8 可靠性/时间优化。
-详见 `docs/competition-roadmap.md`。
-
-## 比赛能力现状（2026-08-08）
-
-| 能力 | 状态 |
-|---|---|
-| Lifecycle（启动/停止/fresh-instance/ownership/安全 stop） | DONE（冻结） |
-| 双机 PX4/MAVROS/FAST-LIO/EGO/OFFBOARD 软件栈 | BASELINE |
-| 已知路线窄通道导航（当前 S 形隧道） | BASELINE |
-| 静态/动态障碍避障（锥桶/支架/摆动悬挂物） | NOT IMPLEMENTED |
-| 双机 20 s 内同时/依次进通道 | NOT IMPLEMENTED |
-| 机间防撞 | PARTIAL |
-| 视觉目标感知（彩色标签/二维码/温度） | SCAFFOLD（mock provider） |
-| 目标定位 / 协同目标作业 | NOT IMPLEMENTED |
-| ArUco 精准降落 | NOT IMPLEMENTED（仅 AUTO.LAND） |
-| 完整比赛任务闭环 | NOT IMPLEMENTED |
-
-> 状态等级：DONE（live 闭环）→ BASELINE（能跑未按比赛验收）→ PARTIAL →
-> SCAFFOLD（接口占位）→ NOT IMPLEMENTED。
-
-## 目录结构
-
-| 目录 | 内容 |
-| --- | --- |
-| `future_aircraft_ws/` | ROS1 工作区源码（多机任务包） |
-| `scripts/` | Windows 启动/验证脚本、WSL 辅助脚本 |
-| `config/` | 阶段配置、环境模板、赛道定义 |
-| `external/` | 独立构建的算法仓库 |
-| `tests/` | 离线契约与回归测试 |
-| `docs/` | 阶段设计与问题记录 |
-| `generated/` | 赛道生成产物（构建期生成） |
-| `logs/` | 每次运行产生的日志与报告 |
-| `.agents/` | 面向开发 agent 的操作手册 |
-
-## 快速开始
-
-### 双机赛道仿真
-
-```bat
-scripts\start_predicted_course_two_uav.bat
+```powershell
+.\sim.ps1 doctor
+.\sim.ps1 start
+.\sim.ps1 status
+.\sim.ps1 stop
 ```
 
-该入口依次完成赛道生成、平地地形部署、双机 PX4 SITL 启动与动态实体加载，不会请求 OFFBOARD 或解锁。
+状态变更必须显式使用 `-Execute`。默认 `dev` 启动配置包含双传感器、Faster-LIO readiness 和 EGO-Swarm，并停在 mission execution、OFFBOARD 与 arming 之前。开发构建与验证：
 
-### Stage 7 live 顺序
-
-```bat
-scripts\run_live_fastlio_dual.bat
-scripts\run_live_ego_swarm_dual.bat
-scripts\run_stage7_topic_probe.bat
-scripts\run_live_slam_ego_swarm_flight.bat --allow-arm --simulation-only
+```powershell
+.\sim.ps1 build
+.\sim.ps1 validate -Suite mission
+.\sim.ps1 validate -Suite core
 ```
 
-`run_live_fastlio_dual.bat` 生成 run-scoped 的 no-arm readiness 报告（`logs/stage7_live/<run-id>/sensor_readiness.json`），五项门禁全部通过后才允许后续规划器与飞行入口；`run_stage7_topic_probe.bat` 是只读诊断入口。仿真解锁必须显式使用 `--allow-arm --simulation-only`。
+## Safety
 
-### 离线验证
+- 所有 live lifecycle 操作必须使用 manifest 化入口；unknown/stale ownership、端口歧义或 stop-clean 失败时只报告并停止，不自动 force retry。
+- 禁止恢复 `scripts/cleanup_sim_stack.ps1` 与 `scripts/restart_live_stack.ps1` 的旧逻辑；它们是恒失败的 hazard tombstone。
+- 禁止名称扫杀、`wsl --shutdown`、自动硬重启循环和隐式 arming。
+- 仿真飞行仅在当前实例 readiness PASS，并同时显式提供 `--simulation-only`、`--allow-arm` 且 policy 允许时执行。真机始终由人类 arm/授权 Offboard。
+- 完整安全规则和 Red-Zone 见 [AGENTS.md](AGENTS.md)。
+
+## Development Ownership
+
+- 人类默认拥有 `future_aircraft_mission` 的比赛行为、任务策略和控制意图。
+- Agent 默认维护仿真编排、地图、项目侧 adapter、诊断、维护脚本及其测试。
+- ROS 接口、launch 组合、package manifest、lifecycle/launcher 和任何可能影响 PBL-1 的改动属于 change-gated shared boundary，修改前必须说明证据、影响、回滚与验证方案。
+- `multi_uav_mission` Python 基线和 lifecycle 实现冻结，除非 fresh regression evidence 证明必须修改。
+
+## Validation
+
+文档与仓库结构改动运行：
+
+```powershell
+D:\PX4PSP\Python38\python.exe tests\script_inventory_check.py --project-root .
+D:\PX4PSP\Python38\python.exe tests\docs_link_check.py --project-root .
+powershell -ExecutionPolicy Bypass -File scripts\validate_repository.ps1
+```
+
+当前核心离线门：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\validate_stage6c.ps1
@@ -113,27 +79,13 @@ powershell -ExecutionPolicy Bypass -File scripts\validate_stage7.ps1
 powershell -ExecutionPolicy Bypass -File scripts\validate_stage8.ps1
 ```
 
-## 运行约束
+离线 PASS 不代表 live PASS；未运行 fresh live 时必须明确写明 live parity 未验证。
 
-- 仿真解锁仅通过 `--allow-arm --simulation-only`；真实飞机保持人工解锁与手动 Offboard。
-- 每次重启仿真视为新实例，readiness 报告携带 run-id 与 simulation-instance-id，跨实例一律拒绝。
-- no-arm 门禁五项：identity、schema、freshness、isolation、stationary_stability。
-- 位置数据离谱（xyz 远超地图或非有限值）时不自动返航/降落：watchdog 判定为 `unreasonable_position` 并跳过 AUTO.LAND，应修好代码后重启仿真，不得依赖返航兜底。
-- 传感器 bridge 默认 `lidar_only`（只加载 Mid360，保持 10 Hz 稳定）；D435i RGB/深度需显式 `--sensor-mode full` 才加载（视觉任务用），避免多传感器渲染拖垮飞行链路。
-- 双机联调前先通过 Stage 2.1 单机 MAVLink 回程检查（`scripts\run_stage2_1_mavlink_check.bat`）。
-- MAVLink 端口约定：`16540/17540`、`16541/17541` 仅用于 CopterSim/PX4；MAVROS 使用专用链路 `/uav1: udp://:14601@127.0.0.1:14600`、`/uav2: udp://:14611@127.0.0.1:14610`。
-- 动态实体赛道以 RflySim LiDAR 可见性与几何净空验收，不作为 CopterSim 地形。
-- Stage 8 控制链取证使用只读记录器 `scripts\run_stage8_control_chain_recorder.bat`（只订阅不发布，不 arm），输出
-  `$STAGE7_RUN_DIR/stage8_control_chain.jsonl` 与 `stage8_control_chain_summary.json`，用于定位 planner/setpoint/FAST-LIO/MAVROS/PX4 各层 z 异常。
-- Stage 7/8 实时产物按 run 隔离：flight_report.json、mission_events.jsonl、executor_trace.json、score_summary.json、runner/executor/watchdog/keepalive 日志及 topic probe 报告都写入 `$STAGE7_RUN_DIR`；run 元数据 `current_run.env` 仍固定在 `logs/stage7_live/`。
+## Documentation Index
 
-## 赛道
-
-`config/maps/predicted_narrow_course_v1.json` 是唯一赛道源：S 形通道中心线约 14.93 m、净宽 1.4–1.5 m、墙高 2.5 m，天花板与墙顶齐平，双降落平台中心间距 2.0 m，碰撞在加载时启用。基图为 SLAMScene。
-
-## 文档与约定
-
-- [.agents/AGENT2READ.md](.agents/AGENT2READ.md)：agent 执行规则与开发经验（传感器对齐、坐标系、ego-swarm 参数语义等）。
-- [docs/d435i_sensor_parity_2026-08-07.md](docs/d435i_sensor_parity_2026-08-07.md)：与 28com UAV_demo 的传感器载荷对齐说明。
-- [docs/](docs/)：阶段设计与问题记录。
-- ROS 代码只放在 `future_aircraft_ws`，不修改 28com 原工程；多机命名空间固定为 `/uav1`、`/uav2`；任务、规划、感知通过固定接口解耦。
+- [文档总索引](docs/README.md)
+- [当前竞赛路线图](docs/current/competition-roadmap.md)
+- [PBL-1 live 回归证据](docs/evidence/2026-08-08-pbl1-fullstack-regression-closure.md)
+- [Lifecycle 架构](docs/architecture/2026-08-08-live-stack-lifecycle-design.md)
+- [Agent 当前入口](.agents/AGENT2READ.md)
+- [RflySim 工具链边界](.agents/RFLYSIM_TOOLCHAIN_REFERENCE.md)

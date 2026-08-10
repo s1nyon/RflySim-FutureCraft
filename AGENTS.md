@@ -23,7 +23,7 @@
 
 ## 2. 当前受保护基线（Protected Baseline）
 
-截至 **2026-08-07**，项目当前应按以下事实工作：
+截至 **2026-08-08**，项目当前应按以下事实工作：
 
 - 双机 OFFBOARD、arming、起飞、Faster-LIO、EGO-Swarm 和错时完整穿隧道已经取得良好 live 结果。
 - 该飞行链是当前 **PBL-1（Protected Baseline 1）**，后续新功能不得无声破坏它。
@@ -33,17 +33,17 @@
   flight runner/recorder 在 28com_uav 之后、project overlay 之前 source ego-planner-swarm devel；
   live 已复验（2026-08-07 晚 fresh-instance，以及 2026-08-08 PBL-1 3/4 fresh-instance 干净通过），
   不再作为当前 blocker。
-- **当前最高优先级是 P0 Safe Live Stack Lifecycle**：live 仿真的启动、停止和 fresh-instance
+- **P0 Safe Live Stack Lifecycle 已 CLOSED / FROZEN**：live 仿真的启动、停止和 fresh-instance
   重复验证必须可控、可证明、不通过系统级扫杀破坏宿主机。
-  设计见 `docs/2026-08-08-live-stack-lifecycle-design.md`，最新状态见 `.agents/AGENT2READ.md` §2.3。
+  设计见 `docs/architecture/2026-08-08-live-stack-lifecycle-design.md`，最新状态见 `.agents/AGENT2READ.md` 的 Current Truth。
   **2026-08-08 已完成 live 闭环验证**：双 CopterSim 实例化、Stage2 fail-fast、双机拓扑
   health gate、WSL identity/端口归属/PID 复用硬化均已落地；5 次连续 fresh start →
-  READY → stop clean 全部通过（证据见 `docs/2026-08-08-lifecycle-p0-fix-live-validated.md`）。
+  READY → stop clean 全部通过（证据见 `docs/evidence/2026-08-08-lifecycle-p0-fix-live-validated.md`）。
   **2026-08-08 PBL-1 full-stack regression 已 CLOSED**：3 次连续 fresh-instance 完整
   双机飞行（FAST-LIO→EGO→OFFBOARD→穿隧道→landing）全部 success，lifecycle 冻结
-  （证据见 `docs/2026-08-08-pbl1-fullstack-regression-closure.md`）。
-  后续开发路线以正式赛题（赛题 2.1，仓库根目录参赛指南 PDF）为准，见
-  `docs/competition-roadmap.md`（Phase 0–8；下一阶段 Phase 2 窄通道比赛导航，
+  （证据见 `docs/evidence/2026-08-08-pbl1-fullstack-regression-closure.md`）。
+  后续开发路线以正式赛题（赛题 2.1，`docs/reference/competition-guide-2026.pdf`）为准，见
+  `docs/current/competition-roadmap.md`（Phase 0–8；下一阶段 Phase 2 窄通道比赛导航，
   旧的 "Smooth Motion M2" 表述已废弃）。
 - 仓库中旧的 `planner_commands=0` 无条件结论、2026-08-02 Stage 8 失败等记录属于历史诊断证据；
   除非 fresh live evidence 再次证明它们仍存在，否则不得把它们直接当作当前 blocker。
@@ -158,13 +158,19 @@ stop/clean 验证失败时禁止自动 force retry，直接停止并向用户报
 
 ## 6. 修改权限
 
+### 6.0 人类 / Agent Ownership Boundary
+
+- **人类默认拥有**：`future_aircraft_ws/src/future_aircraft_mission/` 中的比赛行为、任务策略与控制意图。
+- **Agent 默认拥有**：仿真编排、地图、项目侧 adapter、诊断、维护脚本、文档及其测试。
+- **Change-gated shared boundary**：ROS 接口、launch 组合、package manifest、lifecycle/launcher，以及任何可能影响 PBL-1 的文件；修改前必须说明证据、影响面、风险、rollback 和 validation plan。
+- **冻结**：`multi_uav_mission` 当前 Python/launch 基线与 lifecycle internals；只有 fresh regression evidence 证明必须修改时才进入 Yellow Zone 评审。
+
 ### Green：Agent 可自主修改并验证
 
-- 项目内 Python / 普通 C++
-- `future_aircraft_ws/src/multi_uav_mission/`
-- launch / config / topic remap
+- Agent-owned 的 tooling / diagnostics / maintenance / docs
+- 不影响受保护基线的 config / topic remap
 - sensor bridge / adapter
-- mission logic / tests / diagnostics
+- tests / diagnostics
 - Windows/WSL 启动与验证脚本
 - 项目文档
 - lifecycle **只读 inspect**（`live_stack_inspect.ps1`）
@@ -173,6 +179,9 @@ stop/clean 验证失败时禁止自动 force retry，直接停止并向用户报
 
 ### Yellow：可以调查，但修改前必须先向用户说明证据、影响面和设计
 
+- `future_aircraft_ws/src/future_aircraft_mission/` 的人类所有行为或控制意图
+- `multi_uav_mission` 当前 Python/launch 受保护基线
+- ROS 接口、launch 组合与 package manifest
 - `third_party/ego-planner-swarm` 源码
 - Faster-LIO 核心算法/核心配置语义
 - PX4 核心源码或 EKF 核心策略
@@ -295,6 +304,9 @@ scripts\run_stage8_control_chain_recorder.bat
 
 - **Current State / Current Truth**：只描述现在仍成立的事实。
 - **Historical Incident**：保留过去失败和诊断经验，但不得继续作为当前 blocker。
+
+历史诊断统一从 `docs/incidents/` 查找；当前路线与 active engineering state 从
+`docs/current/` 查找。不要从 `docs/superpowers/` 的历史计划或旧 incident 反推当前状态。
 
 修复一个故障后，必须同步把其状态从 Current 移到 Historical/Resolved；不要让下一任 Agent 重复修已经解决的问题。
 

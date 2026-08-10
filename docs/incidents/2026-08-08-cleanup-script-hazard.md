@@ -129,7 +129,7 @@ schtasks /delete /tn "\FutureAircraftSim_LiveStack_Session1" /f
 
 ## 7. P0 处置结果（2026-08-08，Safe Live Stack Lifecycle）
 
-设计文档：`docs/2026-08-08-live-stack-lifecycle-design.md`。
+设计文档：`docs/architecture/2026-08-08-live-stack-lifecycle-design.md`。
 
 - **封禁**：`scripts/cleanup_sim_stack.ps1`、`scripts/restart_live_stack.ps1` 已替换为
   fail-fast hazard stub（`HAZARD-DISABLED`，恒 exit 1）；静态契约

@@ -2,7 +2,7 @@
 
 > 日期：2026-08-08
 > 状态：Design + Offline Implementation（live 执行待用户批准）
-> 关联事故：`docs/2026-08-08-cleanup-script-hazard.md`（强杀 GUI + `pkill -9` + `wsl --shutdown` + 计划任务循环后蓝屏）
+> 关联事故：`docs/incidents/2026-08-08-cleanup-script-hazard.md`（强杀 GUI + `pkill -9` + `wsl --shutdown` + 计划任务循环后蓝屏）
 
 ## 1. 目标
 

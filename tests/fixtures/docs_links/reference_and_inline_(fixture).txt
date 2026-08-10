@@ -1,0 +1,5 @@
+[reference guide][fixture]
+[balanced](reference_and_inline_(fixture).txt)
+[escaped](reference_and_inline_\(fixture\).txt)
+
+[fixture]: reference_and_inline_(fixture).txt
