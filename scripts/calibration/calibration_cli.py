@@ -21,7 +21,9 @@ from object_metadata import (
     initialize_metadata_receiver,
     record_candidate,
 )
-from ue_asset_loader import build_commands, place_assets, remove_assets
+from showcase_geometry import load_showcase, resolve_showcase
+from showcase_artifacts import generate_showcase_artifacts
+from ue_asset_loader import build_commands, place_assets, place_showcase, remove_assets, remove_showcase
 
 
 def _create_client(rflysim_root: Path):
@@ -56,6 +58,22 @@ def _dry_receipt(action, catalog):
             }
             for candidate, command in zip(catalog.assets, build_commands(catalog))
         ]
+    return receipt
+
+
+def _showcase_dry_receipt(action, catalog, placements):
+    receipt = {
+        "acted_on_ids": [item.object_id for item in placements], "action": action,
+        "arming_request": False, "catalog_sha256": catalog.sha256,
+        "map_change": False, "mode": "dry-run",
+    }
+    if action == "showcase-load":
+        receipt["placements"] = [{
+            "class_id": item.class_id, "expected_dimensions_m": list(item.expected_dimensions),
+            "fit_ground": True, "key": item.key, "measured_dimensions_m": list(item.measured_dimensions),
+            "object_id": item.object_id, "position_enu_m": list(item.position_enu),
+            "scale": list(item.scale),
+        } for item in placements]
     return receipt
 
 
@@ -131,8 +149,35 @@ def main(argv=None):
     record.add_argument("--run-id")
     record.add_argument("--stack-instance-id")
     record.add_argument("--rflysim-root", type=Path, default=Path(os.environ.get("RFLYSIM_ROOT", r"D:\PX4PSP")))
+    showcase_generate = subparsers.add_parser("showcase-generate")
+    showcase_generate.add_argument("--catalog", type=Path, required=True)
+    showcase_generate.add_argument("--showcase", type=Path, required=True)
+    showcase_generate.add_argument("--output", type=Path, required=True)
+    for name in ("showcase-load", "showcase-remove"):
+        action = subparsers.add_parser(name)
+        action.add_argument("--catalog", type=Path, required=True)
+        action.add_argument("--showcase", type=Path, required=True)
+        action.add_argument("--execute", action="store_true")
+        action.add_argument("--window-id", type=int, default=0)
+        action.add_argument("--rflysim-root", type=Path, default=Path(os.environ.get("RFLYSIM_ROOT", r"D:\PX4PSP")))
     args = parser.parse_args(argv)
     catalog = load_catalog(args.catalog)
+
+    if args.command in ("showcase-generate", "showcase-load", "showcase-remove"):
+        showcase_spec = load_showcase(args.showcase)
+        placements = resolve_showcase(showcase_spec, catalog)
+        if args.command == "showcase-generate":
+            from showcase_geometry import validate_showcase
+            report = validate_showcase(placements, showcase_spec.spawn_centers, showcase_spec.spawn_exclusion_radius_m)
+            print(json.dumps(generate_showcase_artifacts(args.output, placements, report), indent=2, sort_keys=True))
+            return 0
+        if not args.execute:
+            print(json.dumps(_showcase_dry_receipt(args.command, catalog, placements), indent=2, sort_keys=True))
+            return 0
+        client = _create_client(args.rflysim_root)
+        receipt = place_showcase(client, catalog, placements, args.window_id) if args.command == "showcase-load" else remove_showcase(client, catalog, placements, args.window_id)
+        print(json.dumps(receipt, indent=2, sort_keys=True))
+        return 0
 
     if args.command == "generate":
         print(json.dumps(generate_artifacts(args.catalog, args.output), indent=2, sort_keys=True))

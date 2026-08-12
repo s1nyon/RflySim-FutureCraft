@@ -79,3 +79,31 @@ def remove_assets(client, catalog: CalibrationCatalog, window_id: int, repeat: i
             if delay_s > 0.0:
                 time.sleep(delay_s)
     return _receipt("remove", catalog, ids)
+
+
+def place_showcase(client, catalog, placements, window_id: int, repeat: int = 3, delay_s: float = 0.02):
+    ids = []
+    for item in placements:
+        ids.append(item.object_id)
+        kwargs = {
+            "copterID": item.object_id,
+            "vehicleType": item.class_id,
+            "MotorRPMSMean": 0,
+            "PosE": list(enu_to_ned(item.position_enu)),
+            "AngEuler": [0.0, 0.0, yaw_enu_to_ned(item.yaw_enu_rad)],
+            "Scale": list(item.scale),
+            "windowID": window_id,
+        }
+        for _ in range(repeat):
+            client.sendUE4PosScale2Ground(**kwargs)
+            if delay_s > 0: time.sleep(delay_s)
+    return _receipt("showcase-load", catalog, ids)
+
+
+def remove_showcase(client, catalog, placements, window_id: int, repeat: int = 3, delay_s: float = 0.02):
+    ids = [item.object_id for item in placements]
+    for object_id in ids:
+        for _ in range(repeat):
+            client.sendUE4Destroy(object_id, window_id)
+            if delay_s > 0: time.sleep(delay_s)
+    return _receipt("showcase-remove", catalog, ids)
