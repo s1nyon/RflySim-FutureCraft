@@ -20,6 +20,10 @@ class MetadataValidationError(ValueError):
 class MetadataCaptureError(RuntimeError):
     """Raised when bounded live metadata capture cannot complete."""
 
+    def __init__(self, message, samples=()):
+        super().__init__(message)
+        self.samples = list(samples)
+
 
 @dataclass(frozen=True)
 class MetadataSample:
@@ -85,6 +89,7 @@ def analyze_samples(
     extent_tolerance_m: float = 0.01,
     stale_after_s: float = 2.0,
     now: float = None,
+    placement_plane_z: float = 0.0,
 ) -> Dict[str, object]:
     reasons = []
     if len(samples) < 3:
@@ -105,10 +110,16 @@ def analyze_samples(
     median_attitude = _median_vec(samples, "attitude_vendor") if samples else Vec3(0, 0, 0)
     median_origin = _median_vec(samples, "box_origin_vendor") if samples else Vec3(0, 0, 0)
     median_extent = _median_vec(samples, "half_extent_vendor") if samples else Vec3(0, 0, 0)
+    origin_enu = ned_to_enu(median_origin)
+    position_enu = ned_to_enu(median_pos)
     return {
         "converted_enu": {
-            "box_origin_m": list(ned_to_enu(median_origin)),
-            "position_m": list(ned_to_enu(median_pos)),
+            "box_origin_m": list(origin_enu),
+            "ground_offset_m": origin_enu.z - median_extent.z - placement_plane_z,
+            "position_m": list(position_enu),
+            "roll_rad": median_attitude.y,
+            "pitch_rad": median_attitude.x,
+            "yaw_rad": math.pi / 2.0 - median_attitude.z,
         },
         "evidence_state": "REJECTED" if reasons else "METADATA_MEASURED",
         "full_dimensions_m": [2.0 * value for value in median_extent],
@@ -130,6 +141,11 @@ def analyze_samples(
 def build_metadata_profile(candidate: AssetCandidate, analysis: Dict[str, object], provenance: Dict[str, object]) -> Dict[str, object]:
     return {
         "approved_roles": [],
+        "commanded_geometry": {
+            "position_enu_m": list(candidate.position_enu),
+            "scale": list(candidate.scale),
+            "yaw_enu_rad": candidate.yaw_enu_rad,
+        },
         "class_id": candidate.class_id,
         "evidence_state": analysis["evidence_state"],
         "measurements": analysis,
@@ -142,11 +158,14 @@ def build_metadata_profile(candidate: AssetCandidate, analysis: Dict[str, object
     }
 
 
+def initialize_metadata_receiver(client) -> None:
+    client.initUE4MsgRec()
+
+
 def record_candidate(client, candidate: AssetCandidate, sample_count: int, timeout_s: float, poll_s: float = 0.01) -> List[MetadataSample]:
     if sample_count < 1 or timeout_s <= 0.0:
         raise ValueError("sample_count and timeout_s must be positive")
     client.reqCamCoptObj(1, candidate.object_id)
-    client.initUE4MsgRec()
     deadline = time.monotonic() + timeout_s
     samples: List[MetadataSample] = []
     while len(samples) < sample_count and time.monotonic() < deadline:
@@ -157,5 +176,5 @@ def record_candidate(client, candidate: AssetCandidate, sample_count: int, timeo
         if poll_s > 0.0:
             time.sleep(poll_s)
     if len(samples) != sample_count:
-        raise MetadataCaptureError("metadata capture timeout for {}".format(candidate.key))
+        raise MetadataCaptureError("metadata capture timeout for {}".format(candidate.key), samples)
     return samples

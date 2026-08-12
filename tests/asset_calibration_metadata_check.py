@@ -34,12 +34,14 @@ class FakeClient:
         self.raws = list(raws)
         self.requested = []
         self.initialized = False
+        self.initialize_count = 0
 
     def reqCamCoptObj(self, kind, object_id):
         self.requested.append((kind, object_id))
 
     def initUE4MsgRec(self):
         self.initialized = True
+        self.initialize_count += 1
 
     def getCamCoptObj(self, kind, object_id):
         if not self.raws:
@@ -69,6 +71,8 @@ def main():
     assert analysis["raw_vendor"]["half_extent_m"] == [0.25, 0.5, 0.75]
     assert analysis["full_dimensions_m"] == [0.5, 1.0, 1.5]
     assert analysis["converted_enu"]["position_m"] == [3.0, 4.0, 2.0]
+    assert analysis["converted_enu"]["ground_offset_m"] == 0.5
+    assert "yaw_rad" in analysis["converted_enu"]
     assert analysis["sample_count"] == 5
     assert analysis["maximum_position_delta_m"] == 0.0
     assert analysis["maximum_extent_delta_m"] == 0.0
@@ -78,6 +82,8 @@ def main():
     assert profile["approved_roles"] == []
     assert profile["measurements"]["full_dimensions_m"] == [0.5, 1.0, 1.5]
     assert profile["provenance"]["run_id"] == "run-1"
+    assert profile["commanded_geometry"]["scale"] == list(candidate.scale)
+    assert profile["commanded_geometry"]["position_enu_m"] == list(candidate.position_enu)
 
     rejected_cases = [
         (samples[:2], "INSUFFICIENT_SAMPLES"),
@@ -105,15 +111,18 @@ def main():
 
     live_raws = [Raw(base + index * 0.1) for index in range(3)]
     client = FakeClient(live_raws)
+    metadata.initialize_metadata_receiver(client)
     captured = metadata.record_candidate(client, candidate, sample_count=3, timeout_s=1, poll_s=0)
     assert len(captured) == 3
     assert client.requested == [(1, candidate.object_id)]
     assert client.initialized is True
+    assert client.initialize_count == 1
     assert all(raw.hasUpdate is False for raw in live_raws)
     try:
         metadata.record_candidate(FakeClient([]), candidate, sample_count=3, timeout_s=0.01, poll_s=0)
     except metadata.MetadataCaptureError as exc:
         assert "timeout" in str(exc)
+        assert exc.samples == []
     else:
         raise AssertionError("metadata timeout did not fail")
 

@@ -17,6 +17,7 @@ from object_metadata import (
     MetadataValidationError,
     analyze_samples,
     build_metadata_profile,
+    initialize_metadata_receiver,
     record_candidate,
 )
 from ue_asset_loader import build_commands, place_assets, remove_assets
@@ -33,7 +34,7 @@ def _create_client(rflysim_root: Path):
 
 
 def _dry_receipt(action, catalog):
-    return {
+    receipt = {
         "acted_on_ids": [item.object_id for item in build_commands(catalog)],
         "action": action,
         "arming_request": False,
@@ -41,6 +42,20 @@ def _dry_receipt(action, catalog):
         "map_change": False,
         "mode": "dry-run",
     }
+    if action == "load":
+        receipt["placements"] = [
+            {
+                "class_id": command.class_id,
+                "object_id": command.object_id,
+                "position_enu_m": list(candidate.position_enu),
+                "position_ned_m": list(command.position_ned),
+                "scale": list(command.scale),
+                "yaw_enu_rad": candidate.yaw_enu_rad,
+                "yaw_ned_rad": command.yaw_ned_rad,
+            }
+            for candidate, command in zip(catalog.assets, build_commands(catalog))
+        ]
+    return receipt
 
 
 def _write_json(path: Path, payload):
@@ -50,14 +65,17 @@ def _write_json(path: Path, payload):
 
 def _record(client, catalog, output, samples, timeout_s, run_id, stack_instance_id):
     output.mkdir(parents=True, exist_ok=True)
+    initialize_metadata_receiver(client)
     states = []
     profile_paths = []
     for candidate in catalog.assets:
         try:
             captured = record_candidate(client, candidate, samples, timeout_s)
-            analysis = analyze_samples(candidate, captured)
+            analysis = analyze_samples(candidate, captured, placement_plane_z=catalog.placement_z)
         except (MetadataCaptureError, MetadataValidationError) as exc:
-            analysis = analyze_samples(candidate, [])
+            analysis = analyze_samples(
+                candidate, getattr(exc, "samples", []), placement_plane_z=catalog.placement_z
+            )
             reason = "CAPTURE_TIMEOUT" if isinstance(exc, MetadataCaptureError) else "INVALID_METADATA"
             analysis["rejection_reasons"].insert(0, reason)
             analysis["capture_error"] = str(exc)
@@ -106,8 +124,8 @@ def main(argv=None):
     record.add_argument("--execute", action="store_true")
     record.add_argument("--samples", type=int, default=5)
     record.add_argument("--timeout-s", type=float, default=10.0)
-    record.add_argument("--run-id", default="manual-metadata-calibration")
-    record.add_argument("--stack-instance-id", default="operator-confirmed-instance")
+    record.add_argument("--run-id")
+    record.add_argument("--stack-instance-id")
     record.add_argument("--rflysim-root", type=Path, default=Path(os.environ.get("RFLYSIM_ROOT", r"D:\PX4PSP")))
     args = parser.parse_args(argv)
     catalog = load_catalog(args.catalog)
@@ -118,6 +136,11 @@ def main(argv=None):
     if not args.execute:
         print(json.dumps(_dry_receipt(args.command, catalog), indent=2, sort_keys=True))
         return 0
+    if args.command == "record":
+        if not args.run_id:
+            parser.error("record --execute requires --run-id")
+        if not args.stack_instance_id:
+            parser.error("record --execute requires --stack-instance-id")
     client = _create_client(args.rflysim_root)
     if args.command == "load":
         receipt = place_assets(client, catalog, args.window_id)

@@ -25,11 +25,14 @@ def load_cli(path):
 
 
 class NoMetadataClient:
+    def __init__(self):
+        self.initialize_count = 0
+
     def reqCamCoptObj(self, *_args):
         pass
 
     def initUE4MsgRec(self):
-        pass
+        self.initialize_count += 1
 
     def getCamCoptObj(self, *_args):
         return None
@@ -56,6 +59,11 @@ def main():
         assert receipt["map_change"] is False
         assert receipt["arming_request"] is False
         assert receipt["acted_on_ids"] == list(range(13000, 13010))
+        if command == "load":
+            assert len(receipt["placements"]) == 10
+            assert set(receipt["placements"][0]) == {
+                "class_id", "object_id", "position_enu_m", "position_ned_m", "scale", "yaw_enu_rad", "yaw_ned_rad"
+            }
 
     with tempfile.TemporaryDirectory(prefix="asset_cli_") as temp_dir:
         root = Path(temp_dir)
@@ -80,15 +88,23 @@ def main():
         assert "schema_version" in failed.stderr
 
         rejected_dir = root / "rejected"
-        manifest, passed = cli_module._record(
-            NoMetadataClient(), catalog, rejected_dir, 3, 0.0001, "run-timeout", "stack-1"
-        )
+        no_metadata = NoMetadataClient()
+        manifest, passed = cli_module._record(no_metadata, catalog, rejected_dir, 3, 0.0001, "run-timeout", "stack-1")
         assert passed is False
         assert len(manifest["profiles"]) == len(catalog.assets)
         assert manifest["states"] == ["REJECTED"] * len(catalog.assets)
+        assert no_metadata.initialize_count == 1
         for profile_name in manifest["profiles"]:
             profile = json.loads((rejected_dir / profile_name).read_text(encoding="utf-8"))
             assert "CAPTURE_TIMEOUT" in profile["measurements"]["rejection_reasons"]
+
+        for missing in ("--run-id", "--stack-instance-id"):
+            live = run(
+                args.cli, "record", "--catalog", args.catalog, "--output", root / "live",
+                "--execute", *( ["--stack-instance-id", "stack-1"] if missing == "--run-id" else ["--run-id", "run-1"] )
+            )
+            assert live.returncode != 0
+            assert missing[2:] in live.stderr
 
     print("asset calibration CLI: PASS")
     return 0
