@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "catalog_name": "official_asset_candidates_v1",
+  "frame": "ENU",
+  "units": "m",
+  "base_map": "SLAMScene",
+  "owned_id_range": [13000, 13099],
+  "calibration_zone": {
+    "bounds": [40.0, 58.0, -9.0, 9.0],
+    "placement_z": 0.0
+  },
+  "station_clearance_m": 0.75,
+  "assets": [
+    {
+      "key": "pillar_813",
+      "object_id": 13000,
+      "class_id": 813,
+      "official_source": "RflySim3D/RflySim3D/Content/RobotMissionChallenge/XML/Pillar.xml",
+      "variant": "Pillar",
+      "intended_roles": ["static_obstacle", "dynamic_obstacle"],
+      "station": {"position": [42.0, -4.0, 1.0], "yaw_rad": 0.0},
+      "scale": [1.0, 1.0, 1.0],
+      "declared_bounds": [0.8, 0.8, 2.0]
+    },
+    {
+      "key": "box_815",
+      "object_id": 13001,
+      "class_id": 815,
+      "official_source": "RflySim3D/RflySim3D/Content/RobotMissionChallenge/XML/Box.xml",
+      "variant": "RobotMissionChallenge Box",
+      "intended_roles": ["static_obstacle", "dynamic_obstacle"],
+      "station": {"position": [45.5, -4.0, 0.5], "yaw_rad": 0.0},
+      "scale": [1.0, 1.0, 1.0],
+      "declared_bounds": [1.0, 1.0, 1.0]
+    },
+    {
+      "key": "box_818",
+      "object_id": 13002,
+      "class_id": 818,
+      "official_source": "RflySim3D/RflySim3D/Content/ContestMeshs/XML/Box.xml",
+      "variant": "ContestMeshs Box",
+      "intended_roles": ["static_obstacle", "dynamic_obstacle"],
+      "station": {"position": [49.0, -4.0, 0.5], "yaw_rad": 0.0},
+      "scale": [1.0, 1.0, 1.0],
+      "declared_bounds": [1.0, 1.0, 1.0]
+    },
+    {
+      "key": "carton_500",
+      "object_id": 13003,
+      "class_id": 500,
+      "official_source": "RflySim3D/RflySim3D/Content/obstacle/carton_500.xml",
+      "variant": "carton_500",
+      "intended_roles": ["static_obstacle"],
+      "station": {"position": [52.5, -4.0, 0.5], "yaw_rad": 0.0},
+      "scale": [1.0, 1.0, 1.0],
+      "declared_bounds": [1.0, 1.0, 1.0]
+    },
+    {
+      "key": "carton_750",
+      "object_id": 13004,
+      "class_id": 750,
+      "official_source": "RflySim3D/RflySim3D/Content/obstacle/carton_750.xml",
+      "variant": "carton_750",
+      "intended_roles": ["static_obstacle"],
+      "station": {"position": [56.0, -4.0, 0.75], "yaw_rad": 0.0},
+      "scale": [1.0, 1.0, 1.0],
+      "declared_bounds": [1.5, 1.5, 1.5]
+    },
+    {
+      "key": "carton_1000",
+      "object_id": 13005,
+      "class_id": 1000,
+      "official_source": "RflySim3D/RflySim3D/Content/obstacle/carton_1000.xml",
+      "variant": "carton_1000",
+      "intended_roles": ["static_obstacle"],
+      "station": {"position": [42.0, 4.0, 1.0], "yaw_rad": 0.0},
+      "scale": [1.0, 1.0, 1.0],
+      "declared_bounds": [2.0, 2.0, 2.0]
+    },
+    {
+      "key": "ring_target_150",
+      "object_id": 13006,
+      "class_id": 150,
+      "official_source": "RflySimAPIs/3.RflySim3DUE/0.ApiExps/e5_UEMapCtrl/2.TargetCreatePy/code/XML/Ring_Target_Blue.xml",
+      "variant": "Ring_Target_Blue",
+      "intended_roles": ["color_target"],
+      "station": {"position": [45.5, 4.0, 1.0], "yaw_rad": 0.0},
+      "scale": [1.0, 1.0, 1.0],
+      "declared_bounds": [0.2, 1.5, 1.5]
+    },
+    {
+      "key": "quad_target_151",
+      "object_id": 13007,
+      "class_id": 151,
+      "official_source": "RflySimAPIs/3.RflySim3DUE/0.ApiExps/e5_UEMapCtrl/2.TargetCreatePy/code/XML/Quad_Target_Red.xml",
+      "variant": "Quad_Target_Red",
+      "intended_roles": ["color_target"],
+      "station": {"position": [49.0, 4.0, 1.0], "yaw_rad": 0.0},
+      "scale": [1.0, 1.0, 1.0],
+      "declared_bounds": [0.2, 1.5, 1.5]
+    },
+    {
+      "key": "aruco_custom_43",
+      "object_id": 13008,
+      "class_id": 43,
+      "official_source": "RflySim3D/RflySim3D/Content/Aruco/Aruco.xml",
+      "variant": "Aruco_Custom",
+      "intended_roles": ["image_target"],
+      "station": {"position": [52.5, 4.0, 0.4], "yaw_rad": 0.0},
+      "scale": [1.0, 1.0, 1.0],
+      "declared_bounds": [0.8, 0.8, 0.1]
+    },
+    {
+      "key": "luminous_light_60",
+      "object_id": 13009,
+      "class_id": 60,
+      "official_source": "RflySim3D built-in ClassID 60 luminous light",
+      "variant": "luminous light",
+      "intended_roles": ["temperature_proxy"],
+      "station": {"position": [56.0, 4.0, 0.5], "yaw_rad": 0.0},
+      "scale": [1.0, 1.0, 1.0],
+      "declared_bounds": [1.0, 1.0, 1.0]
+    }
+  ]
+}
