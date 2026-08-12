@@ -22,7 +22,7 @@ from object_metadata import (
     initialize_metadata_receiver,
     record_candidate,
 )
-from showcase_geometry import load_showcase, resolve_showcase
+from showcase_geometry import ShowcaseValidationError, load_showcase, resolve_showcase, validate_showcase
 from showcase_artifacts import generate_showcase_artifacts
 from ue_asset_loader import build_commands, place_assets, place_showcase, remove_assets, remove_showcase
 
@@ -160,7 +160,7 @@ def main(argv=None):
         action.add_argument("--catalog", type=Path, required=True)
         action.add_argument("--showcase", type=Path, required=True)
         action.add_argument("--execute", action="store_true")
-        action.add_argument("--window-id", type=int, default=0)
+        action.add_argument("--window-id", type=int, choices=(0,), default=0)
         action.add_argument("--rflysim-root", type=Path, default=Path(os.environ.get("RFLYSIM_ROOT", r"D:\PX4PSP")))
     args = parser.parse_args(argv)
     catalog = load_catalog(args.catalog)
@@ -168,9 +168,10 @@ def main(argv=None):
     if args.command in ("showcase-generate", "showcase-load", "showcase-remove"):
         showcase_spec = load_showcase(args.showcase)
         placements = resolve_showcase(showcase_spec, catalog)
+        report = validate_showcase(
+            placements, showcase_spec.spawn_centers, showcase_spec.spawn_exclusion_radius_m
+        )
         if args.command == "showcase-generate":
-            from showcase_geometry import validate_showcase
-            report = validate_showcase(placements, showcase_spec.spawn_centers, showcase_spec.spawn_exclusion_radius_m)
             print(json.dumps(generate_showcase_artifacts(args.output, placements, report), indent=2, sort_keys=True))
             return 0
         if not args.execute:

@@ -3,7 +3,9 @@
 
 import argparse
 import importlib.util
+import json
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -42,6 +44,16 @@ def main():
     assert report["valid"] is True
     assert report["station_count"] == 10
     assert report["minimum_spawn_center_distance_m"] >= 3.0
+    raw = json.loads(args.showcase.read_text(encoding="utf-8"))
+    raw["stations"][0]["position"] = [11.1, -5.0, 0.0]
+    with tempfile.TemporaryDirectory() as temp_dir:
+        changed = Path(temp_dir) / "changed.json"
+        changed.write_text(json.dumps(raw), encoding="utf-8")
+        try:
+            showcase.load_showcase(changed)
+            raise AssertionError("changed station grid accepted")
+        except showcase.ShowcaseValidationError:
+            pass
     print("asset showcase geometry: PASS")
     return 0
 

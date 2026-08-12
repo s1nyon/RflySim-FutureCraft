@@ -33,6 +33,8 @@ try {
     Invoke-Checked $python @($cli, 'load', '--catalog', $catalog)
     Invoke-Checked $python @($cli, 'record', '--catalog', $catalog, '--output', 'logs\calibration\offline-dry-run')
     Invoke-Checked $python @($cli, 'remove', '--catalog', $catalog)
+    Invoke-Checked $python @($cli, 'showcase-load', '--catalog', $catalog, '--showcase', 'config\calibration\official_asset_showcase_v1.json')
+    Invoke-Checked $python @($cli, 'showcase-remove', '--catalog', $catalog, '--showcase', 'config\calibration\official_asset_showcase_v1.json')
     Invoke-Checked 'git.exe' @('diff', '--check')
     Write-Output '[PASS] Official asset calibration offline validation PASS'
 }

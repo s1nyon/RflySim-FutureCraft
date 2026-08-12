@@ -16,6 +16,15 @@ class ShowcaseValidationError(ValueError):
     pass
 
 
+EXPECTED_STATIONS = (
+    ("pillar_813", (11.0, -5.0, 0.0)), ("box_815", (11.0, -2.5, 0.0)),
+    ("box_818", (11.0, 0.0, 0.0)), ("carton_500", (11.0, 2.5, 0.0)),
+    ("carton_750", (11.0, 5.0, 0.0)), ("carton_1000", (13.0, -5.0, 0.0)),
+    ("ring_target_150", (13.0, -2.5, 0.0)), ("quad_target_151", (13.0, 0.0, 0.0)),
+    ("aruco_custom_43", (13.0, 2.5, 0.0)), ("luminous_light_60", (13.0, 5.0, 0.0)),
+)
+
+
 @dataclass(frozen=True)
 class ShowcaseStation:
     key: str
@@ -77,6 +86,8 @@ def load_showcase(path: Path) -> ShowcaseSpec:
     )
     if len(stations) != 10 or any(not item.key for item in stations) or len({item.key for item in stations}) != 10:
         raise ShowcaseValidationError("showcase requires ten unique keyed stations")
+    if tuple((item.key, tuple(item.position_enu)) for item in stations) != EXPECTED_STATIONS:
+        raise ShowcaseValidationError("showcase stations must match the approved two-row grid")
     centers = tuple(tuple(_number(value, "spawn center") for value in item) for item in raw.get("spawn_centers", []))
     if any(len(item) != 2 for item in centers):
         raise ShowcaseValidationError("spawn centers must be 2D")

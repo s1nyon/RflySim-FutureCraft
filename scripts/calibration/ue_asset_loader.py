@@ -82,6 +82,10 @@ def remove_assets(client, catalog: CalibrationCatalog, window_id: int, repeat: i
 
 
 def place_showcase(client, catalog, placements, window_id: int, repeat: int = 3, delay_s: float = 0.02):
+    if repeat < 1:
+        raise ValueError("repeat must be positive")
+    if window_id != 0:
+        raise ValueError("showcase actions are restricted to window 0")
     ids = []
     for item in placements:
         ids.append(item.object_id)
@@ -101,6 +105,10 @@ def place_showcase(client, catalog, placements, window_id: int, repeat: int = 3,
 
 
 def remove_showcase(client, catalog, placements, window_id: int, repeat: int = 3, delay_s: float = 0.02):
+    if repeat < 1:
+        raise ValueError("repeat must be positive")
+    if window_id != 0:
+        raise ValueError("showcase actions are restricted to window 0")
     ids = [item.object_id for item in placements]
     for object_id in ids:
         for _ in range(repeat):
