@@ -96,9 +96,9 @@ comparison. It contains:
 
 - a `6 x 5 m` obstacle-free takeoff zone;
 - segment S1, approximately `7 m` long;
-- a 90-degree turn with inner radius `0.9 m`;
+- a 90-degree turn with centreline radius `1.65 m`;
 - segment S2, approximately `5 m` long;
-- a second 90-degree turn with inner radius `0.9 m`;
+- a second 90-degree turn with centreline radius `1.65 m`;
 - segment S3, approximately `7 m` long;
 - a landing zone outside the S3 exit;
 - two fixed landing-platform centres separated by `1.8 m`.
@@ -106,6 +106,10 @@ comparison. It contains:
 Exact centreline endpoints, arc centres, wall polygons, and zone bounds are
 derived in the implementation plan and stored as numeric configuration. Every
 derived dimension must be included in the generated validation report.
+
+The fixed centreline radius makes the inner radii `0.75 m` for the `1.8 m`
+development profile and `0.90 m` for the `1.5 m` competition profile. Both are
+non-degenerate and satisfy the published maximum inner-radius constraint.
 
 The course has no arena-wide ceiling. A suspended obstacle may have a local
 support frame, but its collision geometry and swept volume are explicit and
