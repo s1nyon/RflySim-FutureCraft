@@ -90,7 +90,12 @@ def _text(value: Any, label: str) -> str:
 
 
 def catalog_sha256(path: Path) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    try:
+        value = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise CatalogValidationError("cannot hash catalog {}: {}".format(path, exc)) from exc
+    canonical = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def profile_id(candidate: AssetCandidate) -> str:

@@ -49,6 +49,14 @@ def main() -> int:
     assert catalog.units == "m"
     assert catalog.owned_id_range == (13000, 13099)
     assert catalog.sha256 == module.catalog_sha256(args.catalog)
+    with tempfile.TemporaryDirectory(prefix="asset_catalog_hash_") as temp_dir:
+        raw = json.loads(args.catalog.read_text(encoding="utf-8"))
+        canonical = json.dumps(raw, ensure_ascii=False, indent=2)
+        lf_path = Path(temp_dir) / "lf.json"
+        crlf_path = Path(temp_dir) / "crlf.json"
+        lf_path.write_bytes((canonical + "\n").encode("utf-8"))
+        crlf_path.write_bytes((canonical.replace("\n", "\r\n") + "\r\n").encode("utf-8"))
+        assert module.catalog_sha256(lf_path) == module.catalog_sha256(crlf_path)
     assert [asset.key for asset in catalog.assets] == [
         "pillar_813",
         "box_815",
