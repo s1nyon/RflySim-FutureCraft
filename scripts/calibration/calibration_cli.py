@@ -12,7 +12,13 @@ from pathlib import Path
 
 from asset_catalog import load_catalog
 from calibration_artifacts import generate_artifacts
-from object_metadata import analyze_samples, build_metadata_profile, record_candidate
+from object_metadata import (
+    MetadataCaptureError,
+    MetadataValidationError,
+    analyze_samples,
+    build_metadata_profile,
+    record_candidate,
+)
 from ue_asset_loader import build_commands, place_assets, remove_assets
 
 
@@ -47,8 +53,14 @@ def _record(client, catalog, output, samples, timeout_s, run_id, stack_instance_
     states = []
     profile_paths = []
     for candidate in catalog.assets:
-        captured = record_candidate(client, candidate, samples, timeout_s)
-        analysis = analyze_samples(candidate, captured)
+        try:
+            captured = record_candidate(client, candidate, samples, timeout_s)
+            analysis = analyze_samples(candidate, captured)
+        except (MetadataCaptureError, MetadataValidationError) as exc:
+            analysis = analyze_samples(candidate, [])
+            reason = "CAPTURE_TIMEOUT" if isinstance(exc, MetadataCaptureError) else "INVALID_METADATA"
+            analysis["rejection_reasons"].insert(0, reason)
+            analysis["capture_error"] = str(exc)
         profile = build_metadata_profile(
             candidate,
             analysis,

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import subprocess
 import sys
@@ -15,11 +16,33 @@ def run(cli, *args):
     return subprocess.run([sys.executable, str(cli), *map(str, args)], check=False, capture_output=True, text=True)
 
 
+def load_cli(path):
+    sys.path.insert(0, str(path.parent))
+    spec = importlib.util.spec_from_file_location("calibration_cli", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class NoMetadataClient:
+    def reqCamCoptObj(self, *_args):
+        pass
+
+    def initUE4MsgRec(self):
+        pass
+
+    def getCamCoptObj(self, *_args):
+        return None
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", type=Path, required=True)
     parser.add_argument("--catalog", type=Path, required=True)
     args = parser.parse_args()
+
+    cli_module = load_cli(args.cli)
+    catalog = cli_module.load_catalog(args.catalog)
 
     source = args.cli.read_text(encoding="utf-8")
     for forbidden in ("RflyChangeMapbyName", "set_mode", "OFFBOARD", "wsl --shutdown", "taskkill", "pkill"):
@@ -55,6 +78,17 @@ def main():
         failed = run(args.cli, "generate", "--catalog", invalid, "--output", root / "bad")
         assert failed.returncode != 0
         assert "schema_version" in failed.stderr
+
+        rejected_dir = root / "rejected"
+        manifest, passed = cli_module._record(
+            NoMetadataClient(), catalog, rejected_dir, 3, 0.0001, "run-timeout", "stack-1"
+        )
+        assert passed is False
+        assert len(manifest["profiles"]) == len(catalog.assets)
+        assert manifest["states"] == ["REJECTED"] * len(catalog.assets)
+        for profile_name in manifest["profiles"]:
+            profile = json.loads((rejected_dir / profile_name).read_text(encoding="utf-8"))
+            assert "CAPTURE_TIMEOUT" in profile["measurements"]["rejection_reasons"]
 
     print("asset calibration CLI: PASS")
     return 0

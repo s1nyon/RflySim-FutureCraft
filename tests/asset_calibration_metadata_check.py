@@ -60,7 +60,10 @@ def main():
     candidate = catalog_module.load_catalog(args.catalog).assets[0]
 
     base = time.time()
-    samples = [metadata.normalize_sample(Raw(base + index * 0.1)) for index in range(5)]
+    samples = [
+        metadata.normalize_sample(Raw(10.0 + index * 0.1), received_at_unix_s=base + index * 0.1)
+        for index in range(5)
+    ]
     analysis = metadata.analyze_samples(candidate, samples, now=base + 0.5)
     assert analysis["evidence_state"] == "METADATA_MEASURED"
     assert analysis["raw_vendor"]["half_extent_m"] == [0.25, 0.5, 0.75]
@@ -79,7 +82,7 @@ def main():
     rejected_cases = [
         (samples[:2], "INSUFFICIENT_SAMPLES"),
         ([metadata.normalize_sample(Raw(base + value)) for value in (0.2, 0.1, 0.3)], "NON_MONOTONIC_TIMESTAMPS"),
-        ([metadata.normalize_sample(Raw(base - 20 + value)) for value in (0, 0.1, 0.2)], "STALE_FINAL_SAMPLE"),
+        ([metadata.normalize_sample(Raw(value), received_at_unix_s=base - 20 + value) for value in (0, 0.1, 0.2)], "STALE_FINAL_SAMPLE"),
         ([metadata.normalize_sample(Raw(base + value, extent=(0.25 + value, 0.5, 0.75))) for value in (0, 0.1, 0.2)], "INCONSISTENT_EXTENT"),
     ]
     for candidate_samples, reason in rejected_cases:

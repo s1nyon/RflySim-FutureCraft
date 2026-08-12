@@ -24,6 +24,7 @@ class MetadataCaptureError(RuntimeError):
 @dataclass(frozen=True)
 class MetadataSample:
     timestamp: float
+    received_at_unix_s: float
     pos_vendor: Vec3
     attitude_vendor: Vec3
     box_origin_vendor: Vec3
@@ -48,9 +49,13 @@ def _vec3(value, label, positive=False):
     return result
 
 
-def normalize_sample(raw) -> MetadataSample:
+def normalize_sample(raw, received_at_unix_s: float = None) -> MetadataSample:
     return MetadataSample(
         timestamp=_number(getattr(raw, "timestmp", None), "timestamp"),
+        received_at_unix_s=_number(
+            time.time() if received_at_unix_s is None else received_at_unix_s,
+            "received_at_unix_s",
+        ),
         pos_vendor=_vec3(getattr(raw, "PosUE", None), "PosUE"),
         attitude_vendor=_vec3(getattr(raw, "angEuler", None), "angEuler"),
         box_origin_vendor=_vec3(getattr(raw, "boxOrigin", None), "boxOrigin"),
@@ -88,7 +93,7 @@ def analyze_samples(
     if any(second <= first for first, second in zip(timestamps, timestamps[1:])):
         reasons.append("NON_MONOTONIC_TIMESTAMPS")
     now = time.time() if now is None else float(now)
-    if not samples or now - samples[-1].timestamp > stale_after_s:
+    if not samples or now - samples[-1].received_at_unix_s > stale_after_s:
         reasons.append("STALE_FINAL_SAMPLE")
     position_delta = _maximum_delta(samples, "pos_vendor") if samples else 0.0
     extent_delta = _maximum_delta(samples, "half_extent_vendor") if samples else 0.0
@@ -115,6 +120,7 @@ def analyze_samples(
             "half_extent_m": list(median_extent),
             "position_m": list(median_pos),
             "timestamps": timestamps,
+            "received_at_unix_s": [sample.received_at_unix_s for sample in samples],
         },
         "rejection_reasons": reasons,
         "sample_count": len(samples),
