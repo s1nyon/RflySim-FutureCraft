@@ -14,6 +14,7 @@
 | `scripts/run_live_ego_swarm_dual.bat` | 当前双机 EGO-Swarm runner。 |
 | `scripts/run_live_fastlio_dual.bat` | 当前双机 sensor/Faster-LIO readiness runner。 |
 | `scripts/run_live_slam_ego_swarm_flight.bat` | 显式 simulation-only arming 的 PBL-1 flight runner。 |
+| `scripts/validate_asset_calibration.ps1` | 官方模型标定场的纯离线契约与 DryRun 验证入口。 |
 | `scripts/validate_lifecycle.ps1` | Lifecycle 离线回归入口。 |
 | `scripts/validate_repository.ps1` | Repository、文档和结构 contract 总入口。 |
 | `scripts/validate_stage6c.ps1` | 当前 Stage 6C 核心离线门。 |
@@ -25,6 +26,13 @@
 
 | Path | Purpose |
 | --- | --- |
+| `scripts/calibration/__init__.py` | 官方模型标定 Python package marker。 |
+| `scripts/calibration/asset_catalog.py` | 官方模型候选目录、schema 与 checksum 纯校验。 |
+| `scripts/calibration/calibration_artifacts.py` | 标定场确定性 JSON/SVG 产物生成器。 |
+| `scripts/calibration/calibration_cli.py` | DryRun-first 标定命令分发器。 |
+| `scripts/calibration/calibration_geometry.py` | 标定站位、净距与 ENU/NED 坐标纯几何。 |
+| `scripts/calibration/object_metadata.py` | RflySim `BoxExtent` 元数据标准化与证据状态分析。 |
+| `scripts/calibration/ue_asset_loader.py` | 仅作用于标定 owned ID 的官方模型加载/移除实现。 |
 | `scripts/deploy_predicted_course_terrain.bat` | 当前赛道 terrain 部署 helper。 |
 | `scripts/generate_predicted_narrow_course.bat` | 当前赛道确定性生成 helper。 |
 | `scripts/load_predicted_narrow_course.bat` | 当前 RflySim 动态赛道加载 helper。 |
