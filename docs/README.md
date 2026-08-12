@@ -8,6 +8,7 @@
 - [`incidents/`](incidents/)：已解决或历史故障、根因和可复用诊断经验。
 - [`decisions/`](decisions/)：已接受工程决策及其边界。
 - [`reference/`](reference/)：外部权威材料，包括[正式参赛指南](reference/competition-guide-2026.pdf)。
+- [`runbooks/official-asset-metadata-calibration.md`](runbooks/official-asset-metadata-calibration.md)：官方模型标定场的离线与受控 T1 元数据操作手册；不定义 Current Truth。
 - [`superpowers/`](superpowers/)：设计和实施计划记录；保留原位置，不作为 Current Truth。
 
 当前主路线入口：[Competition Capability Roadmap](current/competition-roadmap.md)。
