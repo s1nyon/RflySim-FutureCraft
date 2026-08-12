@@ -12,6 +12,7 @@ from pathlib import Path
 
 from asset_catalog import load_catalog
 from calibration_artifacts import generate_artifacts
+from calibration_geometry import enu_to_ned, yaw_enu_to_ned
 from object_metadata import (
     MetadataCaptureError,
     MetadataValidationError,
@@ -72,7 +73,8 @@ def _showcase_dry_receipt(action, catalog, placements):
             "class_id": item.class_id, "expected_dimensions_m": list(item.expected_dimensions),
             "fit_ground": True, "key": item.key, "measured_dimensions_m": list(item.measured_dimensions),
             "object_id": item.object_id, "position_enu_m": list(item.position_enu),
-            "scale": list(item.scale),
+            "position_ned_m": list(enu_to_ned(item.position_enu)), "scale": list(item.scale),
+            "yaw_enu_rad": item.yaw_enu_rad, "yaw_ned_rad": yaw_enu_to_ned(item.yaw_enu_rad),
         } for item in placements]
     return receipt
 

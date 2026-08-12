@@ -26,6 +26,9 @@ def main():
     assert receipt["mode"] == "dry-run" and receipt["map_change"] is False
     assert len(receipt["placements"]) == 10
     assert receipt["placements"][0]["fit_ground"] is True
+    assert receipt["placements"][0]["position_ned_m"] == [-5.0, 11.0, -0.0]
+    assert receipt["placements"][0]["yaw_enu_rad"] == 0.0
+    assert receipt["placements"][0]["yaw_ned_rad"] == 1.5707963267948966
 
     class Client:
         def __init__(self): self.created = []; self.destroyed = []

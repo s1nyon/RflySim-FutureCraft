@@ -85,5 +85,38 @@ This phase cannot produce `LIDAR_MEASURED`, `RGB_MEASURED`, or `ROLE_APPROVED`.
 It does not prove collision geometry, sensor visibility, dynamic behavior,
 official-map equivalence, flight safety, or competition readiness.
 
+## Near-Field Visual Showcase
+
+Use this overlay when the distant calibration grid is not visible from the
+normal development view. It keeps `SLAMScene` and the predicted course, places
+only IDs `13000..13009` in two rows at ENU x `11/13 m`, and stays outside the
+stationary UAV spawn exclusion. It never authorizes flight.
+
+Generate and review the plan before loading:
+
+```powershell
+D:\PX4PSP\Python38\python.exe scripts\calibration\calibration_cli.py showcase-generate --catalog config\calibration\official_asset_candidates_v1.json --showcase config\calibration\official_asset_showcase_v1.json --output generated\calibration\official_asset_showcase_v1
+D:\PX4PSP\Python38\python.exe scripts\calibration\calibration_cli.py showcase-load --catalog config\calibration\official_asset_candidates_v1.json --showcase config\calibration\official_asset_showcase_v1.json --window-id 0
+```
+
+The DryRun must report `map_change=false`, `arming_request=false`, exact IDs
+`13000..13009`, `fit_ground=true`, and the measured/expected dimensions. Live
+loading requires a current manifest-owned RflySim3D process, no unknown
+suspicious process, `GUI_READY=true`, `COURSE_READY=true`, and `SLAMScene` in
+the recorded command line. ROS/MAVROS failure blocks all flight work, but does
+not block this bounded UE-only overlay when those GUI/course gates pass.
+
+After review, load window 0 only:
+
+```powershell
+D:\PX4PSP\Python38\python.exe scripts\calibration\calibration_cli.py showcase-load --catalog config\calibration\official_asset_candidates_v1.json --showcase config\calibration\official_asset_showcase_v1.json --window-id 0 --execute
+```
+
+Remove only the showcase IDs after visual confirmation:
+
+```powershell
+D:\PX4PSP\Python38\python.exe scripts\calibration\calibration_cli.py showcase-remove --catalog config\calibration\official_asset_candidates_v1.json --showcase config\calibration\official_asset_showcase_v1.json --window-id 0 --execute
+```
+
 The next independent phase measures Mid360 and RGB behavior and tests the
 ClassID 43 image mechanism. It must retain the same no-arm and owned-ID rules.
