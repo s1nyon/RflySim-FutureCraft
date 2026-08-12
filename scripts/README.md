@@ -32,6 +32,7 @@
 | `scripts/calibration/calibration_cli.py` | DryRun-first 标定命令分发器。 |
 | `scripts/calibration/calibration_geometry.py` | 标定站位、净距与 ENU/NED 坐标纯几何。 |
 | `scripts/calibration/object_metadata.py` | RflySim `BoxExtent` 元数据标准化与证据状态分析。 |
+| `scripts/calibration/showcase_geometry.py` | 近场官方模型展台规格、缩放与出生点净距纯几何。 |
 | `scripts/calibration/ue_asset_loader.py` | 仅作用于标定 owned ID 的官方模型加载/移除实现。 |
 | `scripts/deploy_predicted_course_terrain.bat` | 当前赛道 terrain 部署 helper。 |
 | `scripts/generate_predicted_narrow_course.bat` | 当前赛道确定性生成 helper。 |

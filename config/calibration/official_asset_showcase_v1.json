@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "showcase_name": "official_asset_showcase_v1",
+  "frame": "ENU",
+  "target_longest_edge_m": 1.2,
+  "pillar_target_height_m": 1.5,
+  "scale_clamp": [0.02, 2.0],
+  "spawn_centers": [[16.0, -0.7], [16.0, 0.7]],
+  "spawn_exclusion_radius_m": 3.0,
+  "evidence": {"state": "EXPLORATORY_T1", "run_id": "t1-debug-20260812T180649Z"},
+  "stations": [
+    {"key": "pillar_813", "position": [11.0, -5.0, 0.0], "measured_dimensions": [1.0, 1.0, 3.0]},
+    {"key": "box_815", "position": [11.0, -2.5, 0.0], "measured_dimensions": [0.06190988048911095, 1.308843970298767, 1.308843970298767]},
+    {"key": "box_818", "position": [11.0, 0.0, 0.0], "measured_dimensions": [0.699999988079071, 0.48776140809059143, 1.0]},
+    {"key": "carton_500", "position": [11.0, 2.5, 0.0], "measured_dimensions": [0.5078689455986023, 0.5081995725631714, 0.5078688859939575]},
+    {"key": "carton_750", "position": [11.0, 5.0, 0.0], "measured_dimensions": [0.7510632276535034, 0.7515521049499512, 0.7510631680488586]},
+    {"key": "carton_1000", "position": [13.0, -5.0, 0.0], "measured_dimensions": [1.001417636871338, 1.0020694732666016, 1.0014175176620483]},
+    {"key": "ring_target_150", "position": [13.0, -2.5, 0.0], "measured_dimensions": [0.5000042915344238, 9.594979286193848, 27.63115882873535]},
+    {"key": "quad_target_151", "position": [13.0, 0.0, 0.0], "measured_dimensions": [0.5000069737434387, 20.500001907348633, 40.25]},
+    {"key": "aruco_custom_43", "position": [13.0, 2.5, 0.0], "measured_dimensions": [0.00019158005306962878, 1.2000001668930054, 1.1999999284744263]},
+    {"key": "luminous_light_60", "position": [13.0, 5.0, 0.0], "measured_dimensions": [1.0, 1.0, 1.0]}
+  ]
+}
