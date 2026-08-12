@@ -17,6 +17,7 @@ from object_metadata import (
     MetadataValidationError,
     analyze_samples,
     build_metadata_profile,
+    close_metadata_receiver,
     initialize_metadata_receiver,
     record_candidate,
 )
@@ -68,31 +69,34 @@ def _record(client, catalog, output, samples, timeout_s, run_id, stack_instance_
     initialize_metadata_receiver(client)
     states = []
     profile_paths = []
-    for candidate in catalog.assets:
-        try:
-            captured = record_candidate(client, candidate, samples, timeout_s)
-            analysis = analyze_samples(candidate, captured, placement_plane_z=catalog.placement_z)
-        except (MetadataCaptureError, MetadataValidationError) as exc:
-            analysis = analyze_samples(
-                candidate, getattr(exc, "samples", []), placement_plane_z=catalog.placement_z
+    try:
+        for candidate in catalog.assets:
+            try:
+                captured = record_candidate(client, candidate, samples, timeout_s)
+                analysis = analyze_samples(candidate, captured, placement_plane_z=catalog.placement_z)
+            except (MetadataCaptureError, MetadataValidationError) as exc:
+                analysis = analyze_samples(
+                    candidate, getattr(exc, "samples", []), placement_plane_z=catalog.placement_z
+                )
+                reason = "CAPTURE_TIMEOUT" if isinstance(exc, MetadataCaptureError) else "INVALID_METADATA"
+                analysis["rejection_reasons"].insert(0, reason)
+                analysis["capture_error"] = str(exc)
+            profile = build_metadata_profile(
+                candidate,
+                analysis,
+                {
+                    "catalog_sha256": catalog.sha256,
+                    "captured_at_unix_s": time.time(),
+                    "run_id": run_id,
+                    "stack_instance_id": stack_instance_id,
+                },
             )
-            reason = "CAPTURE_TIMEOUT" if isinstance(exc, MetadataCaptureError) else "INVALID_METADATA"
-            analysis["rejection_reasons"].insert(0, reason)
-            analysis["capture_error"] = str(exc)
-        profile = build_metadata_profile(
-            candidate,
-            analysis,
-            {
-                "catalog_sha256": catalog.sha256,
-                "captured_at_unix_s": time.time(),
-                "run_id": run_id,
-                "stack_instance_id": stack_instance_id,
-            },
-        )
-        path = output / "{}.json".format(candidate.key)
-        _write_json(path, profile)
-        profile_paths.append(path.name)
-        states.append(profile["evidence_state"])
+            path = output / "{}.json".format(candidate.key)
+            _write_json(path, profile)
+            profile_paths.append(path.name)
+            states.append(profile["evidence_state"])
+    finally:
+        close_metadata_receiver(client)
     manifest = {
         "arming_request": False,
         "catalog_sha256": catalog.sha256,

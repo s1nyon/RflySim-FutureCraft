@@ -95,8 +95,11 @@ def analyze_samples(
     if len(samples) < 3:
         reasons.append("INSUFFICIENT_SAMPLES")
     timestamps = [sample.timestamp for sample in samples]
-    if any(second <= first for first, second in zip(timestamps, timestamps[1:])):
-        reasons.append("NON_MONOTONIC_TIMESTAMPS")
+    if any(second < first for first, second in zip(timestamps, timestamps[1:])):
+        reasons.append("DECREASING_VENDOR_TIMESTAMPS")
+    receipt_times = [sample.received_at_unix_s for sample in samples]
+    if any(second <= first for first, second in zip(receipt_times, receipt_times[1:])):
+        reasons.append("NON_MONOTONIC_RECEIPT_TIMES")
     now = time.time() if now is None else float(now)
     if not samples or now - samples[-1].received_at_unix_s > stale_after_s:
         reasons.append("STALE_FINAL_SAMPLE")
@@ -160,6 +163,12 @@ def build_metadata_profile(candidate: AssetCandidate, analysis: Dict[str, object
 
 def initialize_metadata_receiver(client) -> None:
     client.initUE4MsgRec()
+
+
+def close_metadata_receiver(client) -> None:
+    end_receiver = getattr(client, "endUE4MsgRec", None)
+    if callable(end_receiver):
+        end_receiver()
 
 
 def record_candidate(client, candidate: AssetCandidate, sample_count: int, timeout_s: float, poll_s: float = 0.01) -> List[MetadataSample]:

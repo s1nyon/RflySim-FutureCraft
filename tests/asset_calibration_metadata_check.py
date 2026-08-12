@@ -35,6 +35,7 @@ class FakeClient:
         self.requested = []
         self.initialized = False
         self.initialize_count = 0
+        self.shutdown_count = 0
 
     def reqCamCoptObj(self, kind, object_id):
         self.requested.append((kind, object_id))
@@ -42,6 +43,9 @@ class FakeClient:
     def initUE4MsgRec(self):
         self.initialized = True
         self.initialize_count += 1
+
+    def endUE4MsgRec(self):
+        self.shutdown_count += 1
 
     def getCamCoptObj(self, kind, object_id):
         if not self.raws:
@@ -76,6 +80,11 @@ def main():
     assert analysis["sample_count"] == 5
     assert analysis["maximum_position_delta_m"] == 0.0
     assert analysis["maximum_extent_delta_m"] == 0.0
+    static_samples = [
+        metadata.normalize_sample(Raw(10.0), received_at_unix_s=base + index * 0.1)
+        for index in range(3)
+    ]
+    assert metadata.analyze_samples(candidate, static_samples, now=base + 0.3)["evidence_state"] == "METADATA_MEASURED"
     profile = metadata.build_metadata_profile(candidate, analysis, {"run_id": "run-1", "stack_instance_id": "stack-1"})
     assert profile["schema_version"] == 1
     assert profile["evidence_state"] == "METADATA_MEASURED"
@@ -87,7 +96,7 @@ def main():
 
     rejected_cases = [
         (samples[:2], "INSUFFICIENT_SAMPLES"),
-        ([metadata.normalize_sample(Raw(base + value)) for value in (0.2, 0.1, 0.3)], "NON_MONOTONIC_TIMESTAMPS"),
+        ([metadata.normalize_sample(Raw(base + value)) for value in (0.2, 0.1, 0.3)], "DECREASING_VENDOR_TIMESTAMPS"),
         ([metadata.normalize_sample(Raw(value), received_at_unix_s=base - 20 + value) for value in (0, 0.1, 0.2)], "STALE_FINAL_SAMPLE"),
         ([metadata.normalize_sample(Raw(base + value, extent=(0.25 + value, 0.5, 0.75))) for value in (0, 0.1, 0.2)], "INCONSISTENT_EXTENT"),
     ]

@@ -27,12 +27,16 @@ def load_cli(path):
 class NoMetadataClient:
     def __init__(self):
         self.initialize_count = 0
+        self.shutdown_count = 0
 
     def reqCamCoptObj(self, *_args):
         pass
 
     def initUE4MsgRec(self):
         self.initialize_count += 1
+
+    def endUE4MsgRec(self):
+        self.shutdown_count += 1
 
     def getCamCoptObj(self, *_args):
         return None
@@ -94,6 +98,7 @@ def main():
         assert len(manifest["profiles"]) == len(catalog.assets)
         assert manifest["states"] == ["REJECTED"] * len(catalog.assets)
         assert no_metadata.initialize_count == 1
+        assert no_metadata.shutdown_count == 1
         for profile_name in manifest["profiles"]:
             profile = json.loads((rejected_dir / profile_name).read_text(encoding="utf-8"))
             assert "CAPTURE_TIMEOUT" in profile["measurements"]["rejection_reasons"]
