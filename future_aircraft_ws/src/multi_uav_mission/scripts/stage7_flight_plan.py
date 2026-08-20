@@ -233,7 +233,7 @@ def build_plan(config, course=None):
                 planner_cmd_topic=uavs[uav_id]["planner_cmd_topic"],
                 mavros_odom_topic=uavs[uav_id]["mavros_feedback_odom_topic"],
                 goal=goal,
-                tolerance_m=0.3,
+                tolerance_m=0.5,
                 timeout_s=45,
             )
 

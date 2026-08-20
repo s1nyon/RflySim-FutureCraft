@@ -56,6 +56,10 @@ def main() -> int:
     verify_actions = [
         action for action in navigation if action["action"] == "verify_planned_navigation"
     ]
+    assert all(
+        abs(float(action["tolerance_m"]) - 0.5) <= 1e-9
+        for action in verify_actions
+    )
     assert len(publish_actions) == len(verify_actions)
     assert [
         (action["uav"], tuple(round(float(action["goal"][axis]), 3) for axis in ("x", "y", "z")))
