@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import math
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -48,34 +49,67 @@ def main() -> int:
     navigation = [
         action for action in plan["actions"] if action["stage"] == "collaborative_navigate"
     ]
-    assert len(navigation) == 28
-    for index in range(0, len(navigation), 2):
-        publish, verify = navigation[index : index + 2]
-        assert publish["action"] == "publish_planner_goal"
-        assert verify["action"] == "verify_planned_navigation"
-        assert publish["uav"] == verify["uav"]
-        assert publish["goal"] == verify["goal"]
-    assert [action["uav"] for action in navigation[:14]] == ["uav1"] * 14
-    assert [action["uav"] for action in navigation[14:]] == ["uav2"] * 14
+    assert len(navigation) > 28
+    publish_actions = [
+        action for action in navigation if action["action"] == "publish_planner_goal"
+    ]
+    verify_actions = [
+        action for action in navigation if action["action"] == "verify_planned_navigation"
+    ]
+    assert len(publish_actions) == len(verify_actions)
+    assert [
+        (action["uav"], tuple(round(float(action["goal"][axis]), 3) for axis in ("x", "y", "z")))
+        for action in publish_actions
+    ] == [
+        (action["uav"], tuple(round(float(action["goal"][axis]), 3) for axis in ("x", "y", "z")))
+        for action in verify_actions
+    ]
+    uav1_goals = rounded_goals(publish_actions, "uav1")
+    uav2_goals = rounded_goals(publish_actions, "uav2")
+    assert len(uav1_goals) == len(uav2_goals)
+    assert len(uav1_goals) >= 15
+    assert uav1_goals[-1] == (16.0, 4.6, 1.0)
+    assert uav2_goals[-1] == (16.0, 5.2, 1.0)
 
-    assert rounded_goals(navigation, "uav1") == [
-        (2.5, 0.7, 1.0),
-        (7.0, 0.7, 1.0),
-        (7.9, 1.6, 1.0),
-        (7.9, 4.7, 1.0),
-        (8.8, 5.6, 1.0),
-        (13.3, 5.6, 1.0),
-        (16.0, 4.6, 1.0),
+    poses = {item["name"]: item["position"] for item in course["takeoff_poses"]}
+    shared_uav1 = [
+        (goal[0] + poses["uav1"][0], goal[1] + poses["uav1"][1])
+        for goal in uav1_goals[:-1]
     ]
-    assert rounded_goals(navigation, "uav2") == [
-        (2.5, -0.7, 1.0),
-        (7.0, -0.7, 1.0),
-        (7.9, 0.2, 1.0),
-        (7.9, 3.3, 1.0),
-        (8.8, 4.2, 1.0),
-        (13.3, 4.2, 1.0),
-        (16.0, 5.2, 1.0),
+    shared_uav2 = [
+        (goal[0] + poses["uav2"][0], goal[1] + poses["uav2"][1])
+        for goal in uav2_goals[:-1]
     ]
+    assert all(
+        math.hypot(first[0] - second[0], first[1] - second[1]) <= 0.002
+        for first, second in zip(shared_uav1, shared_uav2)
+    )
+    gaps = [
+        math.hypot(second[0] - first[0], second[1] - first[1])
+        for first, second in zip(shared_uav1, shared_uav1[1:])
+    ]
+    assert gaps
+    assert min(gaps) >= 0.9
+    assert max(gaps) <= 1.35
+
+    # UAV1 enters first. Every shared-route cycle then advances UAV1 one
+    # sample before sending UAV2 to the sample immediately behind it.
+    assert [item["uav"] for item in publish_actions[:3]] == ["uav1", "uav1", "uav2"]
+    uav1_shared_index = {goal: index for index, goal in enumerate(uav1_goals[:-1])}
+    uav2_shared_index = {goal: index for index, goal in enumerate(uav2_goals[:-1])}
+    for index in range(1, len(shared_uav1)):
+        leader = next(
+            action for action in publish_actions
+            if action["uav"] == "uav1"
+            and rounded_goals([action], "uav1")[0] == uav1_goals[index]
+        )
+        follower = next(
+            action for action in publish_actions
+            if action["uav"] == "uav2"
+            and rounded_goals([action], "uav2")[0] == uav2_goals[index - 1]
+        )
+        assert publish_actions.index(leader) < publish_actions.index(follower)
+        assert uav1_shared_index[uav1_goals[index]] - uav2_shared_index[uav2_goals[index - 1]] == 1
 
     landing = [
         action
@@ -89,6 +123,8 @@ def main() -> int:
     launch_args = {item.attrib["name"]: item.attrib.get("default") for item in launch.findall("arg")}
     assert float(launch_args["map_size_x"]) >= 40.0
     assert float(launch_args["map_size_y"]) >= 20.0
+    assert float(launch_args["max_vel"]) == 0.6
+    assert float(launch_args["max_acc"]) == 0.8
     print("stage8 course flight plan: PASS")
     return 0
 

@@ -5,7 +5,82 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
+
+
+def _directed_arc_sweep(start_angle, end_angle, turn):
+    if turn == "left":
+        return (end_angle - start_angle) % (2.0 * math.pi)
+    if turn == "right":
+        return -((start_angle - end_angle) % (2.0 * math.pi))
+    raise ValueError("arc turn must be left or right")
+
+
+def _sample_centreline(course, target_spacing_m=1.1):
+    centreline = course["centreline"]
+    if not centreline:
+        raise ValueError("course flight requires a non-empty centreline")
+    if target_spacing_m <= 0.0:
+        raise ValueError("target spacing must be positive")
+
+    segments = []
+    total_length = 0.0
+    for item in centreline:
+        start = tuple(float(value) for value in item["start"])
+        end = tuple(float(value) for value in item["end"])
+        if item["kind"] == "line":
+            length = math.hypot(end[0] - start[0], end[1] - start[1])
+            segment = {"kind": "line", "start": start, "end": end, "length": length}
+        elif item["kind"] == "arc":
+            center = tuple(float(value) for value in item["center"])
+            radius = float(item["radius"])
+            start_angle = math.atan2(start[1] - center[1], start[0] - center[0])
+            end_angle = math.atan2(end[1] - center[1], end[0] - center[0])
+            sweep = _directed_arc_sweep(start_angle, end_angle, item["turn"])
+            length = abs(sweep) * radius
+            segment = {
+                "kind": "arc",
+                "center": center,
+                "radius": radius,
+                "start_angle": start_angle,
+                "sweep": sweep,
+                "length": length,
+            }
+        else:
+            raise ValueError("centreline segment kind must be line or arc")
+        if length <= 0.0:
+            raise ValueError("centreline segments must have positive length")
+        total_length += length
+        segments.append(segment)
+
+    interval_count = max(1, int(math.ceil(total_length / target_spacing_m)))
+    interval_length = total_length / interval_count
+    samples = []
+    for sample_index in range(interval_count + 1):
+        distance = min(total_length, sample_index * interval_length)
+        traversed = 0.0
+        for segment_index, segment in enumerate(segments):
+            is_last = segment_index == len(segments) - 1
+            if distance <= traversed + segment["length"] or is_last:
+                ratio = min(1.0, max(0.0, (distance - traversed) / segment["length"]))
+                if segment["kind"] == "line":
+                    start = segment["start"]
+                    end = segment["end"]
+                    point = [
+                        start[0] + ratio * (end[0] - start[0]),
+                        start[1] + ratio * (end[1] - start[1]),
+                    ]
+                else:
+                    angle = segment["start_angle"] + ratio * segment["sweep"]
+                    point = [
+                        segment["center"][0] + segment["radius"] * math.cos(angle),
+                        segment["center"][1] + segment["radius"] * math.sin(angle),
+                    ]
+                samples.append(point)
+                break
+            traversed += segment["length"]
+    return samples
 
 
 def _course_routes(course):
@@ -13,10 +88,7 @@ def _course_routes(course):
     platforms = course["landing_platforms"]
     if set(poses) != {"uav1", "uav2"} or len(platforms) < 2:
         raise ValueError("course flight requires uav1/uav2 poses and two landing platforms")
-    centreline = course["centreline"]
-    if not centreline:
-        raise ValueError("course flight requires a non-empty centreline")
-    world_waypoints = [centreline[0]["start"]] + [item["end"] for item in centreline]
+    world_waypoints = _sample_centreline(course)
     routes = {}
     for index, uav_id in enumerate(("uav1", "uav2")):
         origin = poses[uav_id]
@@ -143,26 +215,43 @@ def build_plan(config, course=None):
                 timeout_s=30,
             )
     else:
-        for uav_id in ("uav1", "uav2"):
-            for goal in navigation_routes[uav_id]:
-                add(
-                    "collaborative_navigate",
-                    "publish_planner_goal",
-                    uav_id,
-                    topic=uavs[uav_id]["planner_goal_topic"],
-                    goal=goal,
-                    timeout_s=5,
-                )
-                add(
-                    "collaborative_navigate",
-                    "verify_planned_navigation",
-                    uav_id,
-                    planner_cmd_topic=uavs[uav_id]["planner_cmd_topic"],
-                    mavros_odom_topic=uavs[uav_id]["mavros_feedback_odom_topic"],
-                    goal=goal,
-                    tolerance_m=0.3,
-                    timeout_s=45,
-                )
+        def publish_goal(uav_id, goal):
+            add(
+                "collaborative_navigate",
+                "publish_planner_goal",
+                uav_id,
+                topic=uavs[uav_id]["planner_goal_topic"],
+                goal=goal,
+                timeout_s=5,
+            )
+
+        def verify_goal(uav_id, goal):
+            add(
+                "collaborative_navigate",
+                "verify_planned_navigation",
+                uav_id,
+                planner_cmd_topic=uavs[uav_id]["planner_cmd_topic"],
+                mavros_odom_topic=uavs[uav_id]["mavros_feedback_odom_topic"],
+                goal=goal,
+                tolerance_m=0.3,
+                timeout_s=45,
+            )
+
+        shared_count = len(navigation_routes["uav1"]) - 1
+        publish_goal("uav1", navigation_routes["uav1"][0])
+        verify_goal("uav1", navigation_routes["uav1"][0])
+        for index in range(1, shared_count):
+            publish_goal("uav1", navigation_routes["uav1"][index])
+            publish_goal("uav2", navigation_routes["uav2"][index - 1])
+            verify_goal("uav1", navigation_routes["uav1"][index])
+            verify_goal("uav2", navigation_routes["uav2"][index - 1])
+
+        publish_goal("uav1", navigation_routes["uav1"][-1])
+        publish_goal("uav2", navigation_routes["uav2"][shared_count - 1])
+        verify_goal("uav1", navigation_routes["uav1"][-1])
+        verify_goal("uav2", navigation_routes["uav2"][shared_count - 1])
+        publish_goal("uav2", navigation_routes["uav2"][-1])
+        verify_goal("uav2", navigation_routes["uav2"][-1])
     for uav_id in ("uav1", "uav2"):
         add(
             "aruco_landing",
