@@ -200,6 +200,15 @@ def main() -> int:
         if "Start stack-owned CopterSims" not in text:
             errors.append("generated wrapper missing the stack-owned CopterSim startup message")
 
+        # 7. Interactive-only `choice /T` must be replaced by the
+        # console-compatible `timeout /T /nobreak` (choice /T hangs in detached
+        # consoles that cannot process keyboard input).
+        if re_search(text, r"choice\s+/t\s+\d+\s+/d\s+y\s+/n"):
+            errors.append("generated wrapper still uses choice /t (hangs in detached consoles)")
+        for seconds in ("2", "3", "5"):
+            if f"timeout /t {seconds} /nobreak" not in text:
+                errors.append(f"generated wrapper missing timeout /t {seconds} /nobreak")
+
         if errors:
             for error in errors:
                 print(f"[FAIL] {error}", file=sys.stderr)

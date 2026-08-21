@@ -150,6 +150,11 @@ $src = $src.Replace('ECHO Kill all CopterSims', 'ECHO Start stack-owned CopterSi
 $src = $src.Replace('tasklist|find /i "QGroundControl.exe" && taskkill /f /im "QGroundControl.exe"', 'rem [STACK] name-based kill removed; report unknown instead of killing')
 $src = $src.Replace('tasklist|find /i "RflySim3D.exe" && taskkill /f /im "RflySim3D.exe"', 'rem [STACK] name-based kill removed; report unknown instead of killing')
 
+# choice /T relies on interactive console input processing and hangs in detached
+# consoles; timeout /T /nobreak is the console-compatible equivalent and changes
+# no safety, ownership, or fail-closed semantics.
+$src = [regex]::Replace($src, '(?m)^(\s*)choice\s+/t\s+(\d+)\s+/d\s+y\s+/n(.*)$', '$1timeout /t $2 /nobreak$3')
+
 # UAVSITL.py and any other %~dp0-relative resource must resolve against the real
 # 28com_SITL source directory, never against the generated wrapper's location.
 $src = $src.Replace('%~dp0\', '%UAV_SITL_DIR%\')
