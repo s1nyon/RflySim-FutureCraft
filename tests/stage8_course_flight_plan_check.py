@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Behavior checks for the Stage 8 two-UAV tunnel flight plan."""
+"""Behavior checks for the Stage 8 two-UAV tunnel flight plan.
+
+The continuous-tunnel contract is: intermediate planner targets are
+look-ahead points ahead of a fly-through checkpoint (target != checkpoint),
+the final landing platform is the only terminal goal, and the follower is
+progress-spaced by arc length instead of a fixed waypoint index.
+"""
 
 from __future__ import annotations
 
@@ -7,11 +13,13 @@ import argparse
 import importlib.util
 import json
 import math
+import sys
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
 
 def load_module(path: Path):
+    sys.path.insert(0, str(path.parent))
     spec = importlib.util.spec_from_file_location("stage8_course_flight_plan", path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load flight plan module: {path}")
@@ -20,12 +28,8 @@ def load_module(path: Path):
     return module
 
 
-def rounded_goals(actions, uav_id):
-    return [
-        tuple(round(float(action["goal"][axis]), 3) for axis in ("x", "y", "z"))
-        for action in actions
-        if action["action"] == "publish_planner_goal" and action["uav"] == uav_id
-    ]
+def rounded_goal(goal):
+    return tuple(round(float(goal[axis]), 3) for axis in ("x", "y", "z"))
 
 
 def main() -> int:
@@ -46,78 +50,76 @@ def main() -> int:
         "min_x": -1.1, "max_x": 17.0, "min_y": -2.0, "max_y": 7.0,
         "min_z": -0.5, "max_z": 2.0, "max_speed_mps": 2.0, "max_odom_age_s": 0.5,
     }
-    # The failed flight recovered from its -1.057 m takeoff overshoot; it must
-    # remain inside the protected envelope instead of forcing AUTO.LAND.
     assert -1.057 > plan["geofence"]["min_x"]
+
     navigation = [
         action for action in plan["actions"] if action["stage"] == "collaborative_navigate"
     ]
-    assert len(navigation) > 28
-    publish_actions = [
-        action for action in navigation if action["action"] == "publish_planner_goal"
-    ]
-    verify_actions = [
-        action for action in navigation if action["action"] == "verify_planned_navigation"
-    ]
-    assert len(publish_actions) == len(verify_actions)
-    assert [
-        (action["uav"], tuple(round(float(action["goal"][axis]), 3) for axis in ("x", "y", "z")))
-        for action in publish_actions
-    ] == [
-        (action["uav"], tuple(round(float(action["goal"][axis]), 3) for axis in ("x", "y", "z")))
-        for action in verify_actions
-    ]
-    uav1_goals = rounded_goals(publish_actions, "uav1")
-    uav2_goals = rounded_goals(publish_actions, "uav2")
-    assert len(uav1_goals) == len(uav2_goals)
-    assert 8 <= len(uav1_goals) <= 10
-    assert uav1_goals[-1] == (16.0, 4.6, 1.0)
-    assert uav2_goals[-1] == (16.0, 5.2, 1.0)
+    publishes = [action for action in navigation if action["action"] == "publish_planner_goal"]
+    verifies = [action for action in navigation if action["action"] == "verify_planned_navigation"]
 
-    poses = {item["name"]: item["position"] for item in course["takeoff_poses"]}
-    shared_uav1 = [
-        (goal[0] + poses["uav1"][0], goal[1] + poses["uav1"][1])
-        for goal in uav1_goals[:-1]
-    ]
-    shared_uav2 = [
-        (goal[0] + poses["uav2"][0], goal[1] + poses["uav2"][1])
-        for goal in uav2_goals[:-1]
-    ]
-    assert all(
-        math.hypot(first[0] - second[0], first[1] - second[1]) <= 0.002
-        for first, second in zip(shared_uav1, shared_uav2)
-    )
-    gaps = [
-        math.hypot(second[0] - first[0], second[1] - first[1])
-        for first, second in zip(shared_uav1, shared_uav1[1:])
-    ]
-    assert gaps
-    assert min(gaps) >= 1.7
-    assert max(gaps) <= 2.1
+    uav1_publishes = [action for action in publishes if action["uav"] == "uav1"]
+    uav2_publishes = [action for action in publishes if action["uav"] == "uav2"]
+    uav1_verifies = [action for action in verifies if action["uav"] == "uav1"]
+    uav2_verifies = [action for action in verifies if action["uav"] == "uav2"]
+
+    assert len(uav1_publishes) == len(uav1_verifies)
+    assert len(uav2_publishes) == len(uav2_verifies)
+    assert len(uav1_publishes) > len(uav2_publishes)
 
     for uav_id in ("uav1", "uav2"):
-        uav_verifies = [action for action in verify_actions if action["uav"] == uav_id]
-        assert all(abs(float(action["tolerance_m"]) - 0.5) <= 1e-9 for action in uav_verifies[:-1])
-        assert abs(float(uav_verifies[-1]["tolerance_m"]) - 0.2) <= 1e-9
+        pub = (uav1_publishes if uav_id == "uav1" else uav2_publishes)[-1]
+        ver = (uav1_verifies if uav_id == "uav1" else uav2_verifies)[-1]
+        assert pub.get("terminal") is True
+        assert ver.get("terminal") is True
+        assert rounded_goal(pub["goal"]) == rounded_goal(ver["goal"])
+        assert float(ver["tolerance_m"]) == 0.2
 
-    # UAV1 enters first. Every shared-route cycle then advances UAV1 one
-    # sample before sending UAV2 to the sample immediately behind it.
-    assert [item["uav"] for item in publish_actions[:3]] == ["uav1", "uav1", "uav2"]
-    uav1_shared_index = {goal: index for index, goal in enumerate(uav1_goals[:-1])}
-    uav2_shared_index = {goal: index for index, goal in enumerate(uav2_goals[:-1])}
-    for index in range(1, len(shared_uav1)):
-        leader = next(
-            action for action in publish_actions
-            if action["uav"] == "uav1"
-            and rounded_goals([action], "uav1")[0] == uav1_goals[index]
-        )
-        follower = next(
-            action for action in publish_actions
-            if action["uav"] == "uav2"
-            and rounded_goals([action], "uav2")[0] == uav2_goals[index - 1]
-        )
-        assert publish_actions.index(leader) < publish_actions.index(follower)
-        assert uav1_shared_index[uav1_goals[index]] - uav2_shared_index[uav2_goals[index - 1]] == 1
+    uav1_int_pub = [action for action in uav1_publishes if action.get("terminal") is not True]
+    uav2_int_pub = [action for action in uav2_publishes if action.get("terminal") is not True]
+    uav1_int_ver = [action for action in uav1_verifies if action.get("terminal") is not True]
+    uav2_int_ver = [action for action in uav2_verifies if action.get("terminal") is not True]
+
+    assert len(uav1_int_pub) == len(uav1_int_ver)
+    assert len(uav2_int_pub) == len(uav2_int_ver)
+    assert 18 <= len(uav1_int_pub) <= 30
+    assert len(uav2_int_pub) < len(uav1_int_pub)
+    assert uav1_int_pub[0]["checkpoint_s"] == 0.0
+
+    for pub, ver in zip(uav1_int_pub, uav1_int_ver):
+        assert pub["checkpoint_s"] == ver["checkpoint_s"]
+        assert pub["target_s"] > pub["checkpoint_s"]
+        assert abs((pub["target_s"] - pub["checkpoint_s"]) - pub["lookahead_m"]) <= 1e-9
+        assert rounded_goal(pub["goal"]) != rounded_goal(ver["goal"])
+        assert float(ver["tolerance_m"]) == 0.5
+        if pub["segment_kind"] == "arc":
+            assert abs(pub["lookahead_m"] - 1.0) <= 1e-9
+        else:
+            assert 0.0 < pub["lookahead_m"] <= 2.2 + 1e-9
+
+    for pub, ver in zip(uav2_int_pub, uav2_int_ver):
+        assert pub["checkpoint_s"] == ver["checkpoint_s"]
+        assert pub["target_s"] > pub["checkpoint_s"]
+        assert rounded_goal(pub["goal"]) != rounded_goal(ver["goal"])
+        assert float(ver["tolerance_m"]) == 0.5
+
+    assert any(pub["segment_kind"] == "arc" and abs(pub["lookahead_m"] - 1.0) <= 1e-9 for pub in uav1_int_pub)
+    assert any(pub["segment_kind"] == "line" and abs(pub["lookahead_m"] - 2.2) <= 1e-9 for pub in uav1_int_pub)
+
+    # Tandem progress spacing: follower checkpoints advance monotonically and
+    # stay at least 1.5 m of arc length behind the leader gate that triggered it.
+    follower_s = [pub["checkpoint_s"] for pub in uav2_int_pub]
+    assert follower_s == sorted(follower_s)
+    assert len(set(follower_s)) == len(follower_s)
+    for pub in uav2_int_pub:
+        assert pub["leader_checkpoint_s"] - pub["checkpoint_s"] >= 1.5 - 1e-9
+
+    # The follower target must never be published ahead of the leader target in
+    # arc-length terms for the same phase (it tracks the same corridor offset).
+    leader_by_phase = {pub["phase"]: pub for pub in uav1_int_pub}
+    for pub in uav2_int_pub:
+        leader = leader_by_phase[pub["phase"]]
+        assert pub["target_s"] <= leader["target_s"] + 1e-9
 
     landing = [
         action
@@ -130,7 +132,10 @@ def main() -> int:
         "uav1": {"x": 16.0, "y": 4.6, "z": 0.0},
         "uav2": {"x": 16.0, "y": 5.2, "z": 0.0},
     }
-    assert all(action["fallback_goal"] == expected_landing_goals[action["uav"]] for action in landing)
+    assert all(
+        rounded_goal(action["fallback_goal"]) == rounded_goal(expected_landing_goals[action["uav"]])
+        for action in landing
+    )
 
     launch = ET.parse(args.dual_launch).getroot()
     launch_args = {item.attrib["name"]: item.attrib.get("default") for item in launch.findall("arg")}

@@ -8,102 +8,7 @@ import json
 import math
 from pathlib import Path
 
-
-def _directed_arc_sweep(start_angle, end_angle, turn):
-    if turn == "left":
-        return (end_angle - start_angle) % (2.0 * math.pi)
-    if turn == "right":
-        return -((start_angle - end_angle) % (2.0 * math.pi))
-    raise ValueError("arc turn must be left or right")
-
-
-def _sample_centreline(course, target_spacing_m=2.0):
-    centreline = course["centreline"]
-    if not centreline:
-        raise ValueError("course flight requires a non-empty centreline")
-    if target_spacing_m <= 0.0:
-        raise ValueError("target spacing must be positive")
-
-    segments = []
-    total_length = 0.0
-    for item in centreline:
-        start = tuple(float(value) for value in item["start"])
-        end = tuple(float(value) for value in item["end"])
-        if item["kind"] == "line":
-            length = math.hypot(end[0] - start[0], end[1] - start[1])
-            segment = {"kind": "line", "start": start, "end": end, "length": length}
-        elif item["kind"] == "arc":
-            center = tuple(float(value) for value in item["center"])
-            radius = float(item["radius"])
-            start_angle = math.atan2(start[1] - center[1], start[0] - center[0])
-            end_angle = math.atan2(end[1] - center[1], end[0] - center[0])
-            sweep = _directed_arc_sweep(start_angle, end_angle, item["turn"])
-            length = abs(sweep) * radius
-            segment = {
-                "kind": "arc",
-                "center": center,
-                "radius": radius,
-                "start_angle": start_angle,
-                "sweep": sweep,
-                "length": length,
-            }
-        else:
-            raise ValueError("centreline segment kind must be line or arc")
-        if length <= 0.0:
-            raise ValueError("centreline segments must have positive length")
-        total_length += length
-        segments.append(segment)
-
-    interval_count = max(1, int(math.ceil(total_length / target_spacing_m)))
-    interval_length = total_length / interval_count
-    samples = []
-    for sample_index in range(interval_count + 1):
-        distance = min(total_length, sample_index * interval_length)
-        traversed = 0.0
-        for segment_index, segment in enumerate(segments):
-            is_last = segment_index == len(segments) - 1
-            if distance <= traversed + segment["length"] or is_last:
-                ratio = min(1.0, max(0.0, (distance - traversed) / segment["length"]))
-                if segment["kind"] == "line":
-                    start = segment["start"]
-                    end = segment["end"]
-                    point = [
-                        start[0] + ratio * (end[0] - start[0]),
-                        start[1] + ratio * (end[1] - start[1]),
-                    ]
-                else:
-                    angle = segment["start_angle"] + ratio * segment["sweep"]
-                    point = [
-                        segment["center"][0] + segment["radius"] * math.cos(angle),
-                        segment["center"][1] + segment["radius"] * math.sin(angle),
-                    ]
-                samples.append(point)
-                break
-            traversed += segment["length"]
-    return samples
-
-
-def _course_routes(course):
-    poses = {item["name"]: item["position"] for item in course["takeoff_poses"]}
-    platforms = course["landing_platforms"]
-    if set(poses) != {"uav1", "uav2"} or len(platforms) < 2:
-        raise ValueError("course flight requires uav1/uav2 poses and two landing platforms")
-    world_waypoints = _sample_centreline(course)
-    routes = {}
-    for index, uav_id in enumerate(("uav1", "uav2")):
-        origin = poses[uav_id]
-        destination = platforms[index]["center"]
-        points = world_waypoints + [destination[:2]]
-        routes[uav_id] = [
-            {
-                "x": float(point[0]) - float(origin[0]),
-                "y": float(point[1]) - float(origin[1]),
-                "z": 1.0,
-                "yaw": 0.0,
-            }
-            for point in points
-        ]
-    return routes
+import course_guidance
 
 
 def build_plan(config, course=None):
@@ -127,7 +32,6 @@ def build_plan(config, course=None):
             "uav1": {"x": 0.0, "y": 0.0, "z": 1.0, "yaw": 0.0},
             "uav2": {"x": 0.0, "y": 0.0, "z": 1.0, "yaw": 0.0},
         }
-        navigation_routes = _course_routes(course)
         mission_name = "stage8_predicted_course_tunnel_flight"
         geofence = {
             "min_x": -1.1, "max_x": 17.0,
@@ -215,7 +119,21 @@ def build_plan(config, course=None):
                 timeout_s=30,
             )
     else:
-        def publish_goal(uav_id, goal):
+        centreline = course_guidance.Centreline.from_course(course)
+        gates = course_guidance.build_flythrough_gates(course)
+        poses = {item["name"]: item["position"] for item in course["takeoff_poses"]}
+        platforms = course["landing_platforms"]
+
+        def local_goal(uav_id, point, z=1.0):
+            origin = poses[uav_id]
+            return {
+                "x": float(point[0]) - float(origin[0]),
+                "y": float(point[1]) - float(origin[1]),
+                "z": z,
+                "yaw": 0.0,
+            }
+
+        def publish_goal(uav_id, goal, **meta):
             add(
                 "collaborative_navigate",
                 "publish_planner_goal",
@@ -223,9 +141,10 @@ def build_plan(config, course=None):
                 topic=uavs[uav_id]["planner_goal_topic"],
                 goal=goal,
                 timeout_s=5,
+                **meta,
             )
 
-        def verify_goal(uav_id, goal, tolerance_m=0.5):
+        def verify_goal(uav_id, goal, tolerance_m, **meta):
             add(
                 "collaborative_navigate",
                 "verify_planned_navigation",
@@ -235,29 +154,104 @@ def build_plan(config, course=None):
                 goal=goal,
                 tolerance_m=tolerance_m,
                 timeout_s=45,
+                **meta,
             )
 
-        shared_count = len(navigation_routes["uav1"]) - 1
-        publish_goal("uav1", navigation_routes["uav1"][0])
-        verify_goal("uav1", navigation_routes["uav1"][0])
-        for index in range(1, shared_count):
-            publish_goal("uav1", navigation_routes["uav1"][index])
-            publish_goal("uav2", navigation_routes["uav2"][index - 1])
-            verify_goal("uav1", navigation_routes["uav1"][index])
-            verify_goal("uav2", navigation_routes["uav2"][index - 1])
+        gap_s = 1.5
+        leader_entries = []
+        follower_entries = []
+        last_follower_s = -math.inf
+        for phase, gate in enumerate(gates):
+            leader_entries.append(
+                {
+                    "phase": phase,
+                    "checkpoint_s": gate["s"],
+                    "target_s": gate["target_s"],
+                    "lookahead_m": gate["target_s"] - gate["s"],
+                    "segment_kind": centreline.kind_at_s(gate["s"]),
+                    "width": centreline.width_at_s(gate["s"]),
+                    "checkpoint": gate["checkpoint"],
+                    "target": gate["target"],
+                }
+            )
+            follower_s = gate["s"] - gap_s
+            if follower_s >= -1e-9:
+                follower_gate = course_guidance.gate_at_or_before(gates, follower_s)
+                if follower_gate is not None and follower_gate["s"] > last_follower_s + 1e-9:
+                    follower_entries.append(
+                        {
+                            "phase": phase,
+                            "leader_checkpoint_s": gate["s"],
+                            "checkpoint_s": follower_gate["s"],
+                            "target_s": follower_gate["target_s"],
+                            "lookahead_m": follower_gate["target_s"] - follower_gate["s"],
+                            "segment_kind": centreline.kind_at_s(follower_gate["s"]),
+                            "width": centreline.width_at_s(follower_gate["s"]),
+                            "checkpoint": follower_gate["checkpoint"],
+                            "target": follower_gate["target"],
+                        }
+                    )
+                    last_follower_s = follower_gate["s"]
 
-        publish_goal("uav1", navigation_routes["uav1"][-1])
-        publish_goal("uav2", navigation_routes["uav2"][shared_count - 1])
-        verify_goal("uav1", navigation_routes["uav1"][-1], tolerance_m=0.2)
-        verify_goal("uav2", navigation_routes["uav2"][shared_count - 1])
-        publish_goal("uav2", navigation_routes["uav2"][-1])
-        verify_goal("uav2", navigation_routes["uav2"][-1], tolerance_m=0.2)
+        follower_by_phase = {entry["phase"]: entry for entry in follower_entries}
+        for leader in leader_entries:
+            publish_goal(
+                "uav1",
+                local_goal("uav1", leader["target"]),
+                checkpoint_s=leader["checkpoint_s"],
+                target_s=leader["target_s"],
+                lookahead_m=leader["lookahead_m"],
+                segment_kind=leader["segment_kind"],
+                width=leader["width"],
+                phase=leader["phase"],
+                terminal=False,
+            )
+            follower = follower_by_phase.get(leader["phase"])
+            if follower is not None:
+                publish_goal(
+                    "uav2",
+                    local_goal("uav2", follower["target"]),
+                    checkpoint_s=follower["checkpoint_s"],
+                    target_s=follower["target_s"],
+                    lookahead_m=follower["lookahead_m"],
+                    segment_kind=follower["segment_kind"],
+                    width=follower["width"],
+                    phase=follower["phase"],
+                    leader_checkpoint_s=follower["leader_checkpoint_s"],
+                    terminal=False,
+                )
+            verify_goal(
+                "uav1",
+                local_goal("uav1", leader["checkpoint"]),
+                0.5,
+                checkpoint_s=leader["checkpoint_s"],
+                phase=leader["phase"],
+                terminal=False,
+            )
+            if follower is not None:
+                verify_goal(
+                    "uav2",
+                    local_goal("uav2", follower["checkpoint"]),
+                    0.5,
+                    checkpoint_s=follower["checkpoint_s"],
+                    phase=follower["phase"],
+                    terminal=False,
+                )
+
+        platform_local = {
+            "uav1": local_goal("uav1", platforms[0]["center"][:2]),
+            "uav2": local_goal("uav2", platforms[1]["center"][:2]),
+        }
+        for uav_id in ("uav1", "uav2"):
+            publish_goal(uav_id, platform_local[uav_id], terminal=True)
+        for uav_id in ("uav1", "uav2"):
+            verify_goal(uav_id, platform_local[uav_id], 0.2, terminal=True)
     for uav_id in ("uav1", "uav2"):
         platform_goal = {"z": 0.0}
         if course is not None:
             platform_goal.update(
-                x=navigation_routes[uav_id][-1]["x"],
-                y=navigation_routes[uav_id][-1]["y"],
+                x=platform_local[uav_id]["x"],
+                y=platform_local[uav_id]["y"],
             )
         add(
             "aruco_landing",

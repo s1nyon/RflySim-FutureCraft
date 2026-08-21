@@ -6,11 +6,13 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import sys
 import tempfile
 from pathlib import Path
 
 
 def load_module(name: str, module_path: Path):
+    sys.path.insert(0, str(module_path.parent))
     spec = importlib.util.spec_from_file_location(name, str(module_path))
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load module: {module_path}")

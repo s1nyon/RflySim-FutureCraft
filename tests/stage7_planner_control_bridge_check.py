@@ -14,6 +14,7 @@ from types import SimpleNamespace
 
 
 def load_module(name, path):
+    sys.path.insert(0, str(path.parent))
     spec = importlib.util.spec_from_file_location(name, str(path))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
