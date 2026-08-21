@@ -1,6 +1,6 @@
 # Stage 8 静态隧道双机连续丝滑穿越 — 实现与离线验证（2026-08-21）
 
-> 状态：**OFFLINE IMPLEMENTED + VALIDATED；LIVE 待授权后复验**
+> 状态：**OFFLINE IMPLEMENTED + VALIDATED；LIVE 尝试受环境 console 限制（INFRA-BLOCKED），guidance 未调参**
 > HEAD：`b7c9a19`
 > 范围：仅优化 `predicted_narrow_course_v1` 静态隧道中的双机连续穿越；未改 EGO/PX4/FAST-LIO/lifecycle。
 
@@ -146,3 +146,50 @@ scripts\run_live_slam_ego_swarm_flight.bat --allow-arm --simulation-only
 用户回来后授权 fresh-instance，先做 **UAV1 单机** 完整隧道（确认无 cut corner /
 无停车 / 无 goal storm），再双机 tandem，最终 3 次 fresh-instance 双机 live PASS
 后按 `docs/evidence/2026-08-21-stage8-smooth-tandem-flight.md` 补 live 指标。
+
+## 11. Live 验证尝试（2026-08-21 第二轮，用户已授权 simulation-only Red-Zone）
+
+### 11.1 stale PID 处理（完成）
+
+- 读取出旧 manifest（`stack-20260820T152416Z-b8d9f1e3`）2 个 `stale_pid_reuse`：
+  PID 2688 现在是 `svchost.exe`（netprofm，10:28 启动），PID 15252 现在是
+  `uhssvc.exe`（Update Health Tools，10:30 启动），与 8/20 CopterSim 记录
+  （start-time/cmdline）完全不匹配 → 只退役 stale metadata，未触碰这两个系统进程。
+- 备份 `stack_manifest.json.bak-20260821` 后用 lifecycle 自带分类逻辑移除 2 条 stale
+  记录；旧栈 `live_stack_stop.ps1 -Execute` 收尾 `clean=true`。
+
+### 11.2 fresh start 尝试（INFRA-INVALID）
+
+- 新栈 `stack-20260821T045707Z-bb330115`：GUI_READY / ROSCORE_READY / COURSE_READY
+  = READY，但 MAVROS_UAV1/UAV2 持续 NOT_READY（300s），健康门 fail-closed。
+- 取证：SITL wrapper（`%TEMP%\future_aircraft_stage2_uavsitl.bat`）trace 停在
+  `rfly3d done` 后；子进程树显示 `choice.exe /t 3 /d y /n` 永久挂起；CopterSim 与
+  PX4 SITL 从未启动；`px4_mavlink_1.log` 报 `PX4 daemon not running yet`；
+  stage2 因此未走到 MAVROS，WSL 会话随后结束。
+- 隔离复现：本会话中 `Start-Process cmd -ArgumentList '/c','choice /t 3 /d y /n >nul ...'`
+  在新控制台 8s 不返回；同一 shell 管道内 `choice /t 2` 21ms 返回；
+  `timeout /t 2 /nobreak` 在新控制台约 2s 正常完成；`WScript.Shell.AppActivate`
+  返回 False → 当前 agent 会话无法交互桌面控制台。
+- 结论：canonical SITL wrapper 的 `choice /T` 依赖交互控制台，在本环境必然挂起；
+  这是环境/console 限制，不是 guidance 代码回归（本轮 3 个 commit 未触碰启动链）。
+
+### 11.3 恢复 clean（完成）
+
+- 挂起栈 `live_stack_stop.ps1 -Execute`：`clean=true`，owned 进程全部退出
+  （RflySim3D 需 TERM，原因已记录），scheduled task 删除。
+- `sim.ps1 status` = `no active stack`；inspect `fail_closed=false`，
+  `stale=0 unknown=0 ports_unknown=0`。
+
+### 11.4 解除阻塞的两个选项
+
+1. 在可交互桌面会话中运行 canonical start（`live_stack_start.ps1 -Execute` 或
+   `live_stack_fresh_instance.ps1 -Execute`），让 SITL wrapper 的 `choice` 正常走完；
+2. 或由用户授权一个 **安全中性** 的最小 wrapper 兼容修改：
+   `generate_sitl_wrapper.ps1` 将 `choice /t N /d y /n` 替换为
+   `timeout /t N /nobreak`（已证明在本环境新控制台可用；不改任何 safety gate、
+   ownership、fail-closed 逻辑）。此修改当前**未执行**，等待用户明确授权。
+
+### 11.5 本轮未做
+
+- 未 arm、未起飞、未调 guidance 参数（0.45/0.50/0.55 均未在 live 验证）。
+- 未修改 lifecycle / launcher / 28com 参考工程。

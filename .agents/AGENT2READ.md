@@ -15,8 +15,9 @@
 - 2026-08-21 Stage 8 静态隧道「连续丝滑穿越」guidance 已实现并通过离线验证
   （rolling look-ahead + fly-through checkpoint + s-gap tandem + planner goal
   单次发布），见 `../docs/evidence/2026-08-21-stage8-smooth-tandem-flight.md`。
-  **live 尚未复验**：需用户授权 fresh-instance，且当前 inspect 因 2 个 stale
-  CopterSim PID 复用 fail-closed，不得拿离线 PASS 当作 live PASS。
+  **live 未复验**：stale PID 已退役；fresh start 在 SITL wrapper `choice /T`
+  交互控制台挂起（环境限制），需交互桌面会话或授权 wrapper `choice→timeout`
+  兼容修改后重跑；不得拿离线 PASS 当作 live PASS。
 - **已知 OPEN 缺陷（Yellow Zone，待修）**：`stack_stop.py` 对 WSL 进程组
   `kill -- -PGID` 无效（返回 0 但进程组存活），stop 报 NOT clean，需要按显式 PID
   补清后再收尾记录 `clean: true`；2 个 fresh 栈均 2/2 复现。
