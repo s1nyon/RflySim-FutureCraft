@@ -1,7 +1,9 @@
 # Stage 8 静态隧道双机连续丝滑穿越 — 实现与离线验证（2026-08-21）
 
-> 状态：**OFFLINE IMPLEMENTED + VALIDATED；LIVE 多次 fresh 尝试，candidate 尚未通过验收；最后一个 unsafe 改动（follower 非阻塞 verify）已回退**
-> HEAD：`b7c9a19`
+> 状态：**OFFLINE IMPLEMENTED + VALIDATED；LIVE 已获 2× fresh 双机 SUCCESS
+> （UAV2 staging 方案）；出口提前横切已定位并修复（离线验证）；出口修复的
+> live 复验因环境 lidar 未发布暂被 INFRA 阻塞**
+> HEAD：`c013ca1`
 > 范围：仅优化 `predicted_narrow_course_v1` 静态隧道中的双机连续穿越；未改 EGO/PX4/FAST-LIO/lifecycle。
 
 ## 1. 结论
@@ -323,3 +325,53 @@ stops:   uav1 2；uav2 1
   显式 PID 补清后 `clean=true`；最终 `sim.ps1 status` = `no active stack`。
 - 记录保留在 `logs/stage7_live/stage7-20260821T071110Z-22152` 与
   `logs/stage7_live/stage7-20260821T072342Z-4287`。
+
+## 14. UAV2 出口 clearance 异常：Case B（真实提前横切）与最小修复
+
+### 14.1 离线诊断（Run S2，`stage7-20260821T072342Z-4287`）
+
+对 UAV2 全部 34 个 `clearance < 0.10m` 样本逐点检查：
+
+```text
+world_x：28.83 ~ 29.09（全部 < 29.3，即尚未越过 corridor exit）
+最后一段 straight 纵向位置：4.03 ~ 4.29 / 4.5（仍在墙体纵向范围内）
+world_y：5.33 ~ 5.54（已明显向 platform2 y=5.9 偏移）
+min clearance：-0.111m（机体边缘几何进入北墙带）
+```
+
+**结论：metric artifact 排除，是真实提前横切。** UAV2 的最后一条 tunnel
+fly-through gate 在 s≈13 确认后，terminal platform2 立即发布；EGO 在飞机仍处于
+最后一段墙体纵向范围内时就开始斜切向 platform2。
+
+### 14.2 最小修复（commit `c013ca1`）
+
+- UAV2 在 terminal platform2 发布前增加**出口 fly-through progress gate**
+  （blocking verify，`checkpoint_s = total_length`，`exit_gate=True`），确认
+  越过 corridor exit 后才发布 platform2。
+- UAV1 terminal 顺序与行为完全不变；UAV2 staging、follower blocking progress
+  verify、gap 1.5m、0.45/0.55/2.0 与 lookahead 2.2/0.9 全部冻结。
+- 不修改 turn checkpoint（异常位置在出口直道，不在弯道）。
+
+### 14.3 离线验证
+
+```text
+stage8 course flight plan: PASS（含 exit gate 顺序契约）
+validate_stage8.ps1：Stage 7 + Stage 8 全 PASS
+```
+
+### 14.4 Live 复验：INFRA-INVALID（环境 lidar 未发布）
+
+- 两次 fresh 实例均在 readiness 前失败：CopterSim 的 Mid360 lidar 点云未发布
+  （sensor bridge 只有 IMU 消息），FAST-LIO 无输入、readiness 超时后 roslaunch
+  退出；MAVROS/PX4 正常。
+- 失败发生在任何 mission/planner 参与之前，与 `c013ca1` 无关；今天早前同一链路
+  曾连续 5+ 次成功，判定为当前环境传感器/仿真器状态退化。
+- 已按 canonical lifecycle 停机，两次均 `clean=true`。
+
+### 14.5 Current Truth
+
+- UAV2 飞出地图问题：**已关闭**（staging + blocking follower verify）。
+- 出口提前横切：**根因已确认（Case B）并已修复（`c013ca1`），离线验证通过**；
+  live 复验待环境恢复后跑一次 fresh 双机确认 `min valid in-corridor clearance
+  > 0.10m` 且 terminal goal 发布晚于 exit crossing。
+- 静态双机隧道 baseline 冻结：待该次 live 复验通过后正式冻结。

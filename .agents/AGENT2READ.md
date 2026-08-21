@@ -25,6 +25,12 @@
   两机同时穿隧道 overlap ≈35.5–35.9s。本轮成功标准已达成；剩余风险为 Run S2
   uav2 在**出口直道**（s≈14.5–14.9）几何壁距一度 <0.10m（非弯道），下一迭代
   针对出口/terminal 过渡单独验证，暂未改 turn checkpoint。
+- 2026-08-21（深夜）Run S2 出口 clearance 异常已诊断为 **Case B：真实提前
+  横切**（uav2 在 x<29.3、仍处于最后墙体纵向范围内时向 platform2 斜切，
+  几何壁距 -0.111m；不是 metric artifact）。最小修复 `c013ca1`：platform2
+  发布前增加 blocking 出口 progress gate（s=total），离线全绿。live 复验因
+  当前环境 CopterSim lidar 未发布而连续 2 次 INFRA_INVALID（与修复无关）；
+  待环境恢复后跑一次 fresh 确认出口段 `min valid clearance > 0.10m`。
 - **已知 OPEN 缺陷（Yellow Zone，待修）**：`stack_stop.py` 对 WSL 进程组
   `kill -- -PGID` 无效（返回 0 但进程组存活），stop 报 NOT clean，需要按显式 PID
   补清后再收尾记录 `clean: true`；2 个 fresh 栈均 2/2 复现。
