@@ -468,11 +468,41 @@ class RosBackend:
     def _wait_for_landing(self, uav, action):
         goal_z = float(action.get("fallback_goal", {}).get("z", 0.0))
         threshold_z = max(0.25, goal_z + 0.25)
-        return self._wait_for_odometry_altitude(
-            uav,
-            lambda z: z <= threshold_z,
-            f"landing altitude <= {threshold_z:.2f}m",
-            float(action.get("timeout_s", 30)),
+        timeout_s = float(action.get("timeout_s", 30))
+        deadline = time.monotonic() + timeout_s
+        last_z = "none"
+        latest_odom = None
+        state_topic = uav["state_topic"]
+        odom_topic = uav["odom_topic"]
+        while time.monotonic() < deadline and not self.rospy.is_shutdown():
+            remaining = max(0.01, deadline - time.monotonic())
+            try:
+                state = self.rospy.wait_for_message(
+                    state_topic,
+                    self.State,
+                    timeout=min(0.5, remaining),
+                )
+                if latest_odom is not None and not bool(state.armed):
+                    z = float(latest_odom.pose.pose.position.z)
+                    if z <= max(threshold_z + 0.5, 1.0):
+                        return latest_odom
+            except Exception:
+                pass
+            try:
+                message = self.rospy.wait_for_message(
+                    odom_topic,
+                    self.Odometry,
+                    timeout=min(0.5, remaining),
+                )
+            except Exception:
+                continue
+            latest_odom = message
+            last_z = f"{float(message.pose.pose.position.z):.3f}"
+            if float(message.pose.pose.position.z) <= threshold_z:
+                return message
+        raise RuntimeError(
+            f"landing altitude <= {threshold_z:.2f}m or disarm not confirmed "
+            f"for {uav['uav_id']} within {timeout_s:.1f}s; last_altitude_m={last_z}"
         )
 
     def _wait_for_odometry_altitude(self, uav, predicate, description, timeout_s):
