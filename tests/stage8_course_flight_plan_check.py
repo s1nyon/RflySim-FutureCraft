@@ -66,7 +66,19 @@ def main() -> int:
     uav2_verifies = [action for action in verifies if action["uav"] == "uav2"]
 
     assert len(uav1_publishes) == len(uav1_verifies)
-    assert len([pub for pub in uav2_publishes if pub.get("staging") is not True]) == len(uav2_verifies)
+    assert len(
+        [
+            pub
+            for pub in uav2_publishes
+            if pub.get("staging") is not True and pub.get("terminal") is not True
+        ]
+    ) == len(
+        [
+            ver
+            for ver in uav2_verifies
+            if ver.get("terminal") is not True and ver.get("exit_gate") is not True
+        ]
+    )
     assert len(uav1_publishes) > len(uav2_publishes)
     assert publishes[0].get("staging") is True
     assert publishes[0]["uav"] == "uav2"
@@ -107,6 +119,35 @@ def main() -> int:
         assert rounded_goal(pub["goal"]) == rounded_goal(ver["goal"])
         assert float(ver["tolerance_m"]) == 0.2
 
+    # UAV2 exit gate: a blocking fly-through progress verify at the corridor
+    # exit must run after UAV2's last tunnel gate and before the landing
+    # platform target is published (Run S2: early terminal cut to platform2).
+    exit_gates = [action for action in navigation if action.get("exit_gate") is True]
+    assert len(exit_gates) == 1
+    exit_gate = exit_gates[0]
+    assert exit_gate["action"] == "verify_planned_navigation"
+    assert exit_gate["uav"] == "uav2"
+    assert exit_gate.get("terminal") is False
+    total_length = module.course_guidance.Centreline.from_course(course).total_length
+    assert abs(exit_gate["checkpoint_s"] - total_length) <= 1e-9
+    exit_gate_index = navigation.index(exit_gate)
+    last_uav2_flythrough_verify = max(
+        index
+        for index, action in enumerate(navigation)
+        if action["action"] == "verify_planned_navigation"
+        and action["uav"] == "uav2"
+        and action.get("terminal") is not True
+        and action.get("exit_gate") is not True
+    )
+    uav2_terminal_publish = next(
+        index
+        for index, action in enumerate(navigation)
+        if action["action"] == "publish_planner_goal"
+        and action["uav"] == "uav2"
+        and action.get("terminal") is True
+    )
+    assert last_uav2_flythrough_verify < exit_gate_index < uav2_terminal_publish
+
     uav1_int_pub = [action for action in uav1_publishes if action.get("terminal") is not True]
     uav2_int_pub = [
         action
@@ -114,7 +155,11 @@ def main() -> int:
         if action.get("terminal") is not True and action.get("staging") is not True
     ]
     uav1_int_ver = [action for action in uav1_verifies if action.get("terminal") is not True]
-    uav2_int_ver = [action for action in uav2_verifies if action.get("terminal") is not True]
+    uav2_int_ver = [
+        action
+        for action in uav2_verifies
+        if action.get("terminal") is not True and action.get("exit_gate") is not True
+    ]
 
     assert len(uav1_int_pub) == len(uav1_int_ver)
     assert len(uav2_int_pub) == len(uav2_int_ver)
@@ -167,7 +212,7 @@ def main() -> int:
         for action in navigation
     ]
     for verify in uav2_verifies:
-        if verify.get("terminal"):
+        if verify.get("terminal") or verify.get("exit_gate"):
             continue
         phase = verify["phase"]
         leader_publish_index = next(

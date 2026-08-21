@@ -297,10 +297,25 @@ def build_plan(config, course=None):
             "uav1": local_goal("uav1", platforms[0]["center"][:2]),
             "uav2": local_goal("uav2", platforms[1]["center"][:2]),
         }
-        for uav_id in ("uav1", "uav2"):
-            publish_goal(uav_id, platform_local[uav_id], terminal=True)
-        for uav_id in ("uav1", "uav2"):
-            verify_goal(uav_id, platform_local[uav_id], 0.2, terminal=True)
+        # UAV1 keeps its existing terminal handoff (user-satisfied behavior).
+        publish_goal("uav1", platform_local["uav1"], terminal=True)
+        # UAV2 must cross the corridor exit (blocking fly-through progress
+        # gate) before the landing-platform target is published.  This prevents
+        # cutting the final straight toward platform2 while the vehicle is
+        # still inside the walled corridor (Run S2: clearance -0.111m at
+        # s~14.5-14.9 with world x < 29.3).
+        exit_point = centreline.point_at_s(centreline.total_length)
+        verify_goal(
+            "uav2",
+            local_goal("uav2", exit_point),
+            0.1,
+            checkpoint_s=centreline.total_length,
+            terminal=False,
+            exit_gate=True,
+        )
+        publish_goal("uav2", platform_local["uav2"], terminal=True)
+        verify_goal("uav1", platform_local["uav1"], 0.2, terminal=True)
+        verify_goal("uav2", platform_local["uav2"], 0.2, terminal=True)
     for uav_id in ("uav1", "uav2"):
         platform_goal = {"z": 0.0}
         if course is not None:
