@@ -21,7 +21,7 @@
       "name": "arena_floor",
       "id": 12780,
       "category": "arena_floor",
-      "center": [23.9, 2.2, 0.0],
+      "center": [23.9, 2.2, -0.10],
       "size": [30.8, 19.4, 0.05]
     },
     {

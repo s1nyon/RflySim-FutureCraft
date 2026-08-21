@@ -62,7 +62,10 @@ def main() -> int:
     assert len(model.wall_boxes) >= 10
     assert len(model.arena_objects) == 8
     arena_floor = next(obj for obj in model.arena_objects if obj.category == "arena_floor")
-    assert arena_floor.center == module.Vec3(23.9, 2.2, 0.0)
+    # The floor collision slab is lowered below the CopterSim spawn plane
+    # (z=0) so vehicles cannot spawn inside it (stuck-in-floor / lidar-occluded
+    # failures observed with collision enabled).
+    assert arena_floor.center == module.Vec3(23.9, 2.2, -0.10)
     assert arena_floor.size == module.Vec3(30.8, 19.4, 0.05)
     ceilings = [obj for obj in model.arena_objects if obj.category == "ceiling"]
     assert len(ceilings) == 3
