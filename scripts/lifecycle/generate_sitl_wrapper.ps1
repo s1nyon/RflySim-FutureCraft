@@ -146,6 +146,7 @@ $src = [regex]::Replace($src, '(?m)^(\s*)start /realtime CopterSim\.exe ([^\r]*?
 
 # Remove every name-based kill that survives from the 28com reference.
 $src = $src.Replace('tasklist|find /i "CopterSim.exe" && taskkill /im "CopterSim.exe"', 'rem [STACK] name-based kill removed; report unknown instead of killing')
+$src = $src.Replace('ECHO Kill all CopterSims', 'ECHO Start stack-owned CopterSims')
 $src = $src.Replace('tasklist|find /i "QGroundControl.exe" && taskkill /f /im "QGroundControl.exe"', 'rem [STACK] name-based kill removed; report unknown instead of killing')
 $src = $src.Replace('tasklist|find /i "RflySim3D.exe" && taskkill /f /im "RflySim3D.exe"', 'rem [STACK] name-based kill removed; report unknown instead of killing')
 

@@ -195,6 +195,10 @@ def main() -> int:
         # 6. Name-based kills from the reference must be removed.
         if "taskkill /im" in text.lower():
             errors.append("name-based taskkill survived in the generated wrapper")
+        if "Kill all CopterSims" in text:
+            errors.append("generated wrapper retained the misleading CopterSim kill message")
+        if "Start stack-owned CopterSims" not in text:
+            errors.append("generated wrapper missing the stack-owned CopterSim startup message")
 
         if errors:
             for error in errors:

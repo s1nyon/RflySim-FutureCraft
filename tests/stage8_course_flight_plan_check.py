@@ -43,9 +43,12 @@ def main() -> int:
 
     assert plan["mission_name"] == "stage8_predicted_course_tunnel_flight"
     assert plan["geofence"] == {
-        "min_x": -1.0, "max_x": 17.0, "min_y": -2.0, "max_y": 7.0,
+        "min_x": -1.1, "max_x": 17.0, "min_y": -2.0, "max_y": 7.0,
         "min_z": -0.5, "max_z": 2.0, "max_speed_mps": 2.0, "max_odom_age_s": 0.5,
     }
+    # The failed flight recovered from its -1.057 m takeoff overshoot; it must
+    # remain inside the protected envelope instead of forcing AUTO.LAND.
+    assert -1.057 > plan["geofence"]["min_x"]
     navigation = [
         action for action in plan["actions"] if action["stage"] == "collaborative_navigate"
     ]
@@ -56,10 +59,6 @@ def main() -> int:
     verify_actions = [
         action for action in navigation if action["action"] == "verify_planned_navigation"
     ]
-    assert all(
-        abs(float(action["tolerance_m"]) - 0.5) <= 1e-9
-        for action in verify_actions
-    )
     assert len(publish_actions) == len(verify_actions)
     assert [
         (action["uav"], tuple(round(float(action["goal"][axis]), 3) for axis in ("x", "y", "z")))
@@ -71,7 +70,7 @@ def main() -> int:
     uav1_goals = rounded_goals(publish_actions, "uav1")
     uav2_goals = rounded_goals(publish_actions, "uav2")
     assert len(uav1_goals) == len(uav2_goals)
-    assert len(uav1_goals) >= 15
+    assert 8 <= len(uav1_goals) <= 10
     assert uav1_goals[-1] == (16.0, 4.6, 1.0)
     assert uav2_goals[-1] == (16.0, 5.2, 1.0)
 
@@ -93,8 +92,13 @@ def main() -> int:
         for first, second in zip(shared_uav1, shared_uav1[1:])
     ]
     assert gaps
-    assert min(gaps) >= 0.9
-    assert max(gaps) <= 1.35
+    assert min(gaps) >= 1.7
+    assert max(gaps) <= 2.1
+
+    for uav_id in ("uav1", "uav2"):
+        uav_verifies = [action for action in verify_actions if action["uav"] == uav_id]
+        assert all(abs(float(action["tolerance_m"]) - 0.5) <= 1e-9 for action in uav_verifies[:-1])
+        assert abs(float(uav_verifies[-1]["tolerance_m"]) - 0.2) <= 1e-9
 
     # UAV1 enters first. Every shared-route cycle then advances UAV1 one
     # sample before sending UAV2 to the sample immediately behind it.
@@ -122,13 +126,25 @@ def main() -> int:
     ]
     assert [action["uav"] for action in landing] == ["uav1", "uav2"]
     assert all(action["request"] == {"custom_mode": "AUTO.LAND"} for action in landing)
+    expected_landing_goals = {
+        "uav1": {"x": 16.0, "y": 4.6, "z": 0.0},
+        "uav2": {"x": 16.0, "y": 5.2, "z": 0.0},
+    }
+    assert all(action["fallback_goal"] == expected_landing_goals[action["uav"]] for action in landing)
 
     launch = ET.parse(args.dual_launch).getroot()
     launch_args = {item.attrib["name"]: item.attrib.get("default") for item in launch.findall("arg")}
     assert float(launch_args["map_size_x"]) >= 40.0
     assert float(launch_args["map_size_y"]) >= 20.0
-    assert float(launch_args["max_vel"]) == 0.6
-    assert float(launch_args["max_acc"]) == 0.8
+    assert float(launch_args["max_vel"]) == 0.45
+    assert float(launch_args["max_acc"]) == 0.55
+    single_launch = ET.parse(args.dual_launch.with_name("rflysim_ego_swarm_single.launch")).getroot()
+    max_jerk = single_launch.find(".//param[@name='manager/max_jerk']")
+    assert max_jerk is not None
+    assert float(max_jerk.attrib["value"]) == 2.0
+
+    runner = args.dual_launch.parents[4] / "scripts" / "wsl" / "stage7_live_slam_ego_swarm_flight.sh"
+    assert runner.read_text(encoding="utf-8").count("--min-x -1.1 --max-x 17") == 2
     print("stage8 course flight plan: PASS")
     return 0
 

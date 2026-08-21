@@ -159,6 +159,10 @@ if (Test-Path -LiteralPath $wslScript) {
     if ($wslText -notmatch '(?m)^\s*wait\s*$') {
         $contractErrors += 'scripts/wsl/stage2_two_mavros.sh must keep the WSL ROS/MAVROS session alive after startup'
     }
+    if ($wslText -notmatch 'ROSCORE_WAIT_SECONDS="\$\{ROSCORE_WAIT_SECONDS:-30\}"' -or
+        $wslText -notmatch 'while \(\( SECONDS < roscore_deadline \)\)') {
+        $contractErrors += 'scripts/wsl/stage2_two_mavros.sh must condition-wait up to 30s for roscore readiness'
+    }
 }
 
 if ($missing.Count -gt 0 -or $contractErrors.Count -gt 0) {
@@ -174,6 +178,5 @@ if (-not $Quiet) {
     Write-Host '[PASS] Stage 2 two-UAV namespace validation passed.' -ForegroundColor Green
 }
 exit 0
-
 
 

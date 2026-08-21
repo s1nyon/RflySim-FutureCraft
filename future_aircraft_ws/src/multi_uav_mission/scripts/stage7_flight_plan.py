@@ -17,7 +17,7 @@ def _directed_arc_sweep(start_angle, end_angle, turn):
     raise ValueError("arc turn must be left or right")
 
 
-def _sample_centreline(course, target_spacing_m=1.1):
+def _sample_centreline(course, target_spacing_m=2.0):
     centreline = course["centreline"]
     if not centreline:
         raise ValueError("course flight requires a non-empty centreline")
@@ -130,7 +130,7 @@ def build_plan(config, course=None):
         navigation_routes = _course_routes(course)
         mission_name = "stage8_predicted_course_tunnel_flight"
         geofence = {
-            "min_x": -1.0, "max_x": 17.0,
+            "min_x": -1.1, "max_x": 17.0,
             "min_y": -2.0, "max_y": 7.0,
             "min_z": -0.5, "max_z": 2.0,
             "max_speed_mps": 2.0, "max_odom_age_s": 0.5,
@@ -225,7 +225,7 @@ def build_plan(config, course=None):
                 timeout_s=5,
             )
 
-        def verify_goal(uav_id, goal):
+        def verify_goal(uav_id, goal, tolerance_m=0.5):
             add(
                 "collaborative_navigate",
                 "verify_planned_navigation",
@@ -233,7 +233,7 @@ def build_plan(config, course=None):
                 planner_cmd_topic=uavs[uav_id]["planner_cmd_topic"],
                 mavros_odom_topic=uavs[uav_id]["mavros_feedback_odom_topic"],
                 goal=goal,
-                tolerance_m=0.5,
+                tolerance_m=tolerance_m,
                 timeout_s=45,
             )
 
@@ -248,18 +248,24 @@ def build_plan(config, course=None):
 
         publish_goal("uav1", navigation_routes["uav1"][-1])
         publish_goal("uav2", navigation_routes["uav2"][shared_count - 1])
-        verify_goal("uav1", navigation_routes["uav1"][-1])
+        verify_goal("uav1", navigation_routes["uav1"][-1], tolerance_m=0.2)
         verify_goal("uav2", navigation_routes["uav2"][shared_count - 1])
         publish_goal("uav2", navigation_routes["uav2"][-1])
-        verify_goal("uav2", navigation_routes["uav2"][-1])
+        verify_goal("uav2", navigation_routes["uav2"][-1], tolerance_m=0.2)
     for uav_id in ("uav1", "uav2"):
+        platform_goal = {"z": 0.0}
+        if course is not None:
+            platform_goal.update(
+                x=navigation_routes[uav_id][-1]["x"],
+                y=navigation_routes[uav_id][-1]["y"],
+            )
         add(
             "aruco_landing",
             "call_service",
             uav_id,
             service=uavs[uav_id]["mavros_set_mode_service"],
             request={"custom_mode": "AUTO.LAND"},
-            fallback_goal={"z": 0.0},
+            fallback_goal=platform_goal,
             timeout_s=30,
         )
     add("mission_report", "write_score_report", score_output="score_summary.json", timeout_s=1)

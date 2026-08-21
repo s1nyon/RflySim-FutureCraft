@@ -7,6 +7,11 @@
   （fresh-instance：双机 OFFBOARD/arm/起飞/14 段导航/降落，`success=true` 41.5s，
   证据 `../docs/evidence/2026-08-11-live-import-and-pwsh-compat-armed-verified.md`）。
   两项兼容修复（adapter 模块解析、PS5.1/PS7 schema-v2 整数判定）已随修复提交验证。
+- 2026-08-20 的 8/20 参数/飞行计划改动已做 **4/4 fresh-instance full arm flight
+  PASS**（每次 clean stop → fresh start → readiness → EGO → arm flight 背靠背，
+  50.5s/次，无 collision/offboard-loss/timeout），证据
+  `../docs/evidence/2026-08-20-current-params-4x-fresh-arm-verified.md`。当天早期
+  19:45/21:07 的失败仍按旧栈/未背靠背/odom 抖动处理，不凭单次失败升级为当前 blocker。
 - **已知 OPEN 缺陷（Yellow Zone，待修）**：`stack_stop.py` 对 WSL 进程组
   `kill -- -PGID` 无效（返回 0 但进程组存活），stop 报 NOT clean，需要按显式 PID
   补清后再收尾记录 `clean: true`；2 个 fresh 栈均 2/2 复现。

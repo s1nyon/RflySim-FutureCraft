@@ -12,6 +12,7 @@ stack_register wsl "$$" "$$" "wsl:stage2_launcher" "stage2_two_mavros.sh" "self-
 REF_28COM_UAV_WSL_DIR="${REF_28COM_UAV_WSL_DIR:-/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/28com_sim/UAV_demo/28com_uav}"
 LOG_DIR="$PROJECT_ROOT/logs/stage2_mavros"
 ROS_MASTER_URI="${ROS_MASTER_URI:-http://127.0.0.1:11311}"
+ROSCORE_WAIT_SECONDS="${ROSCORE_WAIT_SECONDS:-30}"
 PX4_MAVLINK_BIN="${PX4_MAVLINK_BIN:-/mnt/d/PX4PSP/Firmware/build/px4_sitl_default/bin/px4-mavlink}"
 STACK_ID="${STACK_ID:-unknown}"
 
@@ -123,16 +124,30 @@ export ROS_IP="${ROS_IP:-127.0.0.1}"
 trap cleanup EXIT INT TERM
 
 stage2_trace "step 1 start (ros master availability check)"
+roscore_pid=""
 if ! timeout 3s rostopic list >/dev/null 2>&1; then
   setsid nohup roscore >"$LOG_DIR/roscore.log" 2>&1 &
   roscore_pid=$!
   stack_register wsl "$roscore_pid" "$roscore_pid" "wsl:roscore" "/opt/ros/noetic/bin/roscore" "created by stage2_two_mavros.sh (setsid)"
   echo "[INFO] Started roscore pid=$roscore_pid log=$LOG_DIR/roscore.log"
   stage2_trace "step 1.1 started roscore pid=$roscore_pid"
-  sleep 5
 fi
 
-if ! timeout 5s rostopic list >/dev/null 2>&1; then
+roscore_ready=false
+roscore_deadline=$((SECONDS + ROSCORE_WAIT_SECONDS))
+while (( SECONDS < roscore_deadline )); do
+  if timeout 3s rostopic list >/dev/null 2>&1; then
+    roscore_ready=true
+    break
+  fi
+  if [[ -n "$roscore_pid" ]] && ! kill -0 "$roscore_pid" >/dev/null 2>&1; then
+    stage2_trace "step 1.2 roscore exited before readiness pid=$roscore_pid"
+    break
+  fi
+  sleep 1
+done
+
+if [[ "$roscore_ready" != true ]]; then
   write_health ROSCORE_READY false "roscore unavailable at $ROS_MASTER_URI"
   echo "[ERROR] ROS master is still unavailable at $ROS_MASTER_URI" >&2
   stage2_trace "step 1 FAILED (roscore unavailable)"
