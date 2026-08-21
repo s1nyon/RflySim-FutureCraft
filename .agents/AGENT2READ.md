@@ -20,6 +20,11 @@
   详见 `../docs/evidence/2026-08-21-stage8-smooth-tandem-flight.md`。
   wrapper `choice→timeout`（`279531b`）已解决 console 挂起；WSL PGID stop
   缺陷仍按显式 PID 补清处理。
+- 2026-08-21（晚）UAV2 pre-entry staging（`7a5ea52`）后 **2× fresh 双机
+  SUCCESS**：uav2 18/18 confirmed、0 pending、不出图；min UAV 距离 1.54–1.59m；
+  两机同时穿隧道 overlap ≈35.5–35.9s。本轮成功标准已达成；剩余风险为 Run S2
+  uav2 在**出口直道**（s≈14.5–14.9）几何壁距一度 <0.10m（非弯道），下一迭代
+  针对出口/terminal 过渡单独验证，暂未改 turn checkpoint。
 - **已知 OPEN 缺陷（Yellow Zone，待修）**：`stack_stop.py` 对 WSL 进程组
   `kill -- -PGID` 无效（返回 0 但进程组存活），stop 报 NOT clean，需要按显式 PID
   补清后再收尾记录 `clean: true`；2 个 fresh 栈均 2/2 复现。

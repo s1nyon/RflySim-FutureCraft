@@ -261,3 +261,65 @@ turn lookahead 1.0→0.9）
 - 所有记录/日志保留在
   `logs/stage7_live/stage7-20260821T061301Z-5311`（Run A）与
   `logs/stage7_live/stage7-20260821T064449Z-4953`（Run C）。
+
+## 13. UAV2 pre-entry staging（commit `7a5ea52`）— 2× fresh dual SUCCESS
+
+### 13.1 改动
+
+- 双机 takeoff 后、正式 tandem traversal 前，给 UAV2 发布一次性非阻塞 staging
+  target：world `(17.5, 0.4, 1.0)`（入口 `(18.5,0)` 前 1.0m、向 uav2 侧偏
+  0.4m，处于开放 approach 区，不与 UAV1 入口轨迹重合）。
+- staging 只有 publish、没有 verify，UAV1 完全不被阻塞。
+- 正式 follower 目标与 verify 保持 hard blocking progress gate；未恢复任何
+  non-blocking pending。
+- 其它参数冻结：`max_vel=0.45 / max_acc=0.55 / max_jerk=2.0`、straight lookahead
+  2.2、turn lookahead 0.9、gap_s 1.5；未改 turn checkpoint。
+
+### 13.2 Run S1（fresh，`stage7-20260821T071110Z-22152`）
+
+```text
+mission: success=true 81.0s  collision=0 offboard_loss=0 timeout=0
+uav1:   22/22 navigation confirmed（含 terminal）
+uav2:   18/18 navigation confirmed，0 pending
+goals:  uav1 logical=22 observed=22；uav2 logical=19（18+staging）observed=19
+traverse time: uav1 44.94s / uav2 44.90s
+min wall clearance: uav1 0.117m / uav2 0.138m
+max cross-track:    uav1 0.358m / uav2 0.387m
+tandem:  min distance 1.590m；median gap_s 2.636；p05 1.718；p95 3.174；
+         overlap 35.91s
+stops:   uav1 2（s≈6.05 1.2s、s≈9.04 0.7s）；uav2 2（同位置 1.2s/0.6s，
+         均为 arc 出口短暂减速，非长时间停车）
+```
+
+### 13.3 Run S2（fresh repeat，`stage7-20260821T072342Z-4287`）
+
+```text
+mission: success=true 81.0s  collision=0 offboard_loss=0 timeout=0
+uav1:   22/22 navigation confirmed
+uav2:   18/18 navigation confirmed，0 pending
+goals:  uav1 logical=22 observed=22；uav2 logical=19 observed=19
+traverse time: uav1 44.40s / uav2 44.21s
+min wall clearance: uav1 0.130m / uav2 -0.111m（几何估计）
+max cross-track:    uav1 0.355m / uav2 0.636m
+tandem:  min distance 1.539m；median gap_s 2.485；p05 1.844；p95 3.138；
+         overlap 35.44s
+stops:   uav1 2；uav2 1
+```
+
+### 13.4 结论与判断
+
+- **follower catastrophic failure 已解决**：两轮 fresh 中 uav2 均 18/18
+  confirmed、0 pending、不出图、完整穿越并 landing。
+- UAV1 保持用户满意的连续飞行（22/22，仅在 arc 出口有 0.7–1.2s 短暂减速）。
+- 双机同时穿隧道（overlap ≈35.5–35.9s），min physical distance 1.54–1.59m。
+- Run S2 的 uav2 几何壁距低点位于 **出口直道 s≈14.5–14.9**（cross-track 最大
+  0.636m），不是弯道切角；因此按证据原则**未做 turn checkpoint 0.5→0.4**。
+  该问题记为剩余风险，下一迭代应针对出口/terminal 过渡（例如最后 flythrough
+  target 的 clamp 位置或 terminal 发布时机）单独验证。
+
+### 13.5 本轮 live 记录
+
+- 两次 fresh 均为 canonical lifecycle；每轮仍遇到已知 WSL PGID stop 缺陷，按
+  显式 PID 补清后 `clean=true`；最终 `sim.ps1 status` = `no active stack`。
+- 记录保留在 `logs/stage7_live/stage7-20260821T071110Z-22152` 与
+  `logs/stage7_live/stage7-20260821T072342Z-4287`。
