@@ -202,6 +202,34 @@ def build_plan(config, course=None):
                     last_follower_s = follower_gate["s"]
 
         follower_by_phase = {entry["phase"]: entry for entry in follower_entries}
+        # UAV2 pre-entry staging: while UAV1 starts its tunnel run, move UAV2 to
+        # a fixed wait point just before the corridor entrance.  This is a
+        # non-blocking publish (no verify), so UAV1 is never held back by UAV2
+        # flying from its takeoff origin.  The formal follower gates below stay
+        # hard blocking progress verifies.
+        first_segment = course["centreline"][0]
+        entry = [float(first_segment["start"][0]), float(first_segment["start"][1])]
+        direction = (
+            float(first_segment["end"][0]) - entry[0],
+            float(first_segment["end"][1]) - entry[1],
+        )
+        direction_length = math.hypot(*direction)
+        direction = (direction[0] / direction_length, direction[1] / direction_length)
+        perpendicular = (-direction[1], direction[0])
+        staging_world = (
+            entry[0] - 1.0 * direction[0] + 0.4 * perpendicular[0],
+            entry[1] - 1.0 * direction[1] + 0.4 * perpendicular[1],
+        )
+        add(
+            "collaborative_navigate",
+            "publish_planner_goal",
+            "uav2",
+            topic=uavs["uav2"]["planner_goal_topic"],
+            goal=local_goal("uav2", staging_world),
+            timeout_s=5,
+            staging=True,
+            terminal=False,
+        )
         # Leader-first scheduling: the leader's next look-ahead target is
         # published immediately after its own checkpoint verification, BEFORE
         # any follower verification can block forward progress.  Checkpoint

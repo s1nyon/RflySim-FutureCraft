@@ -66,10 +66,38 @@ def main() -> int:
     uav2_verifies = [action for action in verifies if action["uav"] == "uav2"]
 
     assert len(uav1_publishes) == len(uav1_verifies)
-    assert len(uav2_publishes) == len(uav2_verifies)
+    assert len([pub for pub in uav2_publishes if pub.get("staging") is not True]) == len(uav2_verifies)
     assert len(uav1_publishes) > len(uav2_publishes)
+    assert publishes[0].get("staging") is True
+    assert publishes[0]["uav"] == "uav2"
     assert publishes[1]["uav"] == "uav1"
     assert [action["uav"] for action in verifies[:3]] == ["uav1", "uav1", "uav1"]
+
+    # UAV2 pre-entry staging: exactly one non-blocking publish, before any
+    # formal follower target, located in the open approach area (outside the
+    # tunnel), with no staging verify that could block UAV1.
+    staging_actions = [action for action in navigation if action.get("staging") is True]
+    assert len(staging_actions) == 1
+    assert staging_actions[0]["action"] == "publish_planner_goal"
+    assert staging_actions[0]["uav"] == "uav2"
+    assert navigation[0] is staging_actions[0]
+    assert not any(action.get("staging") for action in verifies)
+    staging_world_x = (
+        float(staging_actions[0]["goal"]["x"]) + course["takeoff_poses"][1]["position"][0]
+    )
+    staging_world_y = (
+        float(staging_actions[0]["goal"]["y"]) + course["takeoff_poses"][1]["position"][1]
+    )
+    assert 17.0 <= staging_world_x < 18.5
+    assert abs(staging_world_y) < 0.75
+    first_formal_uav2_publish = next(
+        index
+        for index, action in enumerate(navigation)
+        if action["action"] == "publish_planner_goal"
+        and action["uav"] == "uav2"
+        and action.get("staging") is not True
+    )
+    assert navigation.index(staging_actions[0]) < first_formal_uav2_publish
 
     for uav_id in ("uav1", "uav2"):
         pub = (uav1_publishes if uav_id == "uav1" else uav2_publishes)[-1]
@@ -80,7 +108,11 @@ def main() -> int:
         assert float(ver["tolerance_m"]) == 0.2
 
     uav1_int_pub = [action for action in uav1_publishes if action.get("terminal") is not True]
-    uav2_int_pub = [action for action in uav2_publishes if action.get("terminal") is not True]
+    uav2_int_pub = [
+        action
+        for action in uav2_publishes
+        if action.get("terminal") is not True and action.get("staging") is not True
+    ]
     uav1_int_ver = [action for action in uav1_verifies if action.get("terminal") is not True]
     uav2_int_ver = [action for action in uav2_verifies if action.get("terminal") is not True]
 

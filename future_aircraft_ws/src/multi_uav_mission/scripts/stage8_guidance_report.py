@@ -43,11 +43,13 @@ def main(argv=None):
         uav_id = action["uav"]
         origin = poses[uav_id]
         terminal = bool(action.get("terminal"))
+        staging = bool(action.get("staging"))
         world_x = float(action["goal"]["x"]) + float(origin[0])
         world_y = float(action["goal"]["y"]) + float(origin[1])
         rows.append(
             {
                 "uav": uav_id,
+                "staging": staging,
                 "checkpoint_s": action.get("checkpoint_s"),
                 "target_s": action.get("target_s"),
                 "lookahead_m": action.get("lookahead_m"),
@@ -66,14 +68,18 @@ def main(argv=None):
         target_s = "" if row["target_s"] is None else f"{_rounded(row['target_s']):.3f}"
         lookahead = "" if row["lookahead_m"] is None else f"{_rounded(row['lookahead_m']):.3f}"
         width = "" if row["width"] is None else f"{_rounded(row['width']):.3f}"
-        kind = row["segment_kind"] or "terminal"
+        kind = "staging" if row["staging"] else (row["segment_kind"] or "terminal")
         print(
             f"{row['uav']} | {checkpoint_s} | {target_s} | {lookahead} | {kind} | {width} | "
             f"{row['terminal']} | {_rounded(row['target_x']):.3f} | {_rounded(row['target_y']):.3f}"
         )
 
     leader = [row for row in rows if row["uav"] == "uav1" and not row["terminal"]]
-    follower = [row for row in rows if row["uav"] == "uav2" and not row["terminal"]]
+    follower = [
+        row
+        for row in rows
+        if row["uav"] == "uav2" and not row["terminal"] and not row["staging"]
+    ]
     leader_gaps = [
         leader[index + 1]["checkpoint_s"] - leader[index]["checkpoint_s"]
         for index in range(len(leader) - 1)
@@ -115,6 +121,7 @@ def main(argv=None):
                 if action["action"] == "publish_planner_goal"
                 and action["uav"] == "uav2"
                 and not action.get("terminal")
+                and not action.get("staging")
             ])
         ),
     }
