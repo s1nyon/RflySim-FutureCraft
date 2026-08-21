@@ -34,6 +34,13 @@
   2.0m。环境“卡地板/lidar 缺失”根因为 arena_floor 碰撞板与生成平面重叠，
   已由 `9025aab` 下移地板修复并 live 验证。**Stage 8 双机静态隧道 baseline
   可冻结**。
+- 2026-08-21（深夜，稳定性系列）新增 `43692e1`：`_wait_for_landing` 在
+  “低高度已 disarm”时即确认降落（PX4 AUTO.LAND 在仿真中常 disarm 后悬停于
+  0.29–0.55m，导致 z≤0.25 验证反复超时）。修复后 S6/S7 连续 2 次 fresh 双机
+  完整 SUCCESS（82.0s，uav1 22/22、uav2 19/19、pending 0，landing 双确认，
+  min clearance 0.102–0.136m，min 机间距 1.815m）。S4 曾出现 uav2 在 arc2
+  入口偶发切角（几何壁距 -0.03m）记录为残余间歇风险；后续若加固，单独验证
+  turn checkpoint 0.5→0.4。本轮稳定性测试结束。
 - **已知 OPEN 缺陷（Yellow Zone，待修）**：`stack_stop.py` 对 WSL 进程组
   `kill -- -PGID` 无效（返回 0 但进程组存活），stop 报 NOT clean，需要按显式 PID
   补清后再收尾记录 `clean: true`；2 个 fresh 栈均 2/2 复现。

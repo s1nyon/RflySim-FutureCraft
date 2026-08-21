@@ -420,3 +420,52 @@ odom 中心越过 x=29.3 比 terminal 发布晚约 2.8s（0.6s 出口短暂减�
 
 - 已按 canonical lifecycle 停机，`clean=true`；`sim.ps1 status` = `no active stack`。
 - 记录保留在 `logs/stage7_live/stage7-20260821T084406Z-2769`。
+
+## 16. 稳定性系列（S4–S7）与降落验证修复（`43692e1`）
+
+### 16.1 S4（`stage7-20260821T103142Z-2838`）
+
+- 导航完美（uav1 22/22，uav2 19/19，0 pending），但 **uav2 在 arc2 入口
+  （s≈9.0–9.16，world 24.4,4.0–4.07）几何壁距最低 -0.03m**，用户现场观察到撞墙
+  （一次偶发切角；score collision_count 未捕获）。降落验证超时（uav2 悬停 0.548m）。
+
+### 16.2 S5（`stage7-20260821T104509Z-2769`）
+
+- 导航完美，**无负 clearance**（uav1 min 0.073m / uav2 min 0.111m，无负数）；
+  降落验证超时（uav2 悬停 0.345m）。重复模式：PX4 AUTO.LAND 已 disarm 但仿真
+  悬停在 0.29–0.55m，验证要求 z≤0.25m 导致误判失败。
+
+### 16.3 降落修复（`43692e1`）
+
+- `_wait_for_landing` 增加“**低高度已 disarm 即视为降落完成**”：
+  当最新 odom 高度 ≤ max(阈值+0.5, 1.0) 且 `state.armed == False` 时确认 landing；
+  保留原高度阈值路径（正常触地）。离线测试 `stage8_landing_disarm_check.py` 覆盖
+  disarm-低高度通过、armed-未通过、disarm-巡航高度拒绝三种情况。
+
+### 16.4 S6（`stage7-20260821T110404Z-2770`，含降落修复）
+
+```text
+mission: success=true 82.0s  collision=0 offboard_loss=0 timeout=0
+uav1: 22/22；uav2: 19/19，0 pending
+landing: uav1 0.24m / uav2 0.32m（uav2 走 disarm 路径）均 confirmed
+min in-corridor clearance: uav1 0.129m / uav2 0.102m；0 负样本
+```
+
+### 16.5 S7（最终，`stage7-20260821T112057Z-2768`）
+
+```text
+mission: success=true 82.0s  collision=0 offboard_loss=0 timeout=0
+uav1: 22/22；uav2: 19/19，0 pending
+landing: uav1 0.22m / uav2 0.32m 均 confirmed
+min in-corridor clearance: uav1 0.113m / uav2 0.136m；0 负样本
+tandem: min physical distance 1.815m；min gap_s 1.862；median gap_s 2.526；
+        overlap 32.56s；traverse 41.69s / 40.88s
+```
+
+### 16.6 结论
+
+- 降落修复后连续 **2 次 fresh 双机完整 SUCCESS**（S6/S7），本轮稳定性测试结束。
+- S4 的 arc2 入口偶发切角记录为**残余间歇风险**（uav2 min clearance 在
+  0.10–0.14m 波动，S4 出现一次 -0.03m）；若后续需要进一步加固，按单变量规则单独
+  验证 turn checkpoint 0.5→0.4。
+- 所有栈均已 clean 停机；记录保留在对应 run 目录。
