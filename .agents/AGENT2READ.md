@@ -28,9 +28,12 @@
 - 2026-08-21（深夜）Run S2 出口 clearance 异常已诊断为 **Case B：真实提前
   横切**（uav2 在 x<29.3、仍处于最后墙体纵向范围内时向 platform2 斜切，
   几何壁距 -0.111m；不是 metric artifact）。最小修复 `c013ca1`：platform2
-  发布前增加 blocking 出口 progress gate（s=total），离线全绿。live 复验因
-  当前环境 CopterSim lidar 未发布而连续 2 次 INFRA_INVALID（与修复无关）；
-  待环境恢复后跑一次 fresh 确认出口段 `min valid clearance > 0.10m`。
+  发布前增加 blocking 出口 progress gate（s=total）。**Run S3 fresh live 通过**：
+  uav2 19/19 confirmed（17+exit+terminal）、0 pending；出口段 min clearance
+  0.316m、0 负样本；全程 min clearance uav1 0.133 / uav2 0.135m；min 机间距
+  2.0m。环境“卡地板/lidar 缺失”根因为 arena_floor 碰撞板与生成平面重叠，
+  已由 `9025aab` 下移地板修复并 live 验证。**Stage 8 双机静态隧道 baseline
+  可冻结**。
 - **已知 OPEN 缺陷（Yellow Zone，待修）**：`stack_stop.py` 对 WSL 进程组
   `kill -- -PGID` 无效（返回 0 但进程组存活），stop 报 NOT clean，需要按显式 PID
   补清后再收尾记录 `clean: true`；2 个 fresh 栈均 2/2 复现。

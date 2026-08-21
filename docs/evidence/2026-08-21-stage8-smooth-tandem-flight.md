@@ -1,9 +1,9 @@
 # Stage 8 静态隧道双机连续丝滑穿越 — 实现与离线验证（2026-08-21）
 
-> 状态：**OFFLINE IMPLEMENTED + VALIDATED；LIVE 已获 2× fresh 双机 SUCCESS
-> （UAV2 staging 方案）；出口提前横切已定位并修复（离线验证）；出口修复的
-> live 复验因环境 lidar 未发布暂被 INFRA 阻塞**
-> HEAD：`c013ca1`
+> 状态：**Stage 8 双机静态隧道 baseline 可冻结**。UAV2 飞出地图已关闭；
+> 出口提前横切（Case B）已修复并 **live 验证通过**；环境“卡地板/lidar 缺失”
+> 已定位为 arena_floor 碰撞板与 CopterSim 生成平面重叠，修复后 live 恢复。
+> HEAD：`9025aab`
 > 范围：仅优化 `predicted_narrow_course_v1` 静态隧道中的双机连续穿越；未改 EGO/PX4/FAST-LIO/lifecycle。
 
 ## 1. 结论
@@ -372,6 +372,51 @@ validate_stage8.ps1：Stage 7 + Stage 8 全 PASS
 
 - UAV2 飞出地图问题：**已关闭**（staging + blocking follower verify）。
 - 出口提前横切：**根因已确认（Case B）并已修复（`c013ca1`），离线验证通过**；
-  live 复验待环境恢复后跑一次 fresh 双机确认 `min valid in-corridor clearance
-  > 0.10m` 且 terminal goal 发布晚于 exit crossing。
-- 静态双机隧道 baseline 冻结：待该次 live 复验通过后正式冻结。
+  live 复验已于 Run S3 通过（见 §15）。
+- 静态双机隧道 baseline 冻结：Run S3 通过后正式冻结。
+
+## 15. Run S3：出口修复 + 地板修复 live 验证（fresh 通过）
+
+### 15.1 环境问题：飞机卡地板 / lidar 缺失（已修复，`9025aab`）
+
+- 现象：多轮 fresh 在 readiness 前失败（lidar 无点云 → FAST-LIO 无输入）；
+  用户现场确认 UAV1 卡在地板里。原因是 course 部署的 `arena_floor` 碰撞薄板
+  位于 z=0（顶面 +0.025），与 CopterSim 在 z=0 的生成体相交。
+- 修复：`arena_floor` 中心下移至 z=-0.10（顶面 -0.075），生成点位于地板上方；
+  `tests/stage8_course_geometry_check.py` 同步更新。
+- 修复后 fresh 启动：FAST-LIO readiness PASS（lidar 正常）。
+
+### 15.2 Run S3（fresh，`stage7-20260821T084406Z-2769`，
+stack `a2f503da`，commit `c013ca1` + `9025aab`）
+
+```text
+mission: success=true 82.0s  collision=0 offboard_loss=0 timeout=0
+uav1:    22/22 navigation confirmed（含 terminal）
+uav2:    17 flythrough + 1 exit gate + 1 terminal = 19/19 confirmed，0 pending
+goals:   uav1 logical=22 observed=22；uav2 logical=19（staging+17+terminal）observed=19
+traverse time: uav1 42.53s / uav2 42.17s
+min wall clearance: uav1 0.133m / uav2 0.135m（均 > 0.10 ✓）
+max cross-track:    uav1 0.373m / uav2 0.357m（Run S2 为 0.636m）
+tandem:  min physical distance 2.0m；min gap_s 2.116；median gap_s 2.73；
+         overlap 33.47s
+stops:   uav1 1（s≈5.63，1.0s，arc1 出口）；uav2 1（s≈14.66，0.6s，出口前）
+```
+
+### 15.3 出口段专项（uav2，s>13.5）
+
+```text
+min valid in-corridor wall clearance: 0.316m
+max cross-track while inside corridor: 0.209m
+negative clearance samples inside corridor: 0
+terminal platform2 goal world: (32.0, 5.9)
+exit gate 确认位置：s≈14.73（机体前缘已越过墙体终点 x=29.3）
+odom 中心越过 x=29.3 比 terminal 发布晚约 2.8s（0.6s 出口短暂减速）
+```
+
+**结论：Case B 修复有效。** UAV2 不再在墙体纵向范围内向 platform2 横切；
+出口段 clearance 全部为正且 >0.10m。
+
+### 15.4 收尾
+
+- 已按 canonical lifecycle 停机，`clean=true`；`sim.ps1 status` = `no active stack`。
+- 记录保留在 `logs/stage7_live/stage7-20260821T084406Z-2769`。
