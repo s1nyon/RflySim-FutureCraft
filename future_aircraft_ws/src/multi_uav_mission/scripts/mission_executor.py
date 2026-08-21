@@ -309,6 +309,19 @@ class RosBackend:
             )
             if last_planner_sequence > previous_planner_sequence:
                 planner_commands += 1
+        if action.get("non_blocking"):
+            return {
+                "status": "ros_progress_pending",
+                "detail": (
+                    f"course progress not confirmed within {timeout_s:.1f}s; "
+                    f"remaining={last_distance:.3f}m planner_commands={planner_commands}"
+                ),
+                "navigation": {
+                    "distance_m": round(last_distance, 3),
+                    "planner_commands": planner_commands,
+                    "speed_mps": round(self._odom_speed(odom), 3),
+                },
+            }
         raise RuntimeError(
             f"planned navigation not confirmed for {action['uav']} within {timeout_s:.1f}s; "
             f"last_distance={last_distance:.3f}m planner_commands={planner_commands}"
@@ -926,10 +939,15 @@ def _events_for_action(action, result, clock):
 
     events = [event]
     if action["action"] == "verify_planned_navigation" and result.get("navigation"):
+        event_name = (
+            "navigation_pending"
+            if result.get("status") == "ros_progress_pending"
+            else "navigation_confirmed"
+        )
         events.append(
             {
                 "time": clock.tick(),
-                "event": "navigation_confirmed",
+                "event": event_name,
                 "stage": action["stage"],
                 "uav": action["uav"],
                 "distance_m": result["navigation"]["distance_m"],

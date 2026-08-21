@@ -95,6 +95,12 @@ def verify_action(centreline, checkpoint_s=2.4, x=8.0, y=0.7, timeout_s=1.0):
     }
 
 
+def pending_action(centreline, checkpoint_s=2.4, x=3.0, y=0.7, timeout_s=0.5):
+    action = verify_action(centreline, checkpoint_s=checkpoint_s, x=x, y=y, timeout_s=timeout_s)
+    action["non_blocking"] = True
+    return action
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--executor-module", required=True, type=Path)
@@ -159,6 +165,31 @@ def main() -> int:
         publish_stop2.set()
         thread2.join(timeout=2.0)
     assert raised, "verify must not confirm before the vehicle passes the checkpoint"
+
+    # Case 3: a non-blocking course verify that cannot reach the checkpoint
+    # within its short timeout must return "pending" instead of failing.
+    backend3 = executor.RosBackend.__new__(executor.RosBackend)
+    backend3.rospy = FakeRospy()
+    backend3.Odometry = DummyOdometry
+    backend3.PositionCommand = DummyPositionCommand
+    backend3._topic_caches = {}
+    action3 = pending_action(centreline)
+    x3, y3 = action3.pop("_odom_position")
+    publish_stop3 = threading.Event()
+
+    def stream3():
+        while not publish_stop3.is_set():
+            backend3.rospy.publish_odom(make_odom(x3, y3, 1.0))
+            time.sleep(0.02)
+
+    thread3 = threading.Thread(target=stream3, daemon=True)
+    thread3.start()
+    try:
+        result3 = backend3._verify_planned_navigation(action3)
+    finally:
+        publish_stop3.set()
+        thread3.join(timeout=2.0)
+    assert result3["status"] == "ros_progress_pending", result3
 
     print("stage8 course progress verify: PASS")
     return 0

@@ -11,6 +11,10 @@ from pathlib import Path
 import course_guidance
 
 
+LOOKAHEAD_STRAIGHT_M = 2.2
+LOOKAHEAD_TURN_M = 0.9
+
+
 def build_plan(config, course=None):
     uavs = {item["uav_id"]: item for item in config["uavs"]}
     if set(uavs) != {"uav1", "uav2"}:
@@ -120,7 +124,11 @@ def build_plan(config, course=None):
             )
     else:
         centreline = course_guidance.Centreline.from_course(course)
-        gates = course_guidance.build_flythrough_gates(course)
+        gates = course_guidance.build_flythrough_gates(
+            course,
+            lookahead_straight=LOOKAHEAD_STRAIGHT_M,
+            lookahead_turn=LOOKAHEAD_TURN_M,
+        )
         poses = {item["name"]: item["position"] for item in course["takeoff_poses"]}
         platforms = course["landing_platforms"]
 
@@ -153,7 +161,7 @@ def build_plan(config, course=None):
                 mavros_odom_topic=uavs[uav_id]["mavros_feedback_odom_topic"],
                 goal=goal,
                 tolerance_m=tolerance_m,
-                timeout_s=45,
+                timeout_s=meta.pop("timeout_s", 45),
                 **meta,
             )
 
@@ -255,6 +263,8 @@ def build_plan(config, course=None):
                     checkpoint_s=follower["checkpoint_s"],
                     phase=follower["phase"],
                     terminal=False,
+                    non_blocking=True,
+                    timeout_s=2.0,
                 )
 
         platform_local = {
