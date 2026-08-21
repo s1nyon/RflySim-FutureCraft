@@ -194,18 +194,46 @@ def build_plan(config, course=None):
                     last_follower_s = follower_gate["s"]
 
         follower_by_phase = {entry["phase"]: entry for entry in follower_entries}
-        for leader in leader_entries:
-            publish_goal(
+        # Leader-first scheduling: the leader's next look-ahead target is
+        # published immediately after its own checkpoint verification, BEFORE
+        # any follower verification can block forward progress.  Checkpoint
+        # verification uses along-track course_s progress (injected by the
+        # executor from plan["course_guidance"]), so a late verify still
+        # confirms once the vehicle has passed the gate.
+        for index, leader in enumerate(leader_entries):
+            if index == 0:
+                publish_goal(
+                    "uav1",
+                    local_goal("uav1", leader["target"]),
+                    checkpoint_s=leader["checkpoint_s"],
+                    target_s=leader["target_s"],
+                    lookahead_m=leader["lookahead_m"],
+                    segment_kind=leader["segment_kind"],
+                    width=leader["width"],
+                    phase=leader["phase"],
+                    terminal=False,
+                )
+            verify_goal(
                 "uav1",
-                local_goal("uav1", leader["target"]),
+                local_goal("uav1", leader["checkpoint"]),
+                0.1,
                 checkpoint_s=leader["checkpoint_s"],
-                target_s=leader["target_s"],
-                lookahead_m=leader["lookahead_m"],
-                segment_kind=leader["segment_kind"],
-                width=leader["width"],
                 phase=leader["phase"],
                 terminal=False,
             )
+            if index + 1 < len(leader_entries):
+                nxt = leader_entries[index + 1]
+                publish_goal(
+                    "uav1",
+                    local_goal("uav1", nxt["target"]),
+                    checkpoint_s=nxt["checkpoint_s"],
+                    target_s=nxt["target_s"],
+                    lookahead_m=nxt["lookahead_m"],
+                    segment_kind=nxt["segment_kind"],
+                    width=nxt["width"],
+                    phase=nxt["phase"],
+                    terminal=False,
+                )
             follower = follower_by_phase.get(leader["phase"])
             if follower is not None:
                 publish_goal(
@@ -220,19 +248,10 @@ def build_plan(config, course=None):
                     leader_checkpoint_s=follower["leader_checkpoint_s"],
                     terminal=False,
                 )
-            verify_goal(
-                "uav1",
-                local_goal("uav1", leader["checkpoint"]),
-                0.5,
-                checkpoint_s=leader["checkpoint_s"],
-                phase=leader["phase"],
-                terminal=False,
-            )
-            if follower is not None:
                 verify_goal(
                     "uav2",
                     local_goal("uav2", follower["checkpoint"]),
-                    0.5,
+                    0.1,
                     checkpoint_s=follower["checkpoint_s"],
                     phase=follower["phase"],
                     terminal=False,
@@ -266,6 +285,11 @@ def build_plan(config, course=None):
     plan = {"mission_name": mission_name, "actions": actions}
     if geofence is not None:
         plan["geofence"] = geofence
+    if course is not None:
+        plan["course_guidance"] = {
+            "centreline": course["centreline"],
+            "takeoff_poses": course["takeoff_poses"],
+        }
     return plan
 
 

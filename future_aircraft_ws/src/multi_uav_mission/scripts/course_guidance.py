@@ -136,6 +136,35 @@ class Centreline:
             center[1] + radius * math.sin(angle),
         )
 
+    def nearest_s(self, point, ds=0.02):
+        """Return ``(s, distance_m)`` of the closest centreline sample.
+
+        ``point`` is in the same world frame as the course JSON.  The result is
+        the along-track arc length ``s`` of the nearest centreline point and the
+        Euclidean distance to it (cross-track for a vehicle near the course).
+        """
+        best_s = 0.0
+        best_dist = float("inf")
+        s = 0.0
+        while s <= self._total_length + _EPS:
+            sample = self.point_at_s(s)
+            distance = math.hypot(point[0] - sample[0], point[1] - sample[1])
+            if distance < best_dist:
+                best_dist = distance
+                best_s = s
+            s += ds
+        # Local refinement so straight/arc projection is not limited by ds.
+        fine_ds = ds / 10.0
+        probe = max(0.0, best_s - ds)
+        while probe <= min(self._total_length, best_s + ds) + _EPS:
+            sample = self.point_at_s(probe)
+            distance = math.hypot(point[0] - sample[0], point[1] - sample[1])
+            if distance < best_dist:
+                best_dist = distance
+                best_s = probe
+            probe += fine_ds
+        return best_s, best_dist
+
     def _turn_influence(self, s):
         arcs = [segment for segment in self.segments if segment["kind"] == "arc"]
         if not arcs:

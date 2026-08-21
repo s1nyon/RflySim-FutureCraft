@@ -67,6 +67,11 @@ try {
         '--course-spec', $spec
     )
     Invoke-Checked $python @(
+        'tests\stage8_course_progress_verify_check.py',
+        '--executor-module', (Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\mission_executor.py'),
+        '--course-spec', $spec
+    )
+    Invoke-Checked $python @(
         'tests\stage8_course_flight_plan_check.py',
         '--plan-module', (Join-Path $projectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\stage7_flight_plan.py'),
         '--config', (Join-Path $projectRoot 'config\stage7_live_slam_ego_swarm.json'),

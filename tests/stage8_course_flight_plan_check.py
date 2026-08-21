@@ -51,6 +51,8 @@ def main() -> int:
         "min_z": -0.5, "max_z": 2.0, "max_speed_mps": 2.0, "max_odom_age_s": 0.5,
     }
     assert -1.057 > plan["geofence"]["min_x"]
+    assert plan["course_guidance"]["centreline"] == course["centreline"]
+    assert {pose["name"] for pose in plan["course_guidance"]["takeoff_poses"]} == {"uav1", "uav2"}
 
     navigation = [
         action for action in plan["actions"] if action["stage"] == "collaborative_navigate"
@@ -66,6 +68,8 @@ def main() -> int:
     assert len(uav1_publishes) == len(uav1_verifies)
     assert len(uav2_publishes) == len(uav2_verifies)
     assert len(uav1_publishes) > len(uav2_publishes)
+    assert publishes[1]["uav"] == "uav1"
+    assert [action["uav"] for action in verifies[:3]] == ["uav1", "uav1", "uav1"]
 
     for uav_id in ("uav1", "uav2"):
         pub = (uav1_publishes if uav_id == "uav1" else uav2_publishes)[-1]
@@ -91,7 +95,7 @@ def main() -> int:
         assert pub["target_s"] > pub["checkpoint_s"]
         assert abs((pub["target_s"] - pub["checkpoint_s"]) - pub["lookahead_m"]) <= 1e-9
         assert rounded_goal(pub["goal"]) != rounded_goal(ver["goal"])
-        assert float(ver["tolerance_m"]) == 0.5
+        assert float(ver["tolerance_m"]) == 0.1
         if pub["segment_kind"] == "arc":
             assert abs(pub["lookahead_m"] - 1.0) <= 1e-9
         else:
@@ -101,7 +105,7 @@ def main() -> int:
         assert pub["checkpoint_s"] == ver["checkpoint_s"]
         assert pub["target_s"] > pub["checkpoint_s"]
         assert rounded_goal(pub["goal"]) != rounded_goal(ver["goal"])
-        assert float(ver["tolerance_m"]) == 0.5
+        assert float(ver["tolerance_m"]) == 0.1
 
     assert any(pub["segment_kind"] == "arc" and abs(pub["lookahead_m"] - 1.0) <= 1e-9 for pub in uav1_int_pub)
     assert any(pub["segment_kind"] == "line" and abs(pub["lookahead_m"] - 2.2) <= 1e-9 for pub in uav1_int_pub)
@@ -120,6 +124,27 @@ def main() -> int:
     for pub in uav2_int_pub:
         leader = leader_by_phase[pub["phase"]]
         assert pub["target_s"] <= leader["target_s"] + 1e-9
+
+    # Leader-first scheduling: for every follower verify, the leader's target
+    # for that same phase was already published earlier in the action list, so
+    # the follower verification can never starve the leader's look-ahead.
+    action_order = [
+        (action["action"], action.get("uav"), action.get("phase"))
+        for action in navigation
+    ]
+    for verify in uav2_verifies:
+        if verify.get("terminal"):
+            continue
+        phase = verify["phase"]
+        leader_publish_index = next(
+            index
+            for index, (name, uav, item_phase) in enumerate(action_order)
+            if name == "publish_planner_goal"
+            and uav == "uav1"
+            and item_phase == phase
+        )
+        verify_index = action_order.index(("verify_planned_navigation", "uav2", phase))
+        assert leader_publish_index < verify_index
 
     landing = [
         action

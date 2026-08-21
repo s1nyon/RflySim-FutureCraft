@@ -94,6 +94,19 @@ def main() -> int:
     assert_close(guidance.gate_at_or_before(gates, 1.6)["s"], 1.6, 1e-9)
     assert guidance.gate_at_or_before(gates, total + 10.0) is gates[-1]
 
+    # Along-track projection: a point on the centreline maps back to its own s,
+    # and a lateral offset preserves s while reporting the cross-track distance.
+    s_on, dist_on = centreline.nearest_s((21.0, 0.0))
+    assert_close(s_on, 2.5, 1e-6)
+    assert_close(dist_on, 0.0, 1e-6)
+    s_off, dist_off = centreline.nearest_s((21.0, 0.35))
+    assert_close(s_off, 2.5, 1e-6)
+    assert_close(dist_off, 0.35, 1e-6)
+    arc_point = centreline.point_at_s(5.0)
+    s_arc, dist_arc = centreline.nearest_s(arc_point)
+    assert abs(s_arc - 5.0) <= 0.05
+    assert dist_arc <= 0.05
+
     print("stage8 course guidance: PASS")
     return 0
 

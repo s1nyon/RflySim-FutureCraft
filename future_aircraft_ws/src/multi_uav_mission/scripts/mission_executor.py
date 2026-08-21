@@ -246,6 +246,22 @@ class RosBackend:
         planner_cache = self._ensure_topic_cache(planner_topic, self.PositionCommand)
         last_odom_sequence = odom_cache.sequence
         last_planner_sequence = planner_cache.sequence
+
+        progress = None
+        if action.get("progress_mode") == "course_s" and action.get("progress_centreline"):
+            import course_guidance
+
+            centreline = course_guidance.Centreline.from_course(
+                {"centreline": action["progress_centreline"]}
+            )
+            origin = action["progress_origin"]
+            progress = {
+                "centreline": centreline,
+                "origin": (float(origin[0]), float(origin[1])),
+                "checkpoint_s": float(action["checkpoint_s"]),
+                "tolerance_m": float(action.get("progress_tolerance_m", 0.1)),
+            }
+
         while time.monotonic() < deadline and not self.rospy.is_shutdown():
             remaining = max(0.01, deadline - time.monotonic())
             odom, last_odom_sequence = odom_cache.wait_for_sequence(
@@ -255,12 +271,28 @@ class RosBackend:
             if odom is None:
                 continue
             position = odom.pose.pose.position
-            last_distance = (
-                (float(position.x) - float(goal["x"])) ** 2
-                + (float(position.y) - float(goal["y"])) ** 2
-                + (float(position.z) - float(goal["z"])) ** 2
-            ) ** 0.5
-            if last_distance <= tolerance_m:
+            if progress is not None:
+                world = (
+                    float(position.x) + progress["origin"][0],
+                    float(position.y) + progress["origin"][1],
+                )
+                s_now, _ = progress["centreline"].nearest_s(world)
+                last_distance = max(
+                    0.0,
+                    progress["checkpoint_s"] - progress["tolerance_m"] - s_now,
+                )
+            else:
+                last_distance = (
+                    (float(position.x) - float(goal["x"])) ** 2
+                    + (float(position.y) - float(goal["y"])) ** 2
+                    + (float(position.z) - float(goal["z"])) ** 2
+                ) ** 0.5
+            confirmed = (
+                last_distance <= progress["tolerance_m"]
+                if progress is not None
+                else last_distance <= tolerance_m
+            )
+            if confirmed:
                 return {
                     "status": "ros_navigation_success",
                     "detail": f"planned navigation reached goal within {last_distance:.3f}m",
@@ -668,6 +700,29 @@ def _validate_timeout(action):
         raise ValueError(f"sequence {action['sequence']} timeout_s must be positive")
 
 
+def _inject_course_progress(action, plan):
+    """Attach along-track course geometry to Stage 8 fly-through verifies."""
+    if action.get("action") != "verify_planned_navigation":
+        return
+    guidance = plan.get("course_guidance")
+    if not guidance or action.get("checkpoint_s") is None:
+        return
+    origin = next(
+        (
+            pose["position"]
+            for pose in guidance.get("takeoff_poses", [])
+            if pose.get("name") == action.get("uav")
+        ),
+        None,
+    )
+    if origin is None:
+        return
+    action["progress_mode"] = "course_s"
+    action["progress_centreline"] = guidance["centreline"]
+    action["progress_origin"] = [float(origin[0]), float(origin[1])]
+    action.setdefault("progress_tolerance_m", 0.1)
+
+
 def execute_plan(plan, backend, allow_arm=False, simulation_only=False, live_config=None, target_results=None):
     validate_plan(plan)
     geofence = Geofence(**plan["geofence"]) if plan.get("geofence") else None
@@ -684,6 +739,7 @@ def execute_plan(plan, backend, allow_arm=False, simulation_only=False, live_con
 
     try:
         for action in plan["actions"]:
+            _inject_course_progress(action, plan)
             if geofence is not None and "goal" in action:
                 validate_point((action["goal"]["x"], action["goal"]["y"], action["goal"]["z"]), geofence)
             stage = action["stage"]
