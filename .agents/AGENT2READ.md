@@ -12,12 +12,14 @@
   50.5s/次，无 collision/offboard-loss/timeout），证据
   `../docs/evidence/2026-08-20-current-params-4x-fresh-arm-verified.md`。当天早期
   19:45/21:07 的失败仍按旧栈/未背靠背/odom 抖动处理，不凭单次失败升级为当前 blocker。
-- 2026-08-21 Stage 8 静态隧道「连续丝滑穿越」guidance 已实现并通过离线验证
-  （rolling look-ahead + fly-through checkpoint + s-gap tandem + planner goal
-  单次发布），见 `../docs/evidence/2026-08-21-stage8-smooth-tandem-flight.md`。
-  **live 未复验**：stale PID 已退役；fresh start 在 SITL wrapper `choice /T`
-  交互控制台挂起（环境限制），需交互桌面会话或授权 wrapper `choice→timeout`
-  兼容修改后重跑；不得拿离线 PASS 当作 live PASS。
+- 2026-08-21 Stage 8 连续隧道 guidance 已离线验证并多轮 live 尝试：
+  1 logical goal = 1 ROS publish（live 证实）；course_s progress verify 与
+  leader-first 顺序已保留。**live 未通过验收**：blocking-follower 版本
+  （`4756bae`）双机 mission success 但 leader 中途停车 3 次、弯道壁距 0.015m；
+  follower 非阻塞版本（`de1a42a`）导致 uav2 跟丢并飞出地图（60m），**已回退**。
+  详见 `../docs/evidence/2026-08-21-stage8-smooth-tandem-flight.md`。
+  wrapper `choice→timeout`（`279531b`）已解决 console 挂起；WSL PGID stop
+  缺陷仍按显式 PID 补清处理。
 - **已知 OPEN 缺陷（Yellow Zone，待修）**：`stack_stop.py` 对 WSL 进程组
   `kill -- -PGID` 无效（返回 0 但进程组存活），stop 报 NOT clean，需要按显式 PID
   补清后再收尾记录 `clean: true`；2 个 fresh 栈均 2/2 复现。

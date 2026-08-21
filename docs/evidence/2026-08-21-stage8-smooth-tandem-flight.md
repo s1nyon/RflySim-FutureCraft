@@ -1,6 +1,6 @@
 # Stage 8 静态隧道双机连续丝滑穿越 — 实现与离线验证（2026-08-21）
 
-> 状态：**OFFLINE IMPLEMENTED + VALIDATED；LIVE 尝试受环境 console 限制（INFRA-BLOCKED），guidance 未调参**
+> 状态：**OFFLINE IMPLEMENTED + VALIDATED；LIVE 多次 fresh 尝试，candidate 尚未通过验收；最后一个 unsafe 改动（follower 非阻塞 verify）已回退**
 > HEAD：`b7c9a19`
 > 范围：仅优化 `predicted_narrow_course_v1` 静态隧道中的双机连续穿越；未改 EGO/PX4/FAST-LIO/lifecycle。
 
@@ -193,3 +193,71 @@ scripts\run_live_slam_ego_swarm_flight.bat --allow-arm --simulation-only
 
 - 未 arm、未起飞、未调 guidance 参数（0.45/0.50/0.55 均未在 live 验证）。
 - 未修改 lifecycle / launcher / 28com 参考工程。
+
+## 12. Live 验证结果（2026-08-21 下午，多轮 fresh-instance）
+
+### 12.1 wrapper console 阻塞修复
+
+`279531b` 将生成的 SITL wrapper 中 `choice /T` 替换为 `timeout /T /nobreak`
+后，canonical fresh stack 可以正常启动（health + dual topology ready）。
+
+### 12.2 Run A（commit `4756bae`：course_s progress verify + leader-first 顺序，
+follower verify 仍阻塞）
+
+- **双机 mission SUCCESS**（80.5s；collision/offboard/timeout = 0；
+  navigation/landing 双机均 true）。
+- 无 goal storm：uav1 logical=22 observed=22，uav2 logical=18 observed=18。
+- Tandem：overlap 35.98s；min gap_s 1.548m（≈1.5 目标）；median gap_s 2.154m；
+  min physical distance 1.553m（≥0.8/0.9 ✓）。
+- **不达标**：uav1 mid-course stops=3（s≈5.39 停 5.5s、s≈6.03 停 1.3s、
+  s≈8.87 停 1.2s）；uav2 stops=1；min wall clearance uav1=0.015m、
+  uav2=0.039m（<0.10 硬门槛；两机在 arc1/arc2 切内角，max cross-track≈0.46m）。
+- 原因：follower 进入隧道前的 verify（约 8–10s）阻塞 leader 下一 target 发布；
+  leader 吃光 look-ahead 后在弧内停车；turn lookahead 1.0m 让 target 跨弯导致切角。
+
+### 12.3 Run B / Run C（commit `de1a42a`：follower verify 改为 2s 非阻塞 pending；
+turn lookahead 1.0→0.9）
+
+- Run B：uav1 全程正常；uav2 起飞后在原点悬停约 25s，随后慢速爬行并发生
+  odom/mode loss → **INFRA-INVALID**。
+- Run C（fresh）：uav1 **完美**（22/22 navigation confirmed 含 terminal）；
+  uav2 **仅 1/17 confirmed、16 次 navigation_pending**，实际没有进入隧道推进；
+  最终 terminal verify 失败：`last_distance=60.159m planner_commands=133`，
+  score `success=false / missing_mission_end`。用户现场观察：uav2 跟随距离
+  过远并飞出地图。
+- **根因**：non-blocking follower verify 移除了 follower 的 progress gate；
+  follower 的 target 按 leader 节奏每 ~2s 前进，与 uav2 真实进度无关。uav2
+  落后时其 look-ahead 目标持续跑远，EGO 最终朝 60m 外的目标规划 → 出图。
+- **结论**：follower 的 checkpoint 必须继续作为硬 progress gate（阻塞），
+  不能用 2s pending 语义解耦；已回退该改动。
+
+### 12.4 当前 HEAD（回退后）保留的修复
+
+- `course_s` along-track progress verify（leader/follower 均可，late verify
+  仍能在通过后立即确认）。
+- leader-first 顺序：leader 在自身 verify 后、follower verify 前先拿到下一
+  look-ahead target。
+- turn lookahead 0.9m（防切角方向，尚未在健康双机 run 中单独验证）。
+- 1 logical goal = 1 ROS publish（live 证实，uav1/uav2 counts 与 logical 完全一致）。
+
+### 12.5 仍 OPEN 的问题（后续最小实验，一次一类）
+
+1. **leader 在 follower 进入期停车**：follower 进隧道 verify 约 8–10s，
+   阻塞了 leader 下一 target；建议在保持 follower verify 阻塞的前提下，
+   让 leader 的 look-ahead runway ≥ follower 最坏 verify 时长 × 巡航速度
+   （例如 straight lookahead 2.4 + straight checkpoint 0.9，或 leader 在
+   follower verify 前多发一个 gate 的 target）。
+2. **弯道切内角 / wall clearance 0.015m**：建议 turn checkpoint 0.5→0.4
+   （保持 turn lookahead 0.9），单变量验证。
+3. uav2 偶发起飞后悬停/慢速（Run B）按基础设施处理，fresh 重试前先确认
+   uav2 EGO/FAST-LIO odom 与 pos_cmd 健康。
+
+### 12.6 本轮 live 过程记录
+
+- 每个 fresh 周期都遇到已知 WSL PGID stop 缺陷（`kill -- -PGID` 无效），
+  通过 manifest 校验后按显式 PID 补清并再次 `live_stack_stop` 至 `clean=true`。
+- 最终栈 `stack-20260821T064346Z-bea0584f` 已按用户要求停机，`clean=true`；
+  `sim.ps1 status` = `no active stack`。
+- 所有记录/日志保留在
+  `logs/stage7_live/stage7-20260821T061301Z-5311`（Run A）与
+  `logs/stage7_live/stage7-20260821T064449Z-4953`（Run C）。

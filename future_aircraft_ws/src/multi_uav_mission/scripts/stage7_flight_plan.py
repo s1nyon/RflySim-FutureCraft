@@ -263,8 +263,6 @@ def build_plan(config, course=None):
                     checkpoint_s=follower["checkpoint_s"],
                     phase=follower["phase"],
                     terminal=False,
-                    non_blocking=True,
-                    timeout_s=2.0,
                 )
 
         platform_local = {

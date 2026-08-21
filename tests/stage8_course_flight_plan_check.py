@@ -107,8 +107,7 @@ def main() -> int:
         assert pub["target_s"] > pub["checkpoint_s"]
         assert rounded_goal(pub["goal"]) != rounded_goal(ver["goal"])
         assert float(ver["tolerance_m"]) == 0.1
-        assert ver.get("non_blocking") is True
-        assert float(ver["timeout_s"]) == 2.0
+        assert ver.get("non_blocking") is not True
 
     assert any(pub["segment_kind"] == "arc" and abs(pub["lookahead_m"] - 0.9) <= 1e-9 for pub in uav1_int_pub)
     assert any(pub["segment_kind"] == "line" and abs(pub["lookahead_m"] - 2.2) <= 1e-9 for pub in uav1_int_pub)
