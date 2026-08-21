@@ -35,7 +35,7 @@ class FakePublisher:
 
     def get_num_connections(self):
         self.connection_checks += 1
-        return 1 if self.connection_checks >= 2 else 0
+        return 1
 
     def publish(self, message):
         self.messages.append(message)
@@ -43,11 +43,13 @@ class FakePublisher:
 
 class FakeRospy:
     def __init__(self):
-        self.publisher = FakePublisher()
+        self.publishers = []
         self.Time = SimpleNamespace(now=lambda: "stamp")
 
     def Publisher(self, *_args, **_kwargs):
-        return self.publisher
+        publisher = FakePublisher()
+        self.publishers.append(publisher)
+        return publisher
 
     def Rate(self, _rate):
         return SimpleNamespace(sleep=lambda: None)
@@ -82,16 +84,27 @@ def main():
     backend = executor.RosBackend.__new__(executor.RosBackend)
     backend.rospy = FakeRospy()
     backend.PoseStamped = DummyPoseStamped
-    result = backend._publish_planner_goal(
-        {
-            "topic": "/uav1/planning/goal",
-            "goal": {"x": 1.0, "y": 2.0, "z": 1.0},
-            "timeout_s": 0.1,
-        }
-    )
-    assert backend.rospy.publisher.connection_checks >= 2
-    assert len(backend.rospy.publisher.messages) >= 3
-    assert result["status"] == "ros_success"
+    goals = [
+        {"x": 1.0, "y": 2.0, "z": 1.0},
+        {"x": 3.0, "y": 4.0, "z": 1.0},
+    ]
+    for goal in goals:
+        result = backend._publish_planner_goal(
+            {
+                "topic": "/uav1/planning/goal",
+                "goal": goal,
+                "timeout_s": 0.1,
+            }
+        )
+        assert result["status"] == "ros_success"
+
+    assert len(backend.rospy.publishers) == 1
+    published = backend.rospy.publishers[0].messages
+    assert len(published) == 2
+    for message, goal in zip(published, goals):
+        assert message.pose.position.x == goal["x"]
+        assert message.pose.position.y == goal["y"]
+        assert message.pose.position.z == goal["z"]
     return 0
 
 

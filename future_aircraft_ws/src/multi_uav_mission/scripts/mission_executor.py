@@ -199,7 +199,10 @@ class RosBackend:
         return {"status": "ros_success", "detail": f"published {count} position targets"}
 
     def _publish_planner_goal(self, action):
-        publisher = self.rospy.Publisher(action["topic"], self.PoseStamped, queue_size=10, latch=True)
+        publisher = self._ensure_planner_goal_publisher(
+            action["topic"],
+            float(action.get("timeout_s", 5)),
+        )
         goal = action["goal"]
         message = self.PoseStamped()
         message.header.stamp = self.rospy.Time.now()
@@ -208,20 +211,27 @@ class RosBackend:
         message.pose.position.y = float(goal["y"])
         message.pose.position.z = float(goal["z"])
         message.pose.orientation.w = 1.0
-        timeout_s = float(action.get("timeout_s", 5))
+        publisher.publish(message)
+        return {"status": "ros_success", "detail": "planner goal published once"}
+
+    def _ensure_planner_goal_publisher(self, topic, timeout_s):
+        publishers = getattr(self, "_planner_goal_publishers", None)
+        if publishers is None:
+            publishers = {}
+            self._planner_goal_publishers = publishers
+        publisher = publishers.get(topic)
+        if publisher is not None:
+            return publisher
+
+        publisher = self.rospy.Publisher(topic, self.PoseStamped, queue_size=10, latch=True)
         deadline = time.monotonic() + timeout_s
         rate = self.rospy.Rate(10)
         while publisher.get_num_connections() < 1 and time.monotonic() < deadline and not self.rospy.is_shutdown():
             rate.sleep()
         if publisher.get_num_connections() < 1:
-            raise RuntimeError(f"planner goal topic has no subscribers: {action['topic']}")
-
-        publish_count = max(3, min(10, int(timeout_s * 10)))
-        for _ in range(publish_count):
-            message.header.stamp = self.rospy.Time.now()
-            publisher.publish(message)
-            rate.sleep()
-        return {"status": "ros_success", "detail": f"planner goal published {publish_count} times"}
+            raise RuntimeError(f"planner goal topic has no subscribers: {topic}")
+        publishers[topic] = publisher
+        return publisher
 
     def _verify_planned_navigation(self, action):
         timeout_s = float(action["timeout_s"])
@@ -257,6 +267,7 @@ class RosBackend:
                     "navigation": {
                         "distance_m": round(last_distance, 3),
                         "planner_commands": planner_commands,
+                        "speed_mps": round(self._odom_speed(odom), 3),
                     },
                 }
             previous_planner_sequence = last_planner_sequence
@@ -270,6 +281,18 @@ class RosBackend:
             f"planned navigation not confirmed for {action['uav']} within {timeout_s:.1f}s; "
             f"last_distance={last_distance:.3f}m planner_commands={planner_commands}"
         )
+
+    @staticmethod
+    def _odom_speed(odom):
+        try:
+            linear = odom.twist.twist.linear
+            return (
+                float(linear.x) ** 2
+                + float(linear.y) ** 2
+                + float(linear.z) ** 2
+            ) ** 0.5
+        except Exception:
+            return 0.0
 
     def _ensure_topic_cache(self, topic, topic_type):
         caches = getattr(self, "_topic_caches", None)
@@ -855,6 +878,7 @@ def _events_for_action(action, result, clock):
                 "uav": action["uav"],
                 "distance_m": result["navigation"]["distance_m"],
                 "planner_commands": result["navigation"]["planner_commands"],
+                "speed_mps": result["navigation"].get("speed_mps"),
             }
         )
     if _is_target_provider_action(action):
