@@ -10,6 +10,7 @@ catkin_install_python(PROGRAMS
   scripts/ego_swarm_adapter.py
   scripts/ego_swarm_flight_smoke_check.py
   scripts/ego_swarm_setpoint_bridge.py
+  scripts/frame_contract_probe.py
   scripts/live_mission_contract.py
   scripts/live_smoke_runbook.py
   scripts/mavlink_return_path_check.py

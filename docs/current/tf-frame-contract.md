@@ -279,6 +279,10 @@ There is no source-level transform between uav1_camera_init and uav2_camera_init
 11. Yes. `body -> base_link`, `odom -> camera_init`, `map -> odom`, and zero `base_link -> lidar` are aliases/compatibility edges; the NED/FRD edges are convention rotations. The zero LiDAR edge is not the physical 0.1 m sensor extrinsic.
 12. The current protected baseline needs an explicit per-UAV frame contract, not an invented unified global TF. A unified competition frame is only justified after a real alignment source exists.
 
+### A.12 Live verification tooling
+
+`frame_contract_probe.py` is a bounded, read-only ROS diagnostic for the next live-verification task. Run `rosrun multi_uav_mission frame_contract_probe.py --duration 8` only after a clean owned stack is READY; it writes ignored Markdown and JSON reports under `logs/frame_contract_probe/<UTC timestamp>/`, covering audited topic headers/stamps and graph endpoints, TF lookups and direct broadcasters, generic message-label reuse, cross-UAV edges, and timestamp statistics. It does not publish, set parameters, modify TF, or act as a lifecycle health gate.
+
 ## B. Proposed Target Contract
 
 Everything in this section is **PROPOSED**, not current behavior.
@@ -321,10 +325,10 @@ It must remain absent until one of these supplies a defensible transform for eac
 
 The future relationship should be expressed as measured transforms such as `competition_world -> uavX_camera_init`; the exact direction, ownership, and update policy are not selected in this audit.
 
-### B.5 Candidate Task 1B, not executed
+### B.5 Task 1B implementation status
 
 | Priority | Candidate | Files/area | Risk and required validation |
 | --- | --- | --- | --- |
-| P0 | Add a read-only, run-scoped frame probe that records publishers, one message header/stamp per audited topic, TF parent ownership, duplicate edges, and cross-UAV edges | New project diagnostic + focused offline test; no launch wiring | Low runtime risk if manually invoked read-only. Validate offline fixtures, then an already healthy no-arm stack only. |
+| P0 | **IMPLEMENTED OFFLINE / LIVE PENDING:** the read-only, run-scoped frame probe records publishers/subscribers, bounded header/stamp statistics, TF parent ownership, duplicate edges, and cross-UAV edges | New project diagnostic + focused offline test; no launch wiring | Offline validation is complete. Runtime claims remain pending one manually invoked capture on an already healthy no-arm stack. |
 | P1 | Correct message labels without changing numbers: per-UAV registered-cloud label, MAVROS local-position frame params, and per-UAV EGO output/command label | Project adapter/launch; possibly a narrowly reviewed upstream EGO parameterization | Medium/high protected-baseline risk. Require design review, focused tests, Stage 7/8, no-arm header/TF capture, single-UAV, dual-UAV, short navigation, full route, repeated fresh instances. |
 | P2 | Resolve the zero LiDAR TF alias and introduce `competition_world` only after deriving physical/global transforms | Frame adapter/launch and an alignment provider; do not patch Faster-LIO extrinsic casually | High coordinate/regression risk. Require independent transform math, double-application tests, ground-truth comparison, and the full PBL-1 ladder. |
