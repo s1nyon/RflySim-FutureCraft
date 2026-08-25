@@ -62,6 +62,12 @@
 - 当前阶段是 Phase 2「Competition-Grade Narrow-Corridor Navigation」；权威路线见 [`docs/current/competition-roadmap.md`](../docs/current/competition-roadmap.md)。
 - 当前 infrastructure 已有 fresh PBL 路线 2/2 PASS；下一工程缺口是按比赛几何/障碍
   验收导航，以及真实视觉目标感知。
+- **2026-08-25 Competition Course V2 原型 live 验收 BLOCKED**：no-arm 双机 RGB/LiDAR/
+  IMU/Faster-LIO transport 可用，动态实体有实际位移，但相机证据显示起飞区/墙体/入口的
+  空间关系不符合预期；ArUco 与障碍物可见性未证明，因此未启动 EGO，未执行 mission，
+  旧 `predicted_narrow_course` 默认基线不变。下一步必须先离线复核 ENU→RflySim/UE
+  坐标、墙体 extent/orientation、spawn/yaw 与相机轴并生成俯视几何预览。详见
+  `../docs/incidents/2026-08-25-competition-course-v2-live-layout-blocker.md`。
 - D435i `full` 模式仍需 live 飞行闭环；默认 `lidar_only`。Depth transport、目标测距和 Depth→EGO 是三个独立验收层。
 - `planner_commands=0` 的 PositionCommand md5、executor subscriber churn 与 lifecycle 强杀事故均已解决；只有 fresh evidence 再现时才重新作为 blocker，历史见 [`docs/incidents/`](../docs/incidents/)。
 

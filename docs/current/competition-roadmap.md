@@ -118,6 +118,10 @@
 ### Phase 2 — Competition-Grade Narrow-Corridor Navigation（NEXT）
 
 - goal：两架无人机在比赛规定的窄通道中连续、安全、高效导航，对未知静态/动态障碍在线响应，满足进入时限与碰撞约束。
+- current map gate：2026-08-25 的 Competition Course V2 本地原型首次 no-arm live
+  inspection 未通过布局验收；sensor/Faster-LIO transport 与动态实体活动不等于地图正确。
+  在修正并验证坐标转换、墙体几何、spawn/yaw 和相机视角以前，不启动该地图的 EGO/mission。
+  见 [`2026-08-25-competition-course-v2-live-layout-blocker.md`](../incidents/2026-08-25-competition-course-v2-live-layout-blocker.md)。
 - work：motion baseline metrics；corridor/gate guidance；look-ahead goal transition；online local replanning；
   静态障碍回归；动态障碍回归；velocity/acceleration tuning；clearance monitoring。
 - KPI：collision=0；min wall clearance；navigation success rate；time to enter corridor；
