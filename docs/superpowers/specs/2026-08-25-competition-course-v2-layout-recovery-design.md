@@ -7,12 +7,15 @@ Base infrastructure: `f23de934205b6776ef0531d46c26444bf9f7f65e`
 
 ## 1. Problem statement
 
-The first no-arm live inspection of the V2 prototype showed two independent
+The first no-arm live inspection of the V2 prototype showed three independent
 map-level defects:
 
-1. project course layers were not mutually exclusive, so the V2 entities could
+1. V2 moved the takeoff area from the accepted ENU `x ~= 16 m` arena to
+   `x = 2 m`, placing its course in the near-origin region occupied by the
+   native 28com/RflySim `SLAMScene` geometry;
+2. project course layers were not mutually exclusive, so the V2 entities could
    coexist with entities from the prior `predicted_narrow_course` layer;
-2. the geometry validator proved only structural validity, not that a vehicle
+3. the geometry validator proved only structural validity, not that a vehicle
    with a realistic footprint and conservative clearance could pass static and
    moving obstacles.
 
@@ -21,20 +24,24 @@ vehicle-control paths are outside this correction.
 
 ## 2. Base-scene decision
 
-Competition Course V2 will continue to use the existing clean `SLAMScene`
-base. It does not require the 28com_sim competition-course geometry.
+Competition Course V2 will continue to use `SLAMScene`, but it will not place
+project geometry in the native scene's occupied near-origin region. It reuses
+the accepted `predicted_narrow_course` arena coordinates, floor, boundaries,
+ceiling, takeoff area, corridor centerline, and landing area as its spatial
+substrate. V2 adds competition elements to that proven substrate.
 
 The rendered course is a project-owned dynamic layer over `SLAMScene`:
 
 ```text
-clean SLAMScene
+SLAMScene native world
+    + accepted project arena at x ~= 13.5..39.3 m
     + exactly one active project course layer
         - predicted_narrow_course, or
         - competition_course_v2
 ```
 
-The design does not create a new UE map, require UE Editor, offset V2 to a
-distant coordinate region, or accept two visually overlapping courses.
+The design does not create a new UE map, require UE Editor, guess a new free
+coordinate region, or accept two visually overlapping courses.
 
 ## 3. Course-layer exclusivity
 
@@ -98,6 +105,32 @@ The generator will produce a deterministic top-down SVG containing:
 The preview and generated UE command manifest must be derived from the same
 normalized geometry model. The preview is evidence, not a second geometry
 source.
+
+### 4.1 Accepted spatial substrate
+
+The following coordinates are inherited from the live-verified predicted
+course instead of being redesigned:
+
+```text
+takeoff bounds: [13.5, 18.5, -2.5, 2.5]
+uav1 spawn:     [16.0, -0.7, 0.0], ENU yaw 0 deg
+uav2 spawn:     [16.0,  0.7, 0.0], ENU yaw 0 deg
+
+section A: [18.5, 0.0] -> [23.0, 0.0], width 1.5 m
+corner A:  radius 0.9 m, left
+section B: [23.9, 0.9] -> [23.9, 4.0], width 1.4 m
+corner B:  radius 0.9 m, right
+section C: [24.8, 4.9] -> [29.3, 4.9], width 1.5 m
+
+landing bounds: [29.3, 34.3, 2.9, 6.9]
+platform 1:     [32.0, 3.9]
+platform 2:     [32.0, 5.9]
+```
+
+The V2 spec also owns deterministic copies of the accepted arena floor,
+boundary walls, and ceiling objects under the V2 ID range. Loading V2 after
+the transition removes the predicted layer first, then recreates one complete
+arena/course layer with V2 IDs.
 
 ## 5. Vehicle envelope and clearance policy
 
@@ -174,6 +207,12 @@ already coordinate the crossing.
 The preview shows both extreme poses and the full swept envelope. Static
 validation reports the safe-window start, end, duration, and side.
 
+The first revised profile uses a `0.20 m` lateral obstacle width, `30 deg`
+amplitude, and `6.0 s` period in Section C. Exact placement remains derived
+from the accepted centerline and must pass the sampled clearance/window
+validator; these numbers are not accepted merely because they appear in the
+spec.
+
 ## 7. Spawn and entry acceptance
 
 Both UAV spawn disks, enlarged by the `0.25 m` safety margin, must:
@@ -187,7 +226,77 @@ Both UAV spawn disks, enlarged by the `0.25 m` safety margin, must:
 The validator rejects a spawn that is structurally inside the takeoff bounds
 but faces a close wall or a different enclosure.
 
-## 8. Test and validation strategy
+## 8. Measurement contract
+
+The map is a competition benchmark, not only a visual scene. Its spec and
+generated artifacts provide the reference geometry needed by later evaluators.
+They do not consume simulator truth in the flight-control path.
+
+### 8.1 Evidence planes
+
+```text
+map spec / generated semantics
+    geometry, zones, centerline, obstacle truth, marker truth
+
+RflySim/CopterSim ground truth
+    actual vehicle and moving-entity state, contact/collision evidence
+
+ROS runtime evidence
+    Faster-LIO, MAVROS state/odom, EGO commands, setpoints, mission events
+
+RViz
+    visualization only; never the metric source of record
+```
+
+The exact ground-truth transport/API must be audited before a competition
+evaluator is implemented. Topic names or SDK fields are not guessed in this
+map correction.
+
+### 8.2 Generated semantic artifact
+
+Generation emits `evaluation_reference.json`, derived from the normalized
+geometry model and containing:
+
+- spec hash and coordinate contract;
+- takeoff zone and spawn truth;
+- corridor entry and exit gates;
+- Section A/B/C centerline parameterization and cumulative `course_s` ranges;
+- wall and static-obstacle polygons;
+- pendulum pivot, collision footprint, deterministic trajectory parameters,
+  swept envelope, and statically predicted safe windows;
+- target-slot truth records;
+- landing-platform and ArUco polygons;
+- declared vehicle envelope and clearance policy;
+- metric definitions and the primary evidence plane for each metric.
+
+This artifact supports later offline alignment and scoring without adding a
+runtime shared TF. Per-UAV localization estimates may be aligned for analysis
+using a run-scoped transform derived from known spawn or verified simulator
+initial truth; that transform is an evaluation artifact and is not published
+to ROS TF.
+
+### 8.3 Metrics enabled by the map
+
+The reference must be sufficient to compute later:
+
+- takeoff and corridor-entry time;
+- Section A/B/C completion and along-track `course_s`;
+- cross-track error and minimum wall clearance;
+- minimum static- and moving-obstacle clearance;
+- duration and use of pendulum safe windows;
+- minimum inter-UAV distance;
+- collision count, OFFBOARD loss, timeout, and mission duration;
+- target detection recall and target-position error;
+- landing-platform selection and horizontal ArUco landing error;
+- localization error/drift when simulator truth is available.
+
+Existing `stage8_control_chain_recorder.py`, `stage8_flight_metrics.py`,
+`score_summary.py`, and `stage7_run_artifacts.py` remain runtime evidence
+building blocks. Building the full competition evaluator is a later task; V2
+must provide its stable reference contract now so the map does not need to be
+redesigned around each algorithm experiment.
+
+## 9. Test and validation strategy
 
 Implementation follows test-first development.
 
@@ -205,6 +314,10 @@ Implementation follows test-first development.
    bounds.
 8. Preview generation must be deterministic and contain the same normalized
    IDs and bounds as the UE command manifest.
+9. `evaluation_reference.json` must contain all three section ranges, geometry
+   polygons, dynamic truth, landing truth, metric definitions, and the exact
+   V2 spec hash.
+10. No metric may name RViz as its primary evidence source.
 
 ### Static acceptance
 
@@ -230,7 +343,7 @@ Only after offline acceptance:
 
 No arming or V2 mission is required for this layout recovery.
 
-## 9. Non-goals
+## 10. Non-goals
 
 - no TF or localization-frame changes;
 - no EGO/Faster-LIO/PX4/MAVROS tuning;
@@ -239,8 +352,9 @@ No arming or V2 mission is required for this layout recovery.
 - no UE Editor or new static UE map asset;
 - no claim that geometric clearance proves planner success;
 - no change to the default protected old-map behavior.
+- no full competition evaluator or ground-truth bridge in this correction.
 
-## 10. Rollback
+## 11. Rollback
 
 The correction remains isolated on `feature/competition-map-v2`. The accepted
 infrastructure commit and remote infra branch remain untouched. If the revised
