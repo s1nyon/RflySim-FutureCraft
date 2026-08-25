@@ -1,0 +1,56 @@
+{
+  "schema_version": 2,
+  "map_id": "competition_course_v2",
+  "coordinate_frame": "ENU",
+  "units": "m",
+  "base_scene": "SLAMScene",
+  "object_id_range": [15000, 15999],
+  "requirements": {
+    "minimum_uav_count": {"value": 2, "classification": "OFFICIAL"},
+    "maximum_corridor_width_m": {"value": 1.5, "classification": "OFFICIAL"},
+    "maximum_turn_radius_m": {"value": 1.0, "classification": "OFFICIAL"},
+    "minimum_landing_spacing_m": {"value": 1.5, "classification": "OFFICIAL"},
+    "layout_coordinates": {"value": "competition_course_v2", "classification": "PREDICTED"},
+    "aruco_physical_size_m": {"value": 0.6, "classification": "CONFIGURABLE"},
+    "mission_target_asset": {"value": "placeholder", "classification": "CONFIGURABLE"}
+  },
+  "wall": {"height": 2.5, "thickness": 0.15, "max_chord_error": 0.02, "vehicle_type": 1000813},
+  "vehicle_envelope": {"horizontal_diameter": 0.45},
+  "takeoff_area": {"bounds": [0.0, 5.0, -2.5, 2.5]},
+  "spawns": {
+    "uav1": [2.0, -0.7, 0.0],
+    "uav2": [2.0, 0.7, 0.0]
+  },
+  "course": [
+    {"name": "section_a", "kind": "line", "start": [5.0, 0.0], "end": [12.0, 0.0], "width": 1.5},
+    {"name": "corner_a", "kind": "arc", "start": [12.0, 0.0], "end": [12.9, 0.9], "center": [12.0, 0.9], "radius": 0.9, "turn": "left", "width": 1.5},
+    {"name": "section_b", "kind": "line", "start": [12.9, 0.9], "end": [12.9, 5.9], "width": 1.4},
+    {"name": "corner_b", "kind": "arc", "start": [12.9, 5.9], "end": [13.8, 6.8], "center": [13.8, 5.9], "radius": 0.9, "turn": "right", "width": 1.4},
+    {"name": "section_c", "kind": "line", "start": [13.8, 6.8], "end": [20.8, 6.8], "width": 1.5}
+  ],
+  "static_obstacles": [
+    {"name": "static_box_a", "id": 15100, "type": "box", "center": [9.0, 0.30, 0.45], "size": [0.35, 0.35, 0.90], "vehicle_type": 1000813, "collision": true},
+    {"name": "static_pillar_b", "id": 15101, "type": "pillar", "center": [12.60, 3.20, 0.60], "size": [0.30, 0.30, 1.20], "vehicle_type": 1000813, "collision": true}
+  ],
+  "dynamic_obstacle": {
+    "name": "moving_pendulum", "id": 15120, "type": "pendulum", "pivot": [17.2, 6.8, 2.4],
+    "length_m": 1.2, "amplitude_deg": 30.0, "period_sec": 4.0, "phase_rad": 0.0, "update_hz": 20.0,
+    "size": [0.25, 0.25, 0.70], "vehicle_type": 1000813, "collision": true
+  },
+  "mission_target_slot": {
+    "name": "mission_target_slot", "id": 15130, "center": [18.8, 7.35, 1.2], "size": [0.8, 0.3, 0.8],
+    "asset": "placeholder", "replaceable": true, "vehicle_type": 1000813, "collision": false
+  },
+  "landing": {
+    "bounds": [20.8, 28.0, 3.8, 9.8],
+    "platforms": [
+      {"name": "landing_platform_uav1", "id": 15140, "center": [24.5, 5.9, 0.05], "size": [0.9, 0.9, 0.1], "vehicle_type": 1000813, "collision": true},
+      {"name": "landing_platform_uav2", "id": 15141, "center": [24.5, 7.7, 0.05], "size": [0.9, 0.9, 0.1], "vehicle_type": 1000813, "collision": true}
+    ],
+    "markers": [
+      {"name": "aruco_uav1", "id": 15150, "marker_id": 31, "dictionary": "DICT_4X4_250", "physical_size_m": 0.6, "center": [24.5, 5.9, 0.11], "yaw_deg": 0.0, "class_id": 43},
+      {"name": "aruco_uav2", "id": 15151, "marker_id": 47, "dictionary": "DICT_4X4_250", "physical_size_m": 0.6, "center": [24.5, 7.7, 0.11], "yaw_deg": 0.0, "class_id": 43}
+    ]
+  },
+  "terrain": {"bounds": [-10.0, 40.0, -15.0, 20.0], "pixels": [501, 351], "height_raw": 32768}
+}
