@@ -110,6 +110,25 @@ def main() -> int:
     assert "127.0.0.1:0.0" in launcher_text
     assert "xdpyinfo" in launcher_text
     assert "rviz_mode:=" in launcher_text
+    # A live RViz session must be attached to the current lifecycle manifest at
+    # creation time. Otherwise stack inspection correctly classifies roslaunch
+    # and its children as unknown and refuses any simulation arming.
+    assert "--stack-id" in launcher_text
+    assert "--manifest" in launcher_text
+    assert "stack_manifest_wsl" in launcher_text
+    assert "rviz_live.sh" in launcher_text
+    assert "rfly_stack_id=" in launcher_text
+
+    wsl_launcher = root / "scripts" / "wsl" / "rviz_live.sh"
+    wsl_launcher_text = wsl_launcher.read_text(encoding="utf-8").lower()
+    assert "lifecycle_common.sh" in wsl_launcher_text
+    assert "stack_register wsl" in wsl_launcher_text
+    assert "wsl:rviz_session" in wsl_launcher_text
+    assert "exec roslaunch" in wsl_launcher_text
+    assert "set -euo pipefail" not in wsl_launcher_text
+    assert wsl_launcher_text.index("source /opt/ros/noetic/setup.bash") < wsl_launcher_text.index(
+        "set -u"
+    )
     for mode_name in ("uav1", "uav2", "dual"):
         assert mode_name in launcher_text
     assert "static_transform_publisher" not in launcher_text
