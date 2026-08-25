@@ -16,6 +16,8 @@ def main():
     v2 = (root / "scripts/start_competition_course_v2_two_uav.bat").read_text(encoding="utf-8")
     for expected in ("generate_competition_course_v2.bat", "deploy_competition_course_v2_terrain.bat", "load_competition_course_v2.bat", "register_launcher.py", "windows:competition_course_v2_motion", "COURSE_READY"):
         assert expected in v2
+    for expected in ("!MOTION!", "!SPEC!", "!MOTION_EVIDENCE!", "!MOTION_STOP!", "--pid-file", "Get-Process -Id"):
+        assert expected in v2, "motion controller startup must preserve delayed values and prove child alive: {}".format(expected)
     assert "predicted_narrow_course" not in v2.lower()
     batch = (root / "scripts/run_live_fastlio_dual.bat").read_text(encoding="utf-8")
     shell = (root / "scripts/wsl/stage7_live_fastlio_dual.sh").read_text(encoding="utf-8")

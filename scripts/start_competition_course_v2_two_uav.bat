@@ -47,8 +47,13 @@ if "%COURSE_LOAD_RESULT%"=="0" (
   set SPEC=%FUTURE_AIRCRAFT_SIM_DIR%\config\maps\competition_course_v2.json
   set MOTION_EVIDENCE=%FUTURE_AIRCRAFT_SIM_DIR%\logs\live_stack\%STACK_ID%\competition_course_motion.json
   set MOTION_STOP=%COMPETITION_COURSE_V2_OUTPUT%\motion.stop
-  "%PYTHON_EXE%" "%SCRIPT_DIR%lifecycle\register_launcher.py" launch --manifest "%STACK_MANIFEST%" --role "windows:competition_course_v2_motion" --command-line "%PYTHON_EXE% %MOTION% --spec %SPEC% --evidence %MOTION_EVIDENCE% --stop-file %MOTION_STOP%" --file-path "%PYTHON_EXE%" --arguments "%MOTION% --spec %SPEC% --evidence %MOTION_EVIDENCE% --stop-file %MOTION_STOP%"
+  set MOTION_PID_FILE=%FUTURE_AIRCRAFT_SIM_DIR%\logs\live_stack\%STACK_ID%\competition_course_motion.pid
+  "%PYTHON_EXE%" "%SCRIPT_DIR%lifecycle\register_launcher.py" launch --manifest "%STACK_MANIFEST%" --role "windows:competition_course_v2_motion" --command-line "%PYTHON_EXE% !MOTION! --spec !SPEC! --evidence !MOTION_EVIDENCE! --stop-file !MOTION_STOP!" --file-path "%PYTHON_EXE%" --arguments "!MOTION! --spec !SPEC! --evidence !MOTION_EVIDENCE! --stop-file !MOTION_STOP!" --pid-file "!MOTION_PID_FILE!"
   if errorlevel 1 set COURSE_LOAD_RESULT=1
+  if "!COURSE_LOAD_RESULT!"=="0" (
+    powershell -NoLogo -NoProfile -Command "Start-Sleep -Seconds 2; $p=[int](Get-Content -Raw '!MOTION_PID_FILE!'); if(-not (Get-Process -Id $p -ErrorAction SilentlyContinue)){exit 1}; if(-not (Test-Path -LiteralPath '!MOTION_EVIDENCE!')){exit 2}"
+    if errorlevel 1 set COURSE_LOAD_RESULT=1
+  )
 )
 if defined STACK_HEALTH_DIR (
   if not exist "%STACK_HEALTH_DIR%" mkdir "%STACK_HEALTH_DIR%"
