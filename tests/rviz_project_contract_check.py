@@ -105,6 +105,16 @@ def main() -> int:
         "visualization_msgs",
     }.issubset(runtime_dependencies)
 
+    windows_launcher = root / "scripts" / "run_rflysim_rviz.bat"
+    launcher_text = windows_launcher.read_text(encoding="utf-8").lower()
+    assert "127.0.0.1:0.0" in launcher_text
+    assert "xdpyinfo" in launcher_text
+    assert "rviz_mode:=" in launcher_text
+    for mode_name in ("uav1", "uav2", "dual"):
+        assert mode_name in launcher_text
+    assert "static_transform_publisher" not in launcher_text
+    assert "competition_world" not in launcher_text
+
     print("project RViz contract checks: PASS")
     return 0
 
