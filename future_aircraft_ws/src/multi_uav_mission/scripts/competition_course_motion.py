@@ -42,13 +42,16 @@ def main() -> int:
     if args.dry_run:
         print(json.dumps({"mode": "dry-run", "object_id": dynamic["id"], "update_hz": dynamic["update_hz"], "samples": [pendulum_pose(dynamic, value) for value in (0, dynamic["period_sec"] / 4, dynamic["period_sec"] / 2)]}, indent=2)); return 0
     api, started, interval, samples = _client(args.rflysim_root), time.monotonic(), 1.0 / float(dynamic["update_hz"]), []
+    args.evidence.parent.mkdir(parents=True, exist_ok=True)
     while True:
         elapsed = time.monotonic() - started; samples.append(_send(api, dynamic, elapsed, args.window_id))
         if len(samples) > 400: samples = samples[-400:]
+        if len(samples) == 1 or len(samples) % 20 == 0:
+            args.evidence.write_text(json.dumps({"object_id": dynamic["id"], "configured_amplitude_deg": dynamic["amplitude_deg"], "configured_period_sec": dynamic["period_sec"], "samples": samples}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         if (args.duration > 0 and elapsed >= args.duration) or (args.stop_file and args.stop_file.exists()): break
         time.sleep(interval)
     result = {"object_id": dynamic["id"], "configured_amplitude_deg": dynamic["amplitude_deg"], "configured_period_sec": dynamic["period_sec"], "samples": samples}
-    args.evidence.parent.mkdir(parents=True, exist_ok=True); args.evidence.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"); return 0
+    args.evidence.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"); return 0
 
 
 if __name__ == "__main__":

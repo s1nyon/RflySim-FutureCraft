@@ -128,6 +128,25 @@ def load_scene(api, spec: Dict[str, Any], generated_manifest: Dict[str, Any], re
     return receipt
 
 
+def unload_scene(api, spec: Dict[str, Any], receipt_path: Path, window_id: int, motion_stop_file: Optional[Path] = None, sleep=time.sleep) -> Dict[str, Any]:
+    """Stop course motion, then destroy only IDs proven by the matching receipt."""
+    receipt_path = Path(receipt_path)
+    created_ids = _load_prior_ids(receipt_path, spec["spec_sha256"])
+    if not created_ids:
+        raise ValueError("matching load receipt is required for unload")
+    if motion_stop_file is not None:
+        Path(motion_stop_file).parent.mkdir(parents=True, exist_ok=True)
+        Path(motion_stop_file).write_text("stop\n", encoding="ascii")
+        sleep(1.0)
+    for object_id in created_ids:
+        api.sendUE4Destroy(object_id, window_id)
+    result = {"map_id": spec["map_id"], "spec_sha256": spec["spec_sha256"], "cleanup_policy": "receipt_only", "destroyed_ids": created_ids, "motion_stop_requested": motion_stop_file is not None}
+    unload_receipt = receipt_path.with_name("unload_receipt.json")
+    unload_receipt.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    receipt_path.unlink()
+    return result
+
+
 def _client(rflysim_root: Path):
     api_dir = rflysim_root / "RflySimAPIs/RflySimSDK/ue"
     if not api_dir.is_dir():
@@ -142,10 +161,13 @@ def main() -> int:
     parser.add_argument("--receipt", type=Path, required=True); parser.add_argument("--window-id", type=int, default=-1)
     parser.add_argument("--asset-path", type=Path); parser.add_argument("--expected-asset-sha256", default=INSTALLED_ARUCO_SHA256)
     parser.add_argument("--rflysim-root", type=Path, default=Path(os.environ.get("RFLYSIM_ROOT", r"D:\PX4PSP"))); parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--unload", action="store_true"); parser.add_argument("--motion-stop-file", type=Path)
     args = parser.parse_args(); spec = load_spec(args.spec)
     manifest = json.loads((args.generated / "entity_manifest.json").read_text(encoding="utf-8"))
     if args.dry_run:
-        print(json.dumps({"mode": "dry-run", "spec_sha256": spec["spec_sha256"], "receipt": str(args.receipt), "cleanup_policy": "receipt_only", "create_ids": [item["id"] for item in manifest["entities"]], "would_replace_asset": str(args.asset_path) if args.asset_path else None}, indent=2, sort_keys=True)); return 0
+        print(json.dumps({"mode": "dry-run", "operation": "unload" if args.unload else "load", "spec_sha256": spec["spec_sha256"], "receipt": str(args.receipt), "cleanup_policy": "receipt_only", "create_ids": [] if args.unload else [item["id"] for item in manifest["entities"]], "would_replace_asset": str(args.asset_path) if args.asset_path and not args.unload else None}, indent=2, sort_keys=True)); return 0
+    if args.unload:
+        print(json.dumps(unload_scene(_client(args.rflysim_root), spec, args.receipt, args.window_id, args.motion_stop_file), indent=2, sort_keys=True)); return 0
     receipt = load_scene(_client(args.rflysim_root), spec, manifest, args.receipt, args.generated / "aruco", args.window_id, asset_path=args.asset_path, expected_asset_sha256=args.expected_asset_sha256)
     print(json.dumps(receipt, indent=2, sort_keys=True)); return 0
 

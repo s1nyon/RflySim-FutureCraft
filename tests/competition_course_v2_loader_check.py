@@ -30,7 +30,7 @@ def main():
     parser = argparse.ArgumentParser(); parser.add_argument("--project-root", default="."); args = parser.parse_args()
     root = Path(args.project_root).resolve(); sys.path.insert(0, str(root / "future_aircraft_ws/src/multi_uav_mission/scripts"))
     from competition_course_geometry import load_spec
-    from competition_course_ue_loader import installed_asset_transaction, load_scene
+    from competition_course_ue_loader import installed_asset_transaction, load_scene, unload_scene
 
     spec = load_spec(root / "config/maps/competition_course_v2.json")
     generated = root / "generated/competition_course_v2"
@@ -50,6 +50,13 @@ def main():
         assert ("RflyChangeViewKeyCmd P", -1) in api.commands
         saved = json.loads(receipt.read_text(encoding="utf-8"))
         assert saved["cleanup_policy"] == "receipt_only"
+        stop_file = temp / "motion.stop"
+        unload_api = FakeApi()
+        unloaded = unload_scene(unload_api, spec, receipt, -1, stop_file, sleep=lambda _: None)
+        assert unload_api.destroyed == [(value, -1) for value in saved["created_ids"]]
+        assert unloaded["destroyed_ids"] == saved["created_ids"]
+        assert stop_file.exists() and not receipt.exists()
+        assert (temp / "unload_receipt.json").exists()
 
         original, replacement = b"original-installed-asset", b"new-marker"
         installed = temp / "Aruco.png"; source = temp / "marker.png"
