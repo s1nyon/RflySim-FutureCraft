@@ -46,8 +46,11 @@ if "%DRY_RUN%"=="1" (
   call "%SCRIPT_DIR%start_two_uav.bat" --dry-run
   if errorlevel 1 exit /b %ERRORLEVEL%
   echo [DRY-RUN] 4. wait %PREDICTED_COURSE_SCENE_WAIT_SECONDS% seconds before scene load
-  echo [DRY-RUN] 5. load_predicted_narrow_course.bat
-  call "%SCRIPT_DIR%load_predicted_narrow_course.bat" --dry-run
+  echo [DRY-RUN] 5. transition exact project course IDs
+  call "%SCRIPT_DIR%transition_project_course_layer.bat" predicted_narrow_course --dry-run
+  if errorlevel 1 exit /b %ERRORLEVEL%
+  echo [DRY-RUN] 6. load_predicted_narrow_course.bat without broad range clearing
+  call "%SCRIPT_DIR%load_predicted_narrow_course.bat" --dry-run --no-clear
   exit /b %ERRORLEVEL%
 )
 
@@ -59,7 +62,9 @@ call "%SCRIPT_DIR%start_two_uav.bat"
 if errorlevel 1 exit /b %ERRORLEVEL%
 powershell -NoLogo -NoProfile -Command "Start-Sleep -Seconds ([int]$env:PREDICTED_COURSE_SCENE_WAIT_SECONDS)"
 if errorlevel 1 exit /b %ERRORLEVEL%
-call "%SCRIPT_DIR%load_predicted_narrow_course.bat"
+call "%SCRIPT_DIR%transition_project_course_layer.bat" predicted_narrow_course
+if errorlevel 1 exit /b %ERRORLEVEL%
+call "%SCRIPT_DIR%load_predicted_narrow_course.bat" --no-clear
 set COURSE_LOAD_RESULT=%ERRORLEVEL%
 
 if defined STACK_HEALTH_DIR (

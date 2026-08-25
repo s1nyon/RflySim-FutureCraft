@@ -43,6 +43,7 @@ if "%DRY_RUN%"=="1" (
   call "%SCRIPT_DIR%generate_competition_course_v2.bat" --dry-run || exit /b 1
   call "%SCRIPT_DIR%deploy_competition_course_v2_terrain.bat" --dry-run || exit /b 1
   call "%SCRIPT_DIR%start_two_uav.bat" --dry-run || exit /b 1
+  call "%SCRIPT_DIR%transition_project_course_layer.bat" competition_course_v2 --dry-run || exit /b 1
   call "%SCRIPT_DIR%load_competition_course_v2.bat" --dry-run || exit /b 1
   echo [DRY-RUN] register Competition Course V2 motion controller at creation
   exit /b 0
@@ -52,6 +53,7 @@ call "%SCRIPT_DIR%generate_competition_course_v2.bat" || exit /b 1
 call "%SCRIPT_DIR%deploy_competition_course_v2_terrain.bat" || exit /b 1
 call "%SCRIPT_DIR%start_two_uav.bat" || exit /b 1
 powershell -NoLogo -NoProfile -Command "Start-Sleep -Seconds ([int]$env:PREDICTED_COURSE_SCENE_WAIT_SECONDS)" || exit /b 1
+call "%SCRIPT_DIR%transition_project_course_layer.bat" competition_course_v2 || exit /b 1
 call "%SCRIPT_DIR%load_competition_course_v2.bat"
 set COURSE_LOAD_RESULT=%ERRORLEVEL%
 if "%COURSE_LOAD_RESULT%"=="0" (

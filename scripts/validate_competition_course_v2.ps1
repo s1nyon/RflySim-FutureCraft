@@ -3,6 +3,8 @@ $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $Python = 'D:\PX4PSP\Python38\python.exe'
 
 $tests = @(
+    'competition_course_v2_substrate_check.py',
+    'course_layer_transition_check.py',
     'competition_course_v2_geometry_check.py',
     'competition_course_v2_artifacts_check.py',
     'competition_course_v2_loader_check.py',
@@ -26,6 +28,8 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 & $Python -m py_compile `
     (Join-Path $ProjectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\competition_course_geometry.py') `
+    (Join-Path $ProjectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\competition_course_spawn_args.py') `
+    (Join-Path $ProjectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\course_layer_transition.py') `
     (Join-Path $ProjectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\competition_course_artifacts.py') `
     (Join-Path $ProjectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\competition_course_ue_loader.py') `
     (Join-Path $ProjectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\competition_course_motion.py') `
