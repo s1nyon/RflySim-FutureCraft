@@ -55,6 +55,14 @@
 - 2026-08-25 单次 Windows `0x1E` 蓝屏在上述 5 个 fresh run 中未再现，当前不再是
   infrastructure blocker；未获得符号化 dump 根因，仍保留为宿主机历史风险，见
   `../docs/incidents/2026-08-25-live-startup-bsod-0x1e.md`。
+- 2026-08-26 Competition Course V2 已完成**离线布局恢复**：复用 accepted
+  predicted-course arena/spawn substrate（ENU x≈13.5..39.3），V2 仍为 opt-in；新旧
+  course 通过 tracked specs 派生的精确实体 ID 互斥，不做 range sweep。静态绕行
+  开口为 1.225/1.150m（门槛 1.00m），摆锤 120Hz 结构采样最长安全窗口 1.858s
+  （门槛 1.50s）。生成物新增 dimensioned SVG 与 `evaluation_reference.json`；
+  RflySim GT transport 尚未在地图任务中审计，RViz 不是评分源。修订后尚未重新
+  live 加载，LiDAR/RGB、动态实体、Faster-LIO/EGO 均保持 live gate，不得沿用
+  2026-08-25 近原点错误布局的 live 结果宣称 V2 READY。
 - 2026-08-11 旧栈 OFFBOARD 失败已定位为运行时序问题（旧栈重试窗口内 setpoint
   流中断），**不是代码回归**；恢复靠「完整清理 → fresh 栈背靠背启动」，
   见 `../docs/incidents/2026-08-11-offboard-stale-retry-setpoint-stream.md`。

@@ -16,7 +16,7 @@
 | `scripts/run_live_slam_ego_swarm_flight.bat` | 显式 simulation-only arming 的 PBL-1 flight runner。 |
 | `scripts/run_rflysim_rviz.bat` | 可选的 per-UAV/dual RViz 调试入口，不参与 READY 或控制链。 |
 | `scripts/validate_asset_calibration.ps1` | 官方模型标定场的纯离线契约与 DryRun 验证入口。 |
-| `scripts/validate_competition_course_v2.ps1` | Competition Course V2 的结构、确定性、loader 与 DryRun 总入口。 |
+| `scripts/validate_competition_course_v2.ps1` | Competition Course V2 的基底、精确 ID 切换、净空、确定性产物、评价参考、loader 与 DryRun 总入口。 |
 | `scripts/validate_lifecycle.ps1` | Lifecycle 离线回归入口。 |
 | `scripts/validate_repository.ps1` | Repository、文档和结构 contract 总入口。 |
 | `scripts/validate_stage6c.ps1` | 当前 Stage 6C 核心离线门。 |
@@ -45,6 +45,7 @@
 | `scripts/load_predicted_narrow_course.bat` | 当前 RflySim 动态赛道加载 helper。 |
 | `scripts/start_competition_course_v2_two_uav.bat` | 显式选择 Competition Course V2 的双机启动 helper。 |
 | `scripts/start_predicted_course_two_uav.bat` | 当前双机赛道启动链 helper。 |
+| `scripts/transition_project_course_layer.bat` | 从 tracked map specs 派生精确实体 ID 的新旧赛道互斥切换 helper；不做 ID range sweep。 |
 | `scripts/start_rflysim_sitl_two.bat` | 当前双机 RflySim/PX4 启动 helper。 |
 | `scripts/start_two_uav.bat` | 当前双机基础启动 helper。 |
 | `scripts/start_wsl_mavros_two.bat` | 当前双 MAVROS/health-gate 启动 helper。 |

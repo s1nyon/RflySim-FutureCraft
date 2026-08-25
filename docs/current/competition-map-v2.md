@@ -120,6 +120,20 @@ Omitting `-Course` continues to select `predicted_narrow_course`. Real execution
 
 ## Validation levels
 
+Current offline recovery acceptance:
+
+```text
+Competition Course V2 offline geometry: PASS
+Course-layer exclusivity contract: PASS
+Minimum required static gap: 1.00 m
+Observed static passable gaps: 1.225 m / 1.150 m
+Pendulum predicted safe window: 1.858 s (required >=1.50 s)
+Map-only live visual review: NOT RUN AFTER LAYOUT REVISION
+LiDAR/RGB visibility: NOT RE-VALIDATED AFTER LAYOUT REVISION
+Faster-LIO/EGO smoke: NOT RUN AFTER LAYOUT REVISION
+Competition evaluator: NOT IMPLEMENTED; map-side reference only
+```
+
 | Level | Status | Meaning |
 | --- | --- | --- |
 | STRUCTURAL VALIDATION | PASS | Strict schema, IDs, geometry, spawn, obstacle, pendulum, ArUco, target, determinism, fake-SDK loader and dry-run contracts |
