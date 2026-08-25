@@ -11,8 +11,8 @@ if /I "%~1"=="--dry-run" (
   echo [DRY-RUN] Stage 2 two-UAV launch orchestration
   echo [DRY-RUN] 0. start_vcxsrv.bat
   echo [DRY-RUN] 1. start_rflysim_sitl_two.bat
-  echo [DRY-RUN] 2. start_wsl_mavros_two.bat ^(predicate-gated on PX4 sockets and MAVROS connection^)
-  echo [DRY-RUN] 3. retain %STAGE2_BOOT_WAIT_SECONDS% seconds for SITL/scene stabilization before returning
+  echo [DRY-RUN] 2. wait %STAGE2_BOOT_WAIT_SECONDS% seconds for PX4 boot
+  echo [DRY-RUN] 3. start_wsl_mavros_two.bat ^(predicate-gated on PX4 sockets and MAVROS connection^)
   exit /b 0
 )
 call "%SCRIPT_DIR%start_vcxsrv.bat"
@@ -22,9 +22,9 @@ if defined STACK_MANIFEST (
 ) else (
   start "futureAircraftSim SITL two" cmd /k call "%SCRIPT_DIR%start_rflysim_sitl_two.bat"
 )
-rem Stage 2 owns bounded, fail-closed predicates for both real PX4 sockets and
-rem MAVROS connected state. Launch it immediately so those readiness waits run
-rem concurrently with the retained SITL/scene stabilization interval.
+powershell -NoLogo -NoProfile -Command "Start-Sleep -Seconds ([int]$env:STAGE2_BOOT_WAIT_SECONDS)"
+rem Keep this wait before Stage 2: a socket pathname can survive an interrupted
+rem WSL run and is not sufficient proof that the newly owned PX4 instance is up.
 if defined STACK_MANIFEST (
   rem /k keeps the registered cmd alive (stable PID for stop) after the batch
   rem completes; the batch itself must never exit early (block parens fixed).
@@ -33,5 +33,4 @@ if defined STACK_MANIFEST (
 ) else (
   start "futureAircraftSim MAVROS two" cmd /k call "%SCRIPT_DIR%start_wsl_mavros_two.bat"
 )
-powershell -NoLogo -NoProfile -Command "Start-Sleep -Seconds ([int]$env:STAGE2_BOOT_WAIT_SECONDS)"
 exit /b 0

@@ -104,8 +104,8 @@ foreach ($relativePath in $dryRunScripts) {
         if ($relativePath -eq 'scripts/start_two_uav.bat') {
             $bootWaitIndex = $content.LastIndexOf('STAGE2_BOOT_WAIT_SECONDS')
             $mavrosLaunchIndex = $content.LastIndexOf('start_wsl_mavros_two.bat')
-            if ($bootWaitIndex -lt 0 -or $mavrosLaunchIndex -lt 0 -or $mavrosLaunchIndex -gt $bootWaitIndex) {
-                $contractErrors += 'scripts/start_two_uav.bat must launch predicate-gated Stage 2 before the retained SITL/scene stabilization wait'
+            if ($bootWaitIndex -lt 0 -or $mavrosLaunchIndex -lt 0 -or $bootWaitIndex -gt $mavrosLaunchIndex) {
+                $contractErrors += 'scripts/start_two_uav.bat must retain the PX4 boot wait before launching Stage 2; a stale socket alone is not sufficient readiness evidence'
             }
         }
         $output = & cmd /c "`"$fullPath`" --dry-run" 2>&1
@@ -189,4 +189,3 @@ if (-not $Quiet) {
     Write-Host '[PASS] Stage 2 two-UAV namespace validation passed.' -ForegroundColor Green
 }
 exit 0
-

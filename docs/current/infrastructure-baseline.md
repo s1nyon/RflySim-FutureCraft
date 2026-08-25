@@ -38,7 +38,7 @@ The startup path has these relevant waits:
 
 | Wait | Current purpose | Current decision |
 | --- | --- | --- |
-| `STAGE2_BOOT_WAIT_SECONDS=30` | Preserve SITL/RflySim scene stabilization before the caller proceeds | **RETAINED**, but dual-MAVROS Stage 2 now starts before it and independently waits for real PX4 sockets, so useful readiness work overlaps the fixed interval |
+| `STAGE2_BOOT_WAIT_SECONDS=30` | Preserve PX4/SITL boot before Stage 2 starts | **RETAINED**: a live attempt proved that a stale WSL socket can satisfy the existing socket predicate before the newly owned PX4 instance is ready |
 | `PREDICTED_COURSE_SCENE_WAIT_SECONDS=10` | Additional delay before sending the dynamic course load | **RETAINED**: no independent UE scene-load acknowledgement exists |
 | ROS master wait | `rostopic list` succeeds | Predicate-driven, bounded, fail-closed |
 | PX4 instance wait | `/tmp/px4-sock-1` and `/tmp/px4-sock-2` exist as sockets | Predicate-driven, bounded, fail-closed |
