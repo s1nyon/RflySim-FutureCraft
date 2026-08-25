@@ -339,8 +339,10 @@ if (Test-Path -LiteralPath $fastLioRunnerPath) {
     if ($fastLioRunner -notmatch '--timeout-s "\$READINESS_TOPIC_TIMEOUT_SEC"') {
         $contractErrors += 'stage7_live_fastlio_dual.sh must pass the bounded readiness topic timeout to the live sampler'
     }
-    if ($fastLioRunner -notmatch '--sensor-mode lidar_only') {
-        $contractErrors += 'stage7 FAST-LIO runner must run sensor bridges in lidar-only mode for flight stability'
+    if ($fastLioRunner -notmatch 'SENSOR_MODE="\$\{STAGE7_SENSOR_MODE:-lidar_only\}"' -or
+        $fastLioRunner -notmatch 'lidar_only\|full' -or
+        $fastLioRunner -notmatch '--sensor-mode "\$SENSOR_MODE"') {
+        $contractErrors += 'stage7 FAST-LIO runner must default to lidar-only and constrain explicit diagnostics to lidar_only/full'
     }
     if ($fastLioRunner -notmatch 'SENSOR_STARTUP_DEADLINE') {
         $contractErrors += 'stage7_live_fastlio_dual.sh must enforce the sensor startup timeout with a deadline'

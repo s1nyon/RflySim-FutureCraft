@@ -7,6 +7,7 @@ catkin_package()
 
 catkin_install_python(PROGRAMS
   scripts/behavior_tree_runner.py
+  scripts/competition_course_live_probe.py
   scripts/ego_swarm_adapter.py
   scripts/ego_swarm_flight_smoke_check.py
   scripts/ego_swarm_setpoint_bridge.py

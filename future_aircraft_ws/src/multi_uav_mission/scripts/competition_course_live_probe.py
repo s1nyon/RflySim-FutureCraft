@@ -122,6 +122,8 @@ def collect_ros(duration: float, image_dir: Path) -> Tuple[Dict[str, List[Dict[s
         subscriptions += [rospy.Subscriber(TOPIC_SUFFIXES["lidar"].format(uav=uav), PointCloud2, callback(TOPIC_SUFFIXES["lidar"].format(uav=uav), "cloud"), queue_size=1), rospy.Subscriber(TOPIC_SUFFIXES["imu"].format(uav=uav), Imu, callback(TOPIC_SUFFIXES["imu"].format(uav=uav), "imu"), queue_size=20), rospy.Subscriber(TOPIC_SUFFIXES["slam_odom"].format(uav=uav), Odometry, callback(TOPIC_SUFFIXES["slam_odom"].format(uav=uav), "odom"), queue_size=10), rospy.Subscriber(TOPIC_SUFFIXES["slam_cloud"].format(uav=uav), PointCloud2, callback(TOPIC_SUFFIXES["slam_cloud"].format(uav=uav), "cloud"), queue_size=1), rospy.Subscriber(TOPIC_SUFFIXES["ego_cmd"].format(uav=uav), PositionCommand, callback(TOPIC_SUFFIXES["ego_cmd"].format(uav=uav), "command"), queue_size=10)]
         for topic in RGB_CANDIDATES[uav]: subscriptions.append(rospy.Subscriber(topic, Image, callback(topic, "image"), queue_size=1))
     rospy.sleep(duration)
+    advertised.update(name for name, _kind in rospy.get_published_topics())
+    advertised.update(topic for topic, records in samples.items() if records)
     for subscription in subscriptions: subscription.unregister()
     return samples, advertised
 

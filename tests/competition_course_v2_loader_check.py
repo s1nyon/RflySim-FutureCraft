@@ -23,6 +23,13 @@ class FakeApi:
     def sendUE4Cmd(self, command, window_id): self.commands.append((command, window_id))
 
 
+class FailingApi(FakeApi):
+    def sendUE4PosScale(self, **kwargs):
+        if len(self.created) == 3:
+            raise RuntimeError("injected SDK failure")
+        super().sendUE4PosScale(**kwargs)
+
+
 def sha(data): return hashlib.sha256(data).hexdigest()
 
 
@@ -30,15 +37,16 @@ def main():
     parser = argparse.ArgumentParser(); parser.add_argument("--project-root", default="."); args = parser.parse_args()
     root = Path(args.project_root).resolve(); sys.path.insert(0, str(root / "future_aircraft_ws/src/multi_uav_mission/scripts"))
     from competition_course_geometry import load_spec
+    from competition_course_artifacts import generate_artifacts
     from competition_course_ue_loader import installed_asset_transaction, load_scene, unload_scene
 
     spec = load_spec(root / "config/maps/competition_course_v2.json")
-    generated = root / "generated/competition_course_v2"
-    assert (generated / "entity_manifest.json").exists(), "run generator before loader check"
-    manifest = json.loads((generated / "entity_manifest.json").read_text(encoding="utf-8"))
 
     with tempfile.TemporaryDirectory() as temp:
-        temp = Path(temp); receipt = temp / "receipt.json"
+        temp = Path(temp); generated = temp / "generated"
+        generate_artifacts(root / "config/maps/competition_course_v2.json", generated)
+        manifest = json.loads((generated / "entity_manifest.json").read_text(encoding="utf-8"))
+        receipt = temp / "receipt.json"
         receipt.write_text(json.dumps({"spec_sha256": spec["spec_sha256"], "cleanup_policy": "receipt_only", "created_ids": [15100, 15120]}), encoding="utf-8")
         api = FakeApi()
         result = load_scene(api, spec, manifest, receipt, generated / "aruco", -1, sleep=lambda _: None, asset_path=None)
@@ -47,6 +55,7 @@ def main():
         assert set(result["created_ids"]) == {item["id"] for item in manifest["entities"]}
         assert len([call for call in api.created if call[0] == "new"]) == 2
         assert len(api.ext) == 2
+        assert [call["ActExt"][:2] for call in api.ext] == [[0.6, 0.8], [0.6, 0.8]]
         assert ("RflyChangeViewKeyCmd P", -1) in api.commands
         saved = json.loads(receipt.read_text(encoding="utf-8"))
         assert saved["cleanup_policy"] == "receipt_only"
@@ -65,6 +74,18 @@ def main():
             assert installed.read_bytes() == replacement
             assert evidence["replacement_sha256"] == sha(replacement)
         assert installed.read_bytes() == original
+        failing_receipt = temp / "failed_receipt.json"
+        failing_api = FailingApi()
+        try:
+            load_scene(failing_api, spec, manifest, failing_receipt, generated / "aruco", -1, sleep=lambda _: None, asset_path=None)
+        except RuntimeError as exc:
+            assert "injected SDK failure" in str(exc)
+        else:
+            raise AssertionError("injected SDK failure must propagate")
+        assert failing_api.destroyed == [(item[1]["copterID"], -1) for item in failing_api.created]
+        assert not failing_receipt.exists()
+        failure = json.loads((temp / "load_failure_receipt.json").read_text(encoding="utf-8"))
+        assert failure["load_result"] == "ROLLED_BACK"
         assert not list(temp.glob("Aruco.png.*.tmp"))
         try:
             with installed_asset_transaction(source, installed, "0" * 64): pass

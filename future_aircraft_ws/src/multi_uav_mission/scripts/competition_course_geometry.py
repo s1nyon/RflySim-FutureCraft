@@ -202,6 +202,8 @@ def validate_spec(spec: Dict[str, Any]) -> None:
             raise CourseValidationError("marker must use a valid DICT_4X4_250 ID")
         if _number(marker["physical_size_m"], "physical_size_m") <= 0:
             raise CourseValidationError("physical_size_m must be positive")
+        if _number(marker["white_border_size_m"], "white_border_size_m") < marker["physical_size_m"]:
+            raise CourseValidationError("white_border_size_m must not be smaller than the marker")
 
 
 def load_spec(path: Path) -> Dict[str, Any]:

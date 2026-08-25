@@ -81,6 +81,7 @@ def main():
     bad = copy.deepcopy(raw); bad["static_obstacles"][1]["id"] = bad["static_obstacles"][0]["id"]; cases.append((bad, "duplicate object ID"))
     bad = copy.deepcopy(raw); bad["dynamic_obstacle"]["period_sec"] = 0; cases.append((bad, "period_sec"))
     bad = copy.deepcopy(raw); bad["landing"]["markers"][0]["physical_size_m"] = 0; cases.append((bad, "physical_size_m"))
+    bad = copy.deepcopy(raw); bad["landing"]["markers"][0]["white_border_size_m"] = 0.5; cases.append((bad, "white_border_size_m"))
     bad = copy.deepcopy(raw); bad["spawns"]["uav2"] = bad["spawns"]["uav1"]; cases.append((bad, "spawn separation"))
     bad = copy.deepcopy(raw); bad["landing"]["platforms"][1]["center"] = bad["landing"]["platforms"][0]["center"]; cases.append((bad, "platform spacing"))
     bad = copy.deepcopy(raw); bad["mission_target_slot"]["asset"] = "invented_target"; cases.append((bad, "placeholder"))

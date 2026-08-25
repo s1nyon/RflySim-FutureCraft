@@ -48,8 +48,8 @@
       {"name": "landing_platform_uav2", "id": 15141, "center": [24.5, 7.7, 0.05], "size": [0.9, 0.9, 0.1], "vehicle_type": 1000813, "collision": true}
     ],
     "markers": [
-      {"name": "aruco_uav1", "id": 15150, "marker_id": 31, "dictionary": "DICT_4X4_250", "physical_size_m": 0.6, "center": [24.5, 5.9, 0.11], "yaw_deg": 0.0, "class_id": 43},
-      {"name": "aruco_uav2", "id": 15151, "marker_id": 47, "dictionary": "DICT_4X4_250", "physical_size_m": 0.6, "center": [24.5, 7.7, 0.11], "yaw_deg": 0.0, "class_id": 43}
+      {"name": "aruco_uav1", "id": 15150, "marker_id": 31, "dictionary": "DICT_4X4_250", "physical_size_m": 0.6, "white_border_size_m": 0.8, "center": [24.5, 5.9, 0.11], "yaw_deg": 0.0, "class_id": 43},
+      {"name": "aruco_uav2", "id": 15151, "marker_id": 47, "dictionary": "DICT_4X4_250", "physical_size_m": 0.6, "white_border_size_m": 0.8, "center": [24.5, 7.7, 0.11], "yaw_deg": 0.0, "class_id": 43}
     ]
   },
   "terrain": {"bounds": [-10.0, 40.0, -15.0, 20.0], "pixels": [501, 351], "height_raw": 32768}

@@ -95,7 +95,7 @@ def _create_marker(api, marker: Dict[str, Any], source: Path, asset_path: Option
     with transaction as asset_evidence:
         api.sendUE4PosNew(copterID=marker["id"], vehicleType=marker["vehicle_type"], PosE=_ned(marker["center"]), AngEuler=[0.0, 90.0, yaw_enu_to_ned(0.0)], windowID=window_id)
         sleep(0.5)
-        api.sendUE4ExtAct(copterID=marker["id"], ActExt=[marker["physical_size_m"], marker["physical_size_m"]] + [0.0] * 14, windowID=window_id)
+        api.sendUE4ExtAct(copterID=marker["id"], ActExt=[marker["physical_size_m"], marker["white_border_size_m"]] + [0.0] * 14, windowID=window_id)
         if asset_path is not None:
             evidence["asset_transaction"] = dict(asset_evidence)
     if asset_path is not None:
@@ -114,14 +114,22 @@ def load_scene(api, spec: Dict[str, Any], generated_manifest: Dict[str, Any], re
         raise ValueError("entity manifest entities must be a list")
     created, marker_evidence = [], []
     markers_by_name = {item["name"]: item for item in spec["landing"]["markers"]}
-    for item in entities:
-        if item["category"] == "aruco":
-            marker = dict(item); marker.update(markers_by_name[item["name"]])
-            marker_evidence.append(_create_marker(api, marker, Path(marker_dir) / "marker_{}.png".format(marker["marker_id"]), asset_path, window_id, sleep, expected_asset_sha256))
-        else:
-            _create_box(api, item, window_id)
-        created.append(item["id"])
-    api.sendUE4Cmd("RflyChangeViewKeyCmd P", window_id)
+    try:
+        for item in entities:
+            if item["category"] == "aruco":
+                marker = dict(item); marker.update(markers_by_name[item["name"]])
+                marker_evidence.append(_create_marker(api, marker, Path(marker_dir) / "marker_{}.png".format(marker["marker_id"]), asset_path, window_id, sleep, expected_asset_sha256))
+            else:
+                _create_box(api, item, window_id)
+            created.append(item["id"])
+        api.sendUE4Cmd("RflyChangeViewKeyCmd P", window_id)
+    except Exception:
+        for object_id in created:
+            api.sendUE4Destroy(object_id, window_id)
+        failure = {"map_id": spec["map_id"], "spec_sha256": spec["spec_sha256"], "cleanup_policy": "receipt_only", "rolled_back_ids": created, "load_result": "ROLLED_BACK"}
+        Path(receipt_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(receipt_path).with_name("load_failure_receipt.json").write_text(json.dumps(failure, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        raise
     receipt = {"map_id": spec["map_id"], "spec_sha256": spec["spec_sha256"], "cleanup_policy": "receipt_only", "created_ids": created, "window_id": window_id, "marker_evidence": marker_evidence}
     Path(receipt_path).parent.mkdir(parents=True, exist_ok=True)
     Path(receipt_path).write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
