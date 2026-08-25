@@ -25,6 +25,7 @@ catkin_install_python(PROGRAMS
   scripts/rflysim_cloud_contract.py
   scripts/rflysim_pointcloud_adapter.py
   scripts/rflysim_sensor_bridge.py
+  scripts/rviz_frame_adapter.py
   scripts/score_summary.py
   scripts/sim_vision_target_provider.py
   scripts/stage7_flight_plan.py

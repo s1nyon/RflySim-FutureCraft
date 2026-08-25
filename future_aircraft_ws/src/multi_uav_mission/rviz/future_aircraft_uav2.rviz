@@ -1,0 +1,153 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+  - Class: rviz/Selection
+    Name: Selection
+  - Class: rviz/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 1
+      Class: rviz/Grid
+      Color: 160; 160; 164
+      Enabled: true
+      Name: Local Grid
+      Plane: XY
+      Plane Cell Count: 40
+      Reference Frame: <Fixed Frame>
+    - Class: rviz/TF
+      Enabled: true
+      Frame Timeout: 15
+      Frames:
+        All Enabled: true
+      Marker Scale: 0.5
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Tree: {}
+      Update Interval: 0
+    - Angle Tolerance: 0.1
+      Class: rviz/Odometry
+      Covariance:
+        Orientation:
+          Alpha: 0.25
+          Color: 255; 255; 127
+          Color Style: Unique
+          Frame: Local
+          Offset: 1
+          Scale: 1
+          Value: false
+        Position:
+          Alpha: 0.3
+          Color: 204; 51; 204
+          Scale: 1
+          Value: false
+      Enabled: true
+      Keep: 100
+      Name: Faster-LIO Odometry
+      Position Tolerance: 0.1
+      Shape:
+        Alpha: 1
+        Axes Length: 0.6
+        Axes Radius: 0.05
+        Color: 255; 25; 0
+        Head Length: 0.3
+        Head Radius: 0.1
+        Shaft Length: 1
+        Shaft Radius: 0.05
+        Value: Axes
+      Topic: /uav2/mavros/odometry/out
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz/Path
+      Color: 255; 170; 0
+      Enabled: true
+      Head Diameter: 0.3
+      Head Length: 0.2
+      Length: 0.3
+      Line Style: Lines
+      Line Width: 0.03
+      Name: Bounded Local Path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Queue Size: 10
+      Topic: /uav2/viz/path
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/PointCloud2
+      Color: 255; 170; 0
+      Color Transformer: FlatColor
+      Decay Time: 0.2
+      Enabled: true
+      Name: LiDAR (sensor frame)
+      Position Transformer: XYZ
+      Queue Size: 2
+      Selectable: true
+      Size (Pixels): 2
+      Size (m): 0.03
+      Style: Points
+      Topic: /uav2/rflysim/lidar
+      Unreliable: false
+      Use Fixed Frame: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /uav2/viz/optimal_trajectory
+      Name: EGO Optimal Trajectory
+      Namespaces: {}
+      Queue Size: 10
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /uav2/viz/goal
+      Name: EGO Goal
+      Namespaces: {}
+      Queue Size: 10
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /uav2/viz/position_command
+      Name: EGO Position Command
+      Namespaces: {}
+      Queue Size: 10
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Default Light: true
+    Fixed Frame: uav2_camera_init
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz/Interact
+      Hide Inactive Objects: true
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+    - Class: rviz/FocusCamera
+    - Class: rviz/Measure
+  Transformation:
+    Current:
+      Class: rviz/TF
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 18
+      Focal Point:
+        X: 5
+        Y: 0
+        Z: 1
+      Name: Current View
+      Pitch: 0.55
+      Target Frame: uav2_camera_init
+      Yaw: 0.75
+Window Geometry:
+  Height: 900
+  Width: 1200
+  X: 1240
+  Y: 40

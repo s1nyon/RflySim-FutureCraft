@@ -1,0 +1,39 @@
+<launch>
+  <arg name="rviz_mode" default="dual"/>
+  <!-- Force roslaunch evaluation to fail for unsupported values. -->
+  <arg name="validated_mode" default="$(eval arg('rviz_mode') if arg('rviz_mode') in ['uav1', 'uav2', 'dual'] else 1/0)"/>
+
+  <group if="$(eval arg('rviz_mode') == 'uav1' or arg('rviz_mode') == 'dual')">
+    <node pkg="multi_uav_mission" type="rviz_frame_adapter.py" name="rviz_frame_adapter_uav1" output="screen">
+      <param name="frame_id" value="uav1_camera_init"/>
+      <param name="odom_topic" value="/uav1/mavros/odometry/out"/>
+      <param name="path_topic" value="/uav1/viz/path"/>
+      <param name="optimal_marker_topic" value="/uav1/planner/rflysim_ego_swarm_node/optimal_list"/>
+      <param name="optimal_marker_output_topic" value="/uav1/viz/optimal_trajectory"/>
+      <param name="goal_marker_topic" value="/uav1/planner/rflysim_ego_swarm_node/goal_point"/>
+      <param name="goal_marker_output_topic" value="/uav1/viz/goal"/>
+      <param name="position_command_topic" value="/uav1/planning/pos_cmd"/>
+      <param name="position_command_output_topic" value="/uav1/viz/position_command"/>
+      <param name="max_path_poses" value="600" type="int"/>
+    </node>
+    <node pkg="rviz" type="rviz" name="future_aircraft_uav1_rviz" output="screen"
+          args="-d $(find multi_uav_mission)/rviz/future_aircraft_uav1.rviz"/>
+  </group>
+
+  <group if="$(eval arg('rviz_mode') == 'uav2' or arg('rviz_mode') == 'dual')">
+    <node pkg="multi_uav_mission" type="rviz_frame_adapter.py" name="rviz_frame_adapter_uav2" output="screen">
+      <param name="frame_id" value="uav2_camera_init"/>
+      <param name="odom_topic" value="/uav2/mavros/odometry/out"/>
+      <param name="path_topic" value="/uav2/viz/path"/>
+      <param name="optimal_marker_topic" value="/uav2/planner/rflysim_ego_swarm_node/optimal_list"/>
+      <param name="optimal_marker_output_topic" value="/uav2/viz/optimal_trajectory"/>
+      <param name="goal_marker_topic" value="/uav2/planner/rflysim_ego_swarm_node/goal_point"/>
+      <param name="goal_marker_output_topic" value="/uav2/viz/goal"/>
+      <param name="position_command_topic" value="/uav2/planning/pos_cmd"/>
+      <param name="position_command_output_topic" value="/uav2/viz/position_command"/>
+      <param name="max_path_poses" value="600" type="int"/>
+    </node>
+    <node pkg="rviz" type="rviz" name="future_aircraft_uav2_rviz" output="screen"
+          args="-d $(find multi_uav_mission)/rviz/future_aircraft_uav2.rviz"/>
+  </group>
+</launch>
