@@ -51,6 +51,13 @@
   不得把相关性写成驱动根因。后续 live startup / RViz / flight regression 暂停；只允许
   离线开发与取证，详见
   `../docs/incidents/2026-08-25-live-startup-bsod-0x1e.md`。
+- **2026-08-25 RViz/live 收尾为 BLOCKED**：项目 RViz 已改为在创建时登记
+  `wsl:rviz_session`，live 验证四节点、per-UAV frame 与 `unknown_suspicious=0`；
+  但本次双机任务仅确认 OFFBOARD/armed 与约 20 Hz setpoint，UAV1 高度维持约
+  `-0.106m`、没有实际起飞，不能计入 regression。标准 stop 已关闭主栈并释放
+  11311/14600/14601/14610/14611，但 RViz PGID 9329 残留，manifest
+  `clean=false`。禁止从该状态 fresh start，也禁止凭此失败修改 z/坐标系/mission；
+  详见 `../docs/incidents/2026-08-25-rviz-live-flight-no-lift-and-stop-residual.md`。
 - 2026-08-11 旧栈 OFFBOARD 失败已定位为运行时序问题（旧栈重试窗口内 setpoint
   流中断），**不是代码回归**；恢复靠「完整清理 → fresh 栈背靠背启动」，
   见 `../docs/incidents/2026-08-11-offboard-stale-retry-setpoint-stream.md`。
