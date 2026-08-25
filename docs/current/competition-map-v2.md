@@ -43,21 +43,27 @@ ENU +Y north
 
 | Area/object | Versioned value | Classification |
 | --- | --- | --- |
-| Start bounds | x `[0,5]`, y `[-2.5,2.5]` | PREDICTED |
-| UAV1 / UAV2 spawn | `(2,-0.7,0)` / `(2,0.7,0)` ENU | PREDICTED |
-| Section A | `(5,0)` to `(12,0)`, 7 m, width 1.5 m | PREDICTED within OFFICIAL limits |
-| Corner A | centre `(12,0.9)`, left, radius 0.9 m | PREDICTED within OFFICIAL limits |
-| Section B | `(12.9,0.9)` to `(12.9,5.9)`, 5 m, width 1.4 m | PREDICTED within OFFICIAL limits |
-| Corner B | centre `(13.8,5.9)`, right, radius 0.9 m | PREDICTED within OFFICIAL limits |
-| Section C | `(13.8,6.8)` to `(20.8,6.8)`, 7 m, width 1.5 m | PREDICTED within OFFICIAL limits |
+| Start bounds | x `[13.5,18.5]`, y `[-2.5,2.5]` | PREDICTED; accepted arena substrate |
+| UAV1 / UAV2 spawn | `(16,-0.7,0)` / `(16,0.7,0)` ENU, yaw 0° | PREDICTED; accepted baseline spawn |
+| Section A | `(18.5,0)` to `(23,0)`, 4.5 m, width 1.5 m | PREDICTED within OFFICIAL limits |
+| Corner A | centre `(23,0.9)`, left, radius 0.9 m | PREDICTED within OFFICIAL limits |
+| Section B | `(23.9,0.9)` to `(23.9,4)`, 3.1 m, width 1.4 m | PREDICTED within OFFICIAL limits |
+| Corner B | centre `(24.8,4)`, right, radius 0.9 m | PREDICTED within OFFICIAL limits |
+| Section C | `(24.8,4.9)` to `(29.3,4.9)`, 4.5 m, width 1.5 m | PREDICTED within OFFICIAL limits |
 | Wall | 2.5 m high, 0.15 m thick, max chord error 0.02 m | PREDICTED |
-| Static box | ID 15100, `(9.0,0.30,0.45)`, `0.35×0.35×0.90` m | PREDICTED |
-| Static pillar | ID 15101, `(12.60,3.20,0.60)`, `0.30×0.30×1.20` m | PREDICTED |
-| Pendulum | ID 15120, pivot `(17.2,6.8,2.4)`, length 1.2 m, ±30°, period 4 s, 20 Hz | PREDICTED/CONFIGURABLE |
-| Target slot | ID 15130, `(18.8,7.35,1.2)`, `0.8×0.3×0.8` m | CONFIGURABLE placeholder |
-| Landing bounds | x `[20.8,28]`, y `[3.8,9.8]` | PREDICTED |
-| Pads | centres `(24.5,5.9)` and `(24.5,7.7)`, `0.9×0.9×0.1` m | PREDICTED |
+| Static box | ID 15100, `(20.5,0.60,0.45)`, `0.35×0.25×0.90` m; passable side 1.225 m | PREDICTED |
+| Static pillar | ID 15101, `(23.35,2.40,0.60)`, `0.20×0.30×1.20` m; passable side 1.150 m | PREDICTED |
+| Pendulum | ID 15120, pivot `(27,4.9,2.4)`, length 1.2 m, ±30°, period 6 s, 20 Hz | PREDICTED/CONFIGURABLE |
+| Target slot | ID 15130, `(28,5.45,1.2)`, `0.8×0.3×0.8` m | CONFIGURABLE placeholder |
+| Landing bounds | x `[29.3,34.3]`, y `[2.9,6.9]` | PREDICTED; accepted arena substrate |
+| Pads | centres `(32,3.9)` and `(32,5.9)`, `0.9×0.9×0.1` m | PREDICTED |
 | Markers | IDs 31/47, `DICT_4X4_250`, 0.60 m marker and 0.80 m board border extent | CONFIGURABLE |
+
+The configurable vehicle envelope is 0.45 m in diameter with 0.25 m lateral
+margin on each side. Validators therefore require a 1.00 m passable opening.
+At 120 Hz sampling the current pendulum profile provides a predicted 1.858 s
+continuous safe window and 1.250 m maximum open-side gap; these are structural
+predictions and still require live scene confirmation.
 
 ## Generate, validate, deploy, and select
 
@@ -70,7 +76,30 @@ scripts\deploy_competition_course_v2_terrain.bat --dry-run
 scripts\load_competition_course_v2.bat --dry-run
 ```
 
-The generator writes deterministic ignored output under `generated/competition_course_v2/`. It includes a spec hash, entity manifest, structural report, preview, terrain files, and marker PNGs.
+The generator writes deterministic ignored output under `generated/competition_course_v2/`. It includes a spec hash, entity manifest, structural report, dimensioned preview, `evaluation_reference.json`, terrain files, and marker PNGs.
+
+## Measurement contract
+
+`evaluation_reference.json` is the machine-readable map side of future
+competition analysis. It supplies cumulative course distance, wall/static and
+landing polygons, pendulum truth and predicted safe windows, target truth, and
+the clearance policy. It defines metrics for takeoff/entry time, section
+completion, obstacle clearance, inter-UAV distance, collisions, OFFBOARD loss,
+target error, landing error, and localization error.
+
+| Evidence plane | Purpose | Scoring authority |
+| --- | --- | --- |
+| Map spec/reference | Geometry, semantics and expected motion | Reference input |
+| RflySim/CopterSim ground truth | Physical pose, motion and collision truth | Primary where available |
+| ROS runtime | Localization, planner and control behavior | Primary for algorithm/control state |
+| Derived offline analysis | Align truth and runtime to compute errors | Derived result |
+| RViz | Human debugging and visual sanity checks | **Never a score source** |
+
+The exact RflySim ground-truth transport/API is intentionally marked
+`NOT_AUDITED_IN_MAP_TASK`. This map task does not invent a ROS topic or shared
+TF. A later evaluator must audit that transport and align each UAV estimate
+offline using verified initial/spawn truth; it must not create a runtime
+`competition_world` transform without mathematical evidence.
 
 Live selection is explicit:
 
@@ -82,7 +111,8 @@ Omitting `-Course` continues to select `predicted_narrow_course`. Real execution
 
 ## Ownership and reversible deployment
 
-- UE entities use IDs `15000..15999`, but cleanup never clears that range. The loader destroys only IDs recorded by a matching `load_receipt.json`.
+- The predicted and V2 specs reserve disjoint ID ranges. Course selection derives exact IDs from both tracked specs and sends destroy commands only for those IDs; unknown scene entities are never range-swept.
+- The V2 loader still uses its matching `load_receipt.json` for same-course reload/unload rollback.
 - The pendulum process is registered at creation as `windows:competition_course_v2_motion` in the current stack manifest.
 - Before standard stop, `scripts\load_competition_course_v2.bat --unload` requests a graceful controller stop and destroys only receipt-owned entities.
 - RflySim ClassID 43 reads one fixed installed `Aruco.png`. Each marker creation uses an atomic, checksum-guarded temporary replacement and byte-exact restoration in `finally`. The installed original expected SHA-256 is `0a2983af793349abc5cccb1e30c4a491263b63b6413be703a4a3f810fe9c592a`.

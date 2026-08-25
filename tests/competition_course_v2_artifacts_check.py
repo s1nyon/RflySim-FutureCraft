@@ -32,7 +32,8 @@ def main():
         assert tree_hashes(first) == tree_hashes(second)
         expected = {
             "SLAMScene.png", "SLAMScene.txt", "course_preview.svg", "entity_manifest.json",
-            "planning_points.json", "validation_report.json", "aruco/marker_31.png", "aruco/marker_47.png",
+            "planning_points.json", "evaluation_reference.json", "validation_report.json",
+            "aruco/marker_31.png", "aruco/marker_47.png",
         }
         assert expected <= set(tree_hashes(first))
         entities = json.loads((first / "entity_manifest.json").read_text(encoding="utf-8"))

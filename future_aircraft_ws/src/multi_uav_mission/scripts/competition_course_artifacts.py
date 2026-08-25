@@ -163,6 +163,119 @@ def build_preview_svg(spec: Dict[str, Any], entities: List[Dict[str, Any]], repo
     return "\n".join(rows) + "\n"
 
 
+def _box_polygon(item: Dict[str, Any]) -> List[List[float]]:
+    center, size = item["center"], item["size"]
+    yaw = float(item.get("yaw_rad", 0.0))
+    cosine, sine = math.cos(yaw), math.sin(yaw)
+    result: List[List[float]] = []
+    for local_x, local_y in ((-size[0] / 2.0, -size[1] / 2.0),
+                             (size[0] / 2.0, -size[1] / 2.0),
+                             (size[0] / 2.0, size[1] / 2.0),
+                             (-size[0] / 2.0, size[1] / 2.0)):
+        result.append([
+            center[0] + local_x * cosine - local_y * sine,
+            center[1] + local_x * sine + local_y * cosine,
+        ])
+    return result
+
+
+def _course_progress(spec: Dict[str, Any]) -> List[Dict[str, Any]]:
+    progress: List[Dict[str, Any]] = []
+    cumulative = 0.0
+    for item in spec["course"]:
+        if item["kind"] == "line":
+            length = math.hypot(item["end"][0] - item["start"][0], item["end"][1] - item["start"][1])
+        else:
+            center = item["center"]
+            a0 = math.atan2(item["start"][1] - center[1], item["start"][0] - center[0])
+            a1 = math.atan2(item["end"][1] - center[1], item["end"][0] - center[0])
+            sweep = ((a1 - a0) % (2.0 * math.pi) if item["turn"] == "left"
+                     else -((a0 - a1) % (2.0 * math.pi)))
+            length = abs(sweep) * float(item["radius"])
+        entry = {
+            "name": item["name"], "kind": item["kind"],
+            "s_start_m": cumulative, "s_end_m": cumulative + length,
+            "length_m": length, "width_m": float(item["width"]),
+            "start_enu_xy": list(item["start"]), "end_enu_xy": list(item["end"]),
+        }
+        if item["kind"] == "arc":
+            entry.update({"center_enu_xy": list(item["center"]), "radius_m": float(item["radius"]), "turn": item["turn"]})
+        progress.append(entry)
+        cumulative += length
+    return progress
+
+
+def build_evaluation_reference(spec: Dict[str, Any], entities: List[Dict[str, Any]], reports: Dict[str, Any]) -> Dict[str, Any]:
+    """Describe map truth and evidence sources without inventing a GT transport."""
+    wall_polygons = [
+        {"id": item["id"], "name": item["name"], "polygon_enu_xy": _box_polygon(item)}
+        for item in entities if item["category"] == "wall"
+    ]
+    static_polygons = [
+        {"id": item["id"], "name": item["name"], "polygon_enu_xy": _box_polygon(item)}
+        for item in spec["static_obstacles"]
+    ]
+    landing_polygons = [
+        {"id": item["id"], "name": item["name"], "polygon_enu_xy": _box_polygon(item)}
+        for item in spec["landing"]["platforms"]
+    ]
+    dynamic = spec["dynamic_obstacle"]
+    metrics = [
+        {"id": "takeoff_time", "unit": "s", "primary_evidence": "rflysim_ground_truth", "reference": "takeoff_area"},
+        {"id": "corridor_entry_time", "unit": "s", "primary_evidence": "rflysim_ground_truth", "reference": "course_progress[0].start_enu_xy"},
+        {"id": "segment_completion", "unit": "m", "primary_evidence": "rflysim_ground_truth", "reference": "course_progress.s_end_m"},
+        {"id": "wall_clearance", "unit": "m", "primary_evidence": "rflysim_ground_truth", "reference": "geometry.wall_polygons"},
+        {"id": "static_obstacle_clearance", "unit": "m", "primary_evidence": "rflysim_ground_truth", "reference": "geometry.static_obstacle_polygons"},
+        {"id": "dynamic_obstacle_clearance", "unit": "m", "primary_evidence": "rflysim_ground_truth", "reference": "dynamic_obstacle"},
+        {"id": "inter_uav_distance", "unit": "m", "primary_evidence": "rflysim_ground_truth", "reference": "spawns"},
+        {"id": "collision_count", "unit": "count", "primary_evidence": "rflysim_ground_truth", "reference": "geometry"},
+        {"id": "offboard_loss_count", "unit": "count", "primary_evidence": "ros_runtime", "reference": "/uavX/mavros/state"},
+        {"id": "target_error", "unit": "m", "primary_evidence": "rflysim_ground_truth", "reference": "geometry.target_truth"},
+        {"id": "landing_error", "unit": "m", "primary_evidence": "rflysim_ground_truth", "reference": "geometry.landing_polygons"},
+        {"id": "localization_error", "unit": "m", "primary_evidence": "derived_offline", "reference": "rflysim_ground_truth+ros_runtime"},
+    ]
+    return {
+        "schema_version": 1,
+        "map_id": spec["map_id"],
+        "coordinate_frame": "ENU",
+        "spec_sha256": spec["spec_sha256"],
+        "ground_truth_transport": "NOT_AUDITED_IN_MAP_TASK",
+        "evidence_planes": {
+            "map_spec": {"role": "versioned_geometry_and_semantics"},
+            "rflysim_ground_truth": {"role": "physical_simulation_truth", "transport": "NOT_AUDITED_IN_MAP_TASK"},
+            "ros_runtime": {"role": "algorithm_state_and_control_evidence"},
+            "derived_offline": {"role": "aligned_metrics_and_error_analysis"},
+            "rviz": {"role": "visualization_only", "scoring_source": False},
+        },
+        "spawns": dict(spec["spawns"]),
+        "clearance_policy": dict(spec["clearance_policy"]),
+        "course_progress": _course_progress(spec),
+        "geometry": {
+            "wall_polygons": wall_polygons,
+            "static_obstacle_polygons": static_polygons,
+            "landing_polygons": landing_polygons,
+            "target_truth": {
+                "id": spec["mission_target_slot"]["id"],
+                "center_enu": list(spec["mission_target_slot"]["center"]),
+                "size_m": list(spec["mission_target_slot"]["size"]),
+                "asset": spec["mission_target_slot"]["asset"],
+                "replaceable": spec["mission_target_slot"]["replaceable"],
+            },
+        },
+        "dynamic_obstacle": {
+            "id": dynamic["id"], "name": dynamic["name"],
+            "pivot_enu": list(dynamic["pivot"]), "length_m": float(dynamic["length_m"]),
+            "amplitude_deg": float(dynamic["amplitude_deg"]), "period_sec": float(dynamic["period_sec"]),
+            "phase_rad": float(dynamic["phase_rad"]), "size_m": list(dynamic["size"]),
+            "trajectory_model": "angle=amplitude*sin(2*pi*t/period+phase); swing_plane=ENU_YZ",
+            "safe_windows_sec": list(reports["pendulum"]["safe_windows_sec"]),
+            "longest_safe_window_sec": reports["pendulum"]["longest_safe_window_sec"],
+            "maximum_open_side_gap_m": reports["pendulum"]["maximum_open_side_gap_m"],
+        },
+        "metrics": metrics,
+    }
+
+
 def _write_marker(path: Path, marker_id: int) -> None:
     dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
     image = cv2.aruco.generateImageMarker(dictionary, marker_id, 512, borderBits=1)
@@ -185,6 +298,7 @@ def generate_artifacts(spec_path: Path, output_dir: Path) -> Dict[str, Any]:
     }
     _json(output / "entity_manifest.json", {"map_id": spec["map_id"], "coordinate_frame": "ENU", "spec_sha256": spec["spec_sha256"], "owned_cleanup": "receipt_only", "entities": entities})
     _json(output / "planning_points.json", {"frame_id": "competition_course_v2_enu", "semantic_note": "map geometry only; not an established shared UAV TF", "spec_sha256": spec["spec_sha256"], "points": _course_points(spec)})
+    _json(output / "evaluation_reference.json", build_evaluation_reference(spec, entities, reports))
     _json(output / "validation_report.json", {"result": "PASS", "validation_level": "STRUCTURAL", "spec_sha256": spec["spec_sha256"], "entity_count": len(entities), "wall_count": len(build_wall_boxes(spec)), "static_obstacle_count": len(spec["static_obstacles"]), "dynamic_obstacle_count": 1, "aruco_marker_ids": sorted(item["marker_id"] for item in spec["landing"]["markers"]), "full_mission": "NOT_REQUIRED"})
     (output / "course_preview.svg").write_text(build_preview_svg(spec, entities, reports), encoding="utf-8")
     terrain = spec["terrain"]

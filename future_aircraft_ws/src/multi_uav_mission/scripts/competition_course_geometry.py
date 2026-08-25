@@ -219,11 +219,24 @@ def pendulum_clearance_report(spec: Dict[str, Any]) -> Dict[str, Any]:
         longest = max(longest, current)
     longest = min(longest, sample_count)
     longest_sec = longest / sample_hz
+    safe_windows: List[Dict[str, float]] = []
+    run_start = None
+    for index, value in enumerate(safe + [False]):
+        if value and run_start is None:
+            run_start = index
+        elif not value and run_start is not None:
+            safe_windows.append({
+                "start_sec": run_start / sample_hz,
+                "end_sec": index / sample_hz,
+                "duration_sec": (index - run_start) / sample_hz,
+            })
+            run_start = None
     return {
         "name": dynamic["name"], "segment": element["name"],
         "maximum_open_side_gap_m": maximum_gap,
         "required_gap_m": required_gap,
         "longest_safe_window_sec": longest_sec,
+        "safe_windows_sec": safe_windows,
         "required_safe_window_sec": required_window,
         "sampling_hz": sample_hz,
         "passes": maximum_gap + 1e-12 >= required_gap and longest_sec + 1e-12 >= required_window,
