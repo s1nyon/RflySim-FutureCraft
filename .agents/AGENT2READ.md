@@ -45,27 +45,23 @@
   `kill -- -PGID` 无效（返回 0 但进程组存活），stop 报 NOT clean，需要按显式 PID
   补清后再收尾记录 `clean: true`；2 个 fresh 栈均 2/2 复现。
   详见 `../docs/incidents/2026-08-11-wsl-pgid-stop-ineffective.md`。
-- **2026-08-25 live 暂停**：Infrastructure Iteration 第 3 次 pre-change startup
-  measurement 期间 Windows 蓝屏（bugcheck `0x1E`，内核访问违规）。宿主机在崩溃前
-  同时存在 NVIDIA LocalSystem Container 高频 crash-loop，但尚无 WinDbg 符号化堆栈，
-  不得把相关性写成驱动根因。后续 live startup / RViz / flight regression 暂停；只允许
-  离线开发与取证，详见
+- **2026-08-25 Infrastructure Baseline READY**：RViz `exec roslaunch` ownership 已纳入
+  标准 stop 身份校验，PGID 9329 与后续 dual-RViz sessions 均由 repository lifecycle
+  clean stop；最终 owned/orphan/unknown/stale 为 0、核心端口 free。startup 3/3 fresh
+  READY（125.3/123.2/123.4s）；既有 82s 路线 2/2 fresh PASS（RViz OFF/ON 各一次，
+  collision/offboard-loss/timeout 均 0）。早期 no-lift 未再现；重型 dual RViz 导致的
+  planner 失败通过默认关闭 LiDAR、10Hz render 降载，RViz-ON 全路线已通过。证据见
+  `../docs/evidence/2026-08-25-infrastructure-recovery-closure.md`。
+- 2026-08-25 单次 Windows `0x1E` 蓝屏在上述 5 个 fresh run 中未再现，当前不再是
+  infrastructure blocker；未获得符号化 dump 根因，仍保留为宿主机历史风险，见
   `../docs/incidents/2026-08-25-live-startup-bsod-0x1e.md`。
-- **2026-08-25 RViz/live 收尾为 BLOCKED**：项目 RViz 已改为在创建时登记
-  `wsl:rviz_session`，live 验证四节点、per-UAV frame 与 `unknown_suspicious=0`；
-  但本次双机任务仅确认 OFFBOARD/armed 与约 20 Hz setpoint，UAV1 高度维持约
-  `-0.106m`、没有实际起飞，不能计入 regression。标准 stop 已关闭主栈并释放
-  11311/14600/14601/14610/14611，但 RViz PGID 9329 残留，manifest
-  `clean=false`。禁止从该状态 fresh start，也禁止凭此失败修改 z/坐标系/mission；
-  详见 `../docs/incidents/2026-08-25-rviz-live-flight-no-lift-and-stop-residual.md`。
 - 2026-08-11 旧栈 OFFBOARD 失败已定位为运行时序问题（旧栈重试窗口内 setpoint
   流中断），**不是代码回归**；恢复靠「完整清理 → fresh 栈背靠背启动」，
   见 `../docs/incidents/2026-08-11-offboard-stale-retry-setpoint-stream.md`。
 - PBL-1 是受保护的 `lidar_only` 双机 RflySim/PX4/MAVROS/Faster-LIO/EGO-Swarm/OFFBOARD 错时穿越基线，不是完整比赛 mission strategy。
 - 当前阶段是 Phase 2「Competition-Grade Narrow-Corridor Navigation」；权威路线见 [`docs/current/competition-roadmap.md`](../docs/current/competition-roadmap.md)。
-- 当前飞行代码没有 fresh P0/P1 regression 结论；但宿主机 `0x1E` 蓝屏是恢复任何 live
-  regression 前的 infrastructure blocker。解除后下一工程缺口仍是按比赛几何/障碍验收
-  导航，以及真实视觉目标感知。
+- 当前 infrastructure 已有 fresh PBL 路线 2/2 PASS；下一工程缺口是按比赛几何/障碍
+  验收导航，以及真实视觉目标感知。
 - D435i `full` 模式仍需 live 飞行闭环；默认 `lidar_only`。Depth transport、目标测距和 Depth→EGO 是三个独立验收层。
 - `planner_commands=0` 的 PositionCommand md5、executor subscriber churn 与 lifecycle 强杀事故均已解决；只有 fresh evidence 再现时才重新作为 blocker，历史见 [`docs/incidents/`](../docs/incidents/)。
 

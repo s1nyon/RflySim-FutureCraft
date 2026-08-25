@@ -14,6 +14,7 @@
 | `scripts/run_live_ego_swarm_dual.bat` | 当前双机 EGO-Swarm runner。 |
 | `scripts/run_live_fastlio_dual.bat` | 当前双机 sensor/Faster-LIO readiness runner。 |
 | `scripts/run_live_slam_ego_swarm_flight.bat` | 显式 simulation-only arming 的 PBL-1 flight runner。 |
+| `scripts/run_rflysim_rviz.bat` | 可选的 per-UAV/dual RViz 调试入口，不参与 READY 或控制链。 |
 | `scripts/validate_asset_calibration.ps1` | 官方模型标定场的纯离线契约与 DryRun 验证入口。 |
 | `scripts/validate_lifecycle.ps1` | Lifecycle 离线回归入口。 |
 | `scripts/validate_repository.ps1` | Repository、文档和结构 contract 总入口。 |
@@ -67,6 +68,7 @@
 | `scripts/wsl/cleanup_stage7_flight_chain.sh` | 当前 stack-scoped Stage 7 flight-chain 收尾。 |
 | `scripts/wsl/lifecycle_common.sh` | WSL 创建时 PID/PGID 登记公共函数。 |
 | `scripts/wsl/live_stack_wsl_ops.sh` | WSL stack inspect/stop 显式 PID 操作。 |
+| `scripts/wsl/rviz_live.sh` | Lifecycle-owned RViz WSL session wrapper。 |
 | `scripts/wsl/stage2_health_check.sh` | 当前双机 ROS/MAVROS health 检查。 |
 | `scripts/wsl/stage2_two_mavros.sh` | 当前双 MAVROS WSL 启动链。 |
 | `scripts/wsl/stage6d_live_no_arm_smoke.sh` | 当前 Stage 6D no-arm WSL 实现。 |

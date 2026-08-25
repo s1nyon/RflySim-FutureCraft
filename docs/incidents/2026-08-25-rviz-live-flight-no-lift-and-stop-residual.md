@@ -1,9 +1,14 @@
 # RViz live ownership、无升力飞行失败与 stop 残留（2026-08-25）
 
-> 状态：**OPEN / LIVE REGRESSION NOT ACCEPTED**
+> 状态：**RESOLVED / HISTORICAL**
 > 运行实例：`stack-20260825T081042Z-756ce781`
 > Stage 7 run：`stage7-20260825T081141Z-2768`
 > manifest 记录的启动提交：`e55535334e5e8b53d2aedc6943b25e725c1abd1d`
+
+> 2026-08-25 收尾：RViz `exec roslaunch` 身份片段已纳入标准 stop 验证；PGID 9329
+> 经仓库正式 lifecycle 清理。随后 3/3 fresh startup 与 2/2 完整路线通过（一次 RViz
+> OFF、一次轻量 dual RViz ON），no-lift 未再现。详见
+> [`2026-08-25-infrastructure-recovery-closure.md`](../evidence/2026-08-25-infrastructure-recovery-closure.md)。
 
 ## 1. 本轮范围和结论
 

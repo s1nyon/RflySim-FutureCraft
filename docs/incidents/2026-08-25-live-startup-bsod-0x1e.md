@@ -1,8 +1,13 @@
 # Live startup 期间 Windows 蓝屏：0x1E（2026-08-25）
 
-> 状态：**OPEN / BLOCKING FURTHER LIVE REGRESSION**
+> 状态：**HISTORICAL / NOT REPRODUCED IN CLOSURE RUNS**
 > 影响：Infrastructure Iteration 的第 3 次 pre-change startup timing、后续 startup optimization live 验证和 full flight regression
 > 不影响结论：Phase 1 TF / Frame Contract 仍为 CLOSED；本事故尚未证明由 ROS、PX4、Faster-LIO、EGO 或本轮代码引起
+
+> 2026-08-25 后续状态：用户恢复 live 工作后，3 次正式 fresh startup 与 2 次 fresh
+> 完整双机路线均通过，未再发生宿主机崩溃。因此该单次事件不再阻塞当前 infrastructure
+> baseline；驱动级根因仍未由符号化 dump 证明，保留为宿主机历史风险。闭环证据见
+> [`2026-08-25-infrastructure-recovery-closure.md`](../evidence/2026-08-25-infrastructure-recovery-closure.md)。
 
 ## 1. 事件
 

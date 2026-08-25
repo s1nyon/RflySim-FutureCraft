@@ -27,13 +27,18 @@ frame without changing numeric values or stamps. It does not publish TF or contr
 topics and does not copy registered high-bandwidth point clouds. Ground-truth display
 is not included because no reliable project GT topic/frame contract has been verified.
 
-The two RViz processes and visualization adapters were observed live. Their nodes,
-per-UAV path headers and manifest role `wsl:rviz_session` were verified with
-`unknown_suspicious=0`; raw odometry remained approximately 9–12 Hz during the bounded
-observation. Visual orientation and full RViz ON flight performance remain unaccepted.
-The attempted flight reached dual OFFBOARD/armed state but produced no observed takeoff,
-and standard stop left the registered RViz PGID alive. See
-[`2026-08-25-rviz-live-flight-no-lift-and-stop-residual.md`](../incidents/2026-08-25-rviz-live-flight-no-lift-and-stop-residual.md).
+Raw LiDAR remains available but is disabled by default, and each RViz render loop is
+limited to 10 Hz. Enable a single LiDAR display manually when it is needed. The first
+dual-window configuration rendered both point clouds continuously and consumed about
+63% + 55% WSL CPU; the bounded configuration used about 21% + 19% during flight and
+did not subscribe RViz to either `/uavX/rflysim/lidar` topic.
+
+Dual RViz is **LIVE-VERIFIED**. Both processes and adapters remained online throughout
+the accepted 82 s route. Path headers were `uav1_camera_init` and `uav2_camera_init`;
+the run completed with zero collision, OFFBOARD-loss, and timeout events. Standard
+stop then terminated the registered `wsl:rviz_session` and finished with zero owned
+orphan, unknown, stale, or occupied-port findings. See
+[`2026-08-25-infrastructure-recovery-closure.md`](../evidence/2026-08-25-infrastructure-recovery-closure.md).
 
 ## Startup progression
 
@@ -49,19 +54,26 @@ The startup path has these relevant waits:
 | health wait | run-scoped GUI/ROS/MAVROS/course status plus topology | Predicate-driven, bounded, fail-closed |
 | sensor/Faster-LIO/EGO waits | real messages, publishers/subscribers and registered roles | Predicate-driven, bounded, fail-closed |
 
-Two clean RViz-OFF pre-change startup samples completed before the crash (198.6 s and
-134.1 s wall time). The required third sample blue-screened the Windows host and is not
-a valid timing result. No after-timing claim is accepted.
+Two valid pre-change samples were 198.6 s and 134.1 s (mean 166.4 s); the third attempted
+sample ended in a host crash and is excluded. Three accepted RViz-OFF startup samples
+after the launcher/readiness changes were 125.3 s, 123.2 s, and 123.4 s (mean 124.0 s):
+42.4 s / 25.5% lower than the two-sample before mean. Stable fail-closed behavior takes
+priority over this timing comparison; the retained waits below were not shortened.
 
-## Active live blockers
+## Acceptance
 
-Further live startup, RViz, and flight regression are **BLOCKED** by
-[`2026-08-25-live-startup-bsod-0x1e.md`](../incidents/2026-08-25-live-startup-bsod-0x1e.md).
-Offline validation does not close this blocker. Infrastructure baseline readiness must
-remain unclaimed until dump analysis and the required fresh live ladder complete.
+The infrastructure baseline is **READY** at the current branch tip:
 
-Additionally, stack `stack-20260825T081042Z-756ce781` ended with all core ports free and
-`owned_and_alive=0`, but manifest `stop.clean=false` because RViz PGID `9329` remained as
-an owned orphan. No fresh start is allowed from this state. The same run's flight evidence
-confirmed dual OFFBOARD/arming but no physical takeoff; this is not a passed regression and
-does not justify changing coordinate or mission mathematics.
+- Phase 1 TF/frame contract remains CLOSED; no shared competition frame was introduced.
+- startup is 3/3 fresh READY with RViz OFF;
+- full existing-route flight is 2/2 fresh PASS (one RViz OFF, one dual RViz ON);
+- every accepted stop ended with no owned orphan, unknown process, stale PID, or occupied
+  ROS/PX4/MAVROS port;
+- the earlier no-lift symptom was not reproduced after clean lifecycle recovery. A later
+  heavy-RViz attempt did take off but failed planning under excessive visualization load;
+  the default RViz load was reduced and the same RViz-ON route then passed.
+
+The old failures remain historical evidence in
+[`2026-08-25-rviz-live-flight-no-lift-and-stop-residual.md`](../incidents/2026-08-25-rviz-live-flight-no-lift-and-stop-residual.md)
+and [`2026-08-25-live-startup-bsod-0x1e.md`](../incidents/2026-08-25-live-startup-bsod-0x1e.md),
+not current blockers.
