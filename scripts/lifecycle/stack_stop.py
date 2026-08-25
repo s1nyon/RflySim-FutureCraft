@@ -210,6 +210,7 @@ WSL_SESSION_ROLE_FRAGMENTS = {
     "wsl:mavros_uav2": ("roslaunch", "mavros"),
     "wsl:px4_mavlink_uav1": ("px4-mavlink",),
     "wsl:px4_mavlink_uav2": ("px4-mavlink",),
+    "wsl:rviz_session": ("rflysim_rviz.launch",),
 }
 
 

@@ -309,6 +309,33 @@ def main() -> int:
     assert not any(pid == -796 for pid in [c for _, c in backend.calls]), "foreign argv must not be killed"
     assert report.clean is False, "foreign argv must fail closed"
 
+    # 6f. RViz session wrapper execs roslaunch after registering its own
+    # PID/PGID. The same PID + start-time + project-specific launch argv must
+    # remain stoppable through the registered group.
+    manifest6f = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
+    ownership.register_process(
+        manifest6f, side="wsl", pid=9329, pgid=9329, role="wsl:rviz_session", name="bash",
+        command_line="rviz_live.sh -> roslaunch rflysim_rviz.launch mode=dual",
+        start_time_utc=start, reason="created by rviz_live.sh before exec",
+    )
+    rviz_roslaunch = make_proc(
+        9329, "roslaunch", start,
+        "/usr/bin/python3.10 /opt/ros/noetic/bin/roslaunch multi_uav_mission "
+        "rflysim_rviz.launch rviz_mode:=dual",
+        pgid=9329,
+    )
+    wsl_table = MutableTable([rviz_roslaunch])
+    backend = FakeStopBackend(win_table=MutableTable([]), wsl_table=wsl_table)
+    report = stop.execute_stop(
+        manifest6f, win_table=MutableTable([]), wsl_table=wsl_table,
+        win_backend=backend, wsl_backend=backend, dry_run=False, reason="t",
+        int_wait_s=0, term_wait_s=0,
+    )
+    assert -9329 in {pid for _, pid in backend.calls}, (
+        "registered RViz exec-transformed session must be stopped via its PGID"
+    )
+    assert report.clean is True, "registered RViz session stop must be clean"
+
     # 7. Signal failure -> clean=false with failure reasons recorded.
     manifest7 = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
     ownership.register_process(
