@@ -20,7 +20,7 @@ def main():
     from competition_course_geometry import load_spec, pendulum_pose
     from competition_course_motion import run_samples
     dynamic = load_spec(root / "config/maps/competition_course_v2.json")["dynamic_obstacle"]
-    samples = [pendulum_pose(dynamic, value) for value in (0, 1, 2, 3, 4)]
+    samples = [pendulum_pose(dynamic, value) for value in (0, 1.5, 3, 4.5, 6)]
     assert math.isclose(samples[0][1], samples[2][1], abs_tol=1e-9)
     assert samples[1][1] > samples[0][1] > samples[3][1]
     assert all(math.isclose(a, b, abs_tol=1e-9) for a, b in zip(samples[0], samples[4]))
@@ -32,7 +32,7 @@ def main():
         assert result["object_id"] == 15120
         recorded = json.loads(evidence.read_text(encoding="utf-8"))
         assert [sample["elapsed_sec"] for sample in recorded["samples"]] == [0.0, 1.0, 2.0]
-        assert recorded["configured_period_sec"] == 4.0
+        assert recorded["configured_period_sec"] == 6.0
     print("competition_course_v2_motion_check: PASS")
 
 

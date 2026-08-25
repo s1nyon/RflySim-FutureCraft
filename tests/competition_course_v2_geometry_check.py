@@ -65,9 +65,9 @@ def main():
     }
 
     p0 = pendulum_pose(model["dynamic_obstacle"], 0.0)
-    pq = pendulum_pose(model["dynamic_obstacle"], 1.0)
-    ph = pendulum_pose(model["dynamic_obstacle"], 2.0)
-    assert math.isclose(p0[1], 6.8, abs_tol=1e-9)
+    pq = pendulum_pose(model["dynamic_obstacle"], 1.5)
+    ph = pendulum_pose(model["dynamic_obstacle"], 3.0)
+    assert math.isclose(p0[1], 4.9, abs_tol=1e-9)
     assert pq[1] > p0[1]
     assert math.isclose(ph[1], p0[1], abs_tol=1e-9)
     assert all(math.isfinite(value) for pose in (p0, pq, ph) for value in pose)

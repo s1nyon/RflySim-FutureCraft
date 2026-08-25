@@ -92,6 +92,144 @@ def _arc_angles(item: Dict[str, Any]) -> Tuple[float, float]:
     return a0, sweep
 
 
+def _line_basis(item: Dict[str, Any]) -> Tuple[float, float, float, float, float]:
+    start = _vec(item["start"], 2, "line start")
+    end = _vec(item["end"], 2, "line end")
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    length = math.hypot(dx, dy)
+    if length <= 0:
+        raise CourseValidationError("line length must be positive")
+    ux, uy = dx / length, dy / length
+    return ux, uy, -uy, ux, length
+
+
+def _named_course(spec: Dict[str, Any], name: str) -> Dict[str, Any]:
+    matches = [item for item in spec["course"] if item.get("name") == name]
+    if len(matches) != 1:
+        raise CourseValidationError("segment {} must name exactly one course element".format(name))
+    return matches[0]
+
+
+def static_clearance_reports(spec: Dict[str, Any]) -> List[Dict[str, Any]]:
+    required = float(spec["clearance_policy"]["minimum_passable_gap_m"])
+    reports: List[Dict[str, Any]] = []
+    for obstacle in spec["static_obstacles"]:
+        element = _named_course(spec, obstacle.get("segment", ""))
+        if element.get("kind") != "line":
+            raise CourseValidationError("{} segment must be a line".format(obstacle["name"]))
+        ux, uy, nx, ny, length = _line_basis(element)
+        center = _vec(obstacle["center"], 3, "{} center".format(obstacle["name"]))
+        size = _vec(obstacle["size"], 3, "{} size".format(obstacle["name"]))
+        rel_x, rel_y = center[0] - element["start"][0], center[1] - element["start"][1]
+        along = rel_x * ux + rel_y * uy
+        offset = rel_x * nx + rel_y * ny
+        half_lateral = abs(nx) * size[0] / 2.0 + abs(ny) * size[1] / 2.0
+        half_longitudinal = abs(ux) * size[0] / 2.0 + abs(uy) * size[1] / 2.0
+        half_width = float(element["width"]) / 2.0
+        left_gap = half_width - (offset + half_lateral)
+        right_gap = (offset - half_lateral) + half_width
+        passable = max(left_gap, right_gap)
+        contained = half_longitudinal <= along <= length - half_longitudinal
+        reports.append({
+            "name": obstacle["name"], "segment": element["name"],
+            "left_gap_m": left_gap, "right_gap_m": right_gap,
+            "passable_gap_m": passable, "required_gap_m": required,
+            "longitudinally_contained": contained,
+            "passes": contained and passable + 1e-12 >= required,
+        })
+    return reports
+
+
+def turn_clearance_reports(spec: Dict[str, Any]) -> List[Dict[str, Any]]:
+    diameter = float(spec["clearance_policy"]["vehicle_diameter_m"])
+    required = float(spec["clearance_policy"]["lateral_margin_each_side_m"])
+    chord_error = float(spec["wall"]["max_chord_error"])
+    reports: List[Dict[str, Any]] = []
+    for item in spec["course"]:
+        if item["kind"] != "arc":
+            continue
+        margin = (float(item["width"]) - diameter) / 2.0 - chord_error
+        reports.append({
+            "name": item["name"], "center_margin_m": margin,
+            "required_margin_m": required, "passes": margin + 1e-12 >= required,
+        })
+    return reports
+
+
+def spawn_clearance_report(spec: Dict[str, Any]) -> Dict[str, Any]:
+    diameter = float(spec["clearance_policy"]["vehicle_diameter_m"])
+    margin = float(spec["clearance_policy"]["lateral_margin_each_side_m"])
+    radius = diameter / 2.0 + margin
+    bounds = _vec(spec["takeoff_area"]["bounds"], 4, "takeoff bounds")
+    entry = _vec(spec["course"][0]["start"], 2, "course entry")
+    boundary_clearances: Dict[str, float] = {}
+    headings: Dict[str, bool] = {}
+    positions: Dict[str, Tuple[float, ...]] = {}
+    for name in ("uav1", "uav2"):
+        position = _vec(spec["spawns"][name], 3, "{} spawn".format(name))
+        positions[name] = position
+        boundary_clearances[name] = min(
+            position[0] - bounds[0], bounds[1] - position[0],
+            position[1] - bounds[2], bounds[3] - position[1],
+        ) - radius
+        yaw = math.radians(float(spec["spawn_yaw_deg"][name]))
+        to_entry = (entry[0] - position[0], entry[1] - position[1])
+        headings[name] = math.cos(yaw) * to_entry[0] + math.sin(yaw) * to_entry[1] > 0.0
+    surface_gap = _distance(positions["uav1"], positions["uav2"]) - diameter
+    required_surface_gap = 2.0 * margin
+    passes = (min(boundary_clearances.values()) >= -1e-12 and
+              surface_gap + 1e-12 >= required_surface_gap and all(headings.values()))
+    return {
+        "boundary_clearance_m": boundary_clearances,
+        "inter_uav_surface_gap_m": surface_gap,
+        "required_inter_uav_surface_gap_m": required_surface_gap,
+        "headings_toward_entry": headings,
+        "passes": passes,
+    }
+
+
+def pendulum_clearance_report(spec: Dict[str, Any]) -> Dict[str, Any]:
+    dynamic = spec["dynamic_obstacle"]
+    element = _named_course(spec, dynamic.get("segment", ""))
+    if element.get("kind") != "line":
+        raise CourseValidationError("{} segment must be a line".format(dynamic["name"]))
+    _, _, nx, ny, _ = _line_basis(element)
+    size = _vec(dynamic["size"], 3, "pendulum size")
+    half_lateral = abs(nx) * size[0] / 2.0 + abs(ny) * size[1] / 2.0
+    required_gap = float(spec["clearance_policy"]["minimum_passable_gap_m"])
+    required_window = float(spec["clearance_policy"]["minimum_dynamic_safe_window_sec"])
+    sample_hz = float(spec["clearance_policy"]["sampling_hz"])
+    period = float(dynamic["period_sec"])
+    sample_count = max(1, int(round(period * sample_hz)))
+    safe: List[bool] = []
+    maximum_gap = -math.inf
+    start = element["start"]
+    half_width = float(element["width"]) / 2.0
+    for index in range(sample_count):
+        position = pendulum_pose(dynamic, index / sample_hz)
+        offset = (position[0] - start[0]) * nx + (position[1] - start[1]) * ny
+        left_gap = half_width - (offset + half_lateral)
+        right_gap = (offset - half_lateral) + half_width
+        open_gap = max(left_gap, right_gap)
+        maximum_gap = max(maximum_gap, open_gap)
+        safe.append(open_gap + 1e-12 >= required_gap)
+    longest = current = 0
+    for value in safe + safe:
+        current = current + 1 if value else 0
+        longest = max(longest, current)
+    longest = min(longest, sample_count)
+    longest_sec = longest / sample_hz
+    return {
+        "name": dynamic["name"], "segment": element["name"],
+        "maximum_open_side_gap_m": maximum_gap,
+        "required_gap_m": required_gap,
+        "longest_safe_window_sec": longest_sec,
+        "required_safe_window_sec": required_window,
+        "sampling_hz": sample_hz,
+        "passes": maximum_gap + 1e-12 >= required_gap and longest_sec + 1e-12 >= required_window,
+    }
+
+
 def validate_spec(spec: Dict[str, Any]) -> None:
     unknown = sorted(set(spec) - ROOT_FIELDS)
     if unknown:
@@ -234,6 +372,37 @@ def validate_spec(spec: Dict[str, Any]) -> None:
             raise CourseValidationError("physical_size_m must be positive")
         if _number(marker["white_border_size_m"], "white_border_size_m") < marker["physical_size_m"]:
             raise CourseValidationError("white_border_size_m must not be smaller than the marker")
+
+    for report in static_clearance_reports(spec):
+        if not report["passes"]:
+            raise CourseValidationError(
+                "{} passable gap {:.6f} m is below required {:.6f} m or obstacle is outside its segment".format(
+                    report["name"], report["passable_gap_m"], report["required_gap_m"]
+                )
+            )
+    for report in turn_clearance_reports(spec):
+        if not report["passes"]:
+            raise CourseValidationError(
+                "{} center margin {:.6f} m is below required {:.6f} m".format(
+                    report["name"], report["center_margin_m"], report["required_margin_m"]
+                )
+            )
+    spawn_report = spawn_clearance_report(spec)
+    if not spawn_report["passes"]:
+        for name in ("uav1", "uav2"):
+            if spawn_report["boundary_clearance_m"][name] < 0:
+                raise CourseValidationError("{} spawn safety envelope leaves the takeoff area".format(name))
+            if not spawn_report["headings_toward_entry"][name]:
+                raise CourseValidationError("{} spawn heading points away from course entry".format(name))
+        raise CourseValidationError("spawn separation is below the clearance policy")
+    dynamic_report = pendulum_clearance_report(spec)
+    if not dynamic_report["passes"]:
+        raise CourseValidationError(
+            "{} safe window {:.6f} s is below required {:.6f} s or open-side gap is insufficient".format(
+                dynamic_report["name"], dynamic_report["longest_safe_window_sec"],
+                dynamic_report["required_safe_window_sec"]
+            )
+        )
 
 
 def load_spec(path: Path) -> Dict[str, Any]:

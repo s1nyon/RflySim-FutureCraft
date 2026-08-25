@@ -51,16 +51,16 @@
     {"name": "section_c", "kind": "line", "start": [24.8, 4.9], "end": [29.3, 4.9], "width": 1.5}
   ],
   "static_obstacles": [
-    {"name": "static_box_a", "id": 15100, "type": "box", "center": [9.0, 0.30, 0.45], "size": [0.35, 0.35, 0.90], "vehicle_type": 1000813, "collision": true},
-    {"name": "static_pillar_b", "id": 15101, "type": "pillar", "center": [12.60, 3.20, 0.60], "size": [0.30, 0.30, 1.20], "vehicle_type": 1000813, "collision": true}
+    {"name": "static_box_a", "id": 15100, "type": "box", "segment": "section_a", "center": [20.5, 0.60, 0.45], "size": [0.35, 0.25, 0.90], "vehicle_type": 1000813, "collision": true},
+    {"name": "static_pillar_b", "id": 15101, "type": "pillar", "segment": "section_b", "center": [23.35, 2.40, 0.60], "size": [0.20, 0.30, 1.20], "vehicle_type": 1000813, "collision": true}
   ],
   "dynamic_obstacle": {
-    "name": "moving_pendulum", "id": 15120, "type": "pendulum", "pivot": [17.2, 6.8, 2.4],
-    "length_m": 1.2, "amplitude_deg": 30.0, "period_sec": 4.0, "phase_rad": 0.0, "update_hz": 20.0,
-    "size": [0.25, 0.25, 0.70], "vehicle_type": 1000813, "collision": true
+    "name": "moving_pendulum", "id": 15120, "type": "pendulum", "segment": "section_c", "pivot": [27.0, 4.9, 2.4],
+    "length_m": 1.2, "amplitude_deg": 30.0, "period_sec": 6.0, "phase_rad": 0.0, "update_hz": 20.0,
+    "size": [0.25, 0.20, 0.70], "vehicle_type": 1000813, "collision": true
   },
   "mission_target_slot": {
-    "name": "mission_target_slot", "id": 15130, "center": [18.8, 7.35, 1.2], "size": [0.8, 0.3, 0.8],
+    "name": "mission_target_slot", "id": 15130, "center": [28.0, 5.45, 1.2], "size": [0.8, 0.3, 0.8],
     "asset": "placeholder", "replaceable": true, "vehicle_type": 1000813, "collision": false
   },
   "landing": {
