@@ -509,9 +509,50 @@ function Invoke-ProtectedBatch {
         return 2
     }
 
-    $ErrorActionPreference = 'Continue'
-    & $ScriptPath @Arguments 2>&1 | ForEach-Object { Write-Host $_ }
-    return [int]$LASTEXITCODE
+    # Keep launcher output away from the sim.ps1 host pipe. A detached WSL child
+    # can inherit that pipe and keep the caller blocked for its entire lifetime,
+    # even after the launcher cmd.exe has exited. The run-scoped launcher log is
+    # intentionally retained as diagnostic evidence.
+    $projectRoot = Split-Path -Parent (Split-Path -Parent $ScriptPath)
+    $logRoot = Join-Path $projectRoot 'logs\startup_launchers'
+    New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
+    $stem = '{0}-{1}-{2}' -f [IO.Path]::GetFileNameWithoutExtension($ScriptPath),
+        (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssfffZ'),
+        ([guid]::NewGuid().ToString('N').Substring(0, 8))
+    $outputPath = Join-Path $logRoot "$stem.log"
+    $wrapperPath = Join-Path $logRoot "$stem.cmd"
+    $quotedArguments = @($Arguments | ForEach-Object {
+        '"' + ([string]$_).Replace('"', '""') + '"'
+    })
+    $callLine = 'call "{0}" {1} 1>"{2}" 2>&1' -f `
+        $ScriptPath.Replace('"', '""'), ($quotedArguments -join ' '),
+        $outputPath.Replace('"', '""')
+    [IO.File]::WriteAllLines($wrapperPath, @(
+        '@echo off',
+        $callLine,
+        'exit /b %errorlevel%'
+    ), [Text.Encoding]::ASCII)
+
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $env:ComSpec
+    $startInfo.Arguments = "/d /s /c `"`"$wrapperPath`"`""
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+    try {
+        $null = $process.Start()
+        $process.WaitForExit()
+        $exitCode = [int]$process.ExitCode
+    }
+    finally {
+        $process.Dispose()
+        Remove-Item -LiteralPath $wrapperPath -Force -ErrorAction SilentlyContinue
+    }
+    if (Test-Path -LiteralPath $outputPath -PathType Leaf) {
+        Get-Content -LiteralPath $outputPath | ForEach-Object { Write-Host $_ }
+    }
+    return $exitCode
 }
 
 function Get-Stage7RunContext {
@@ -640,7 +681,8 @@ function Test-ProtectedManifestRoleAlive {
     }
     $roleAlive = @(
         $report.owned | Where-Object {
-            $_.entry.role -eq $Role -and $_.status -eq 'owned_and_alive'
+            $_.entry.role -eq $Role -and
+            $_.status -in @('owned_and_alive', 'owned_orphan')
         }
     ).Count -gt 0
     return [pscustomobject]@{ ExitCode = 0; RoleAlive = $roleAlive }

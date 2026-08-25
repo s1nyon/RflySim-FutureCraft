@@ -101,6 +101,13 @@ foreach ($relativePath in $dryRunScripts) {
         if ($relativePath -eq 'scripts/start_two_uav.bat' -and $content -match 'timeout /t') {
             $contractErrors += 'scripts/start_two_uav.bat must not use timeout /t for noninteractive startup waits'
         }
+        if ($relativePath -eq 'scripts/start_two_uav.bat') {
+            $bootWaitIndex = $content.LastIndexOf('STAGE2_BOOT_WAIT_SECONDS')
+            $mavrosLaunchIndex = $content.LastIndexOf('start_wsl_mavros_two.bat')
+            if ($bootWaitIndex -lt 0 -or $mavrosLaunchIndex -lt 0 -or $mavrosLaunchIndex -gt $bootWaitIndex) {
+                $contractErrors += 'scripts/start_two_uav.bat must launch predicate-gated Stage 2 before the retained SITL/scene stabilization wait'
+            }
+        }
         $output = & cmd /c "`"$fullPath`" --dry-run" 2>&1
         if ($LASTEXITCODE -ne 0) {
             $contractErrors += "$relativePath --dry-run failed with exit code ${LASTEXITCODE}: $($output -join ' ')"
@@ -163,6 +170,10 @@ if (Test-Path -LiteralPath $wslScript) {
         $wslText -notmatch 'while \(\( SECONDS < roscore_deadline \)\)') {
         $contractErrors += 'scripts/wsl/stage2_two_mavros.sh must condition-wait up to 30s for roscore readiness'
     }
+    if ($wslText -notmatch 'if \[\[ -S "/tmp/px4-sock-\$sysid" \]\]' -or
+        $wslText -notmatch 'PX4 instance \$sysid is unavailable after 30 seconds') {
+        $contractErrors += 'scripts/wsl/stage2_two_mavros.sh must condition-wait for each real PX4 instance socket before starting its MAVLink bridge'
+    }
 }
 
 if ($missing.Count -gt 0 -or $contractErrors.Count -gt 0) {
@@ -178,5 +189,4 @@ if (-not $Quiet) {
     Write-Host '[PASS] Stage 2 two-UAV namespace validation passed.' -ForegroundColor Green
 }
 exit 0
-
 

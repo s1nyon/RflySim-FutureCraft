@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -616,6 +617,57 @@ def main() -> int:
             assert result.returncode == 0, result.stderr or result.stdout
             assert "__RESULT__=True" in result.stdout, result.stdout
 
+    def check_protected_batch_does_not_wait_for_detached_child() -> None:
+        with tempfile.TemporaryDirectory(prefix="sim-cli-protected-batch-") as directory:
+            root = Path(directory)
+            launcher = root / "detached-runner.cmd"
+            launcher.write_text(
+                "@echo off\n"
+                'start "" /b powershell.exe -NoProfile -Command '
+                '"Start-Sleep -Seconds 3"\n'
+                "echo detached runner launched\n"
+                "exit /b 17\n",
+                encoding="ascii",
+            )
+            expression = (
+                "$watch=[Diagnostics.Stopwatch]::StartNew(); "
+                "$code=& (Get-Module sim_cli) { param($path) "
+                "Invoke-ProtectedBatch -ScriptPath $path } "
+                f"'{quote_ps(launcher)}'; $watch.Stop(); "
+                'Write-Output "__CODE__=$code"; '
+                'Write-Output "__ELAPSED_MS__=$($watch.ElapsedMilliseconds)"'
+            )
+            result, _, _ = invoke_module(module, root, expression)
+            assert result.returncode == 0, result.stderr or result.stdout
+            assert "__CODE__=17" in result.stdout, result.stdout
+            elapsed_line = next(
+                line for line in result.stdout.splitlines()
+                if line.startswith("__ELAPSED_MS__=")
+            )
+            elapsed_ms = int(elapsed_line.split("=", 1)[1])
+            if elapsed_ms < 1500:
+                # Let the synthetic child release its inherited handles before
+                # TemporaryDirectory removes the fixture on Windows.
+                time.sleep(3.2)
+            assert elapsed_ms < 1500, (
+                "protected batch waited for the detached long-lived child: "
+                f"{elapsed_ms} ms"
+            )
+
+        for relative in (
+            "scripts/run_live_fastlio_dual.bat",
+            "scripts/run_live_ego_swarm_dual.bat",
+        ):
+            source = (project_root / relative).read_text(encoding="utf-8")
+            start_lines = [
+                line.lower().replace("^", "") for line in source.splitlines()
+                if line.lstrip().lower().startswith("start ")
+            ]
+            assert start_lines, f"{relative}: no detached launcher found"
+            assert all(">nul 2>&1" in line for line in start_lines), (
+                f"{relative}: detached WSL launcher must not inherit sim.ps1 output handles"
+            )
+
     def check_dry_run_repository_dispatch() -> None:
         start = run_cli(project_root, "start")
         assert start.returncode == 0, start.stderr or start.stdout
@@ -627,7 +679,11 @@ def main() -> int:
 
         stop = run_cli(project_root, "stop")
         assert stop.returncode in (0, 2), stop.stderr or stop.stdout
-        assert "DryRun" in stop.stdout or "no active stack" in stop.stdout, stop.stdout
+        assert (
+            "DryRun" in stop.stdout
+            or '"dry_run": true' in stop.stdout
+            or "no active stack" in stop.stdout
+        ), stop.stdout
 
         source = module.read_text(encoding="utf-8")
         lowered = source.lower()
@@ -823,7 +879,9 @@ def main() -> int:
     def check_dev_start_accepts_live_ego_role() -> None:
         with tempfile.TemporaryDirectory(prefix="sim-cli-ego-alive-") as directory:
             root = Path(directory)
-            _, log_path = write_ego_role_fixtures(root, "owned_and_alive")
+            # WSL sessions are live and ownership-verified but appear as
+            # owned_orphan because their Windows parent chain is not visible.
+            _, log_path = write_ego_role_fixtures(root, "owned_orphan")
             env = os.environ.copy()
             env.update(
                 {
@@ -850,7 +908,7 @@ def main() -> int:
                 "start exit=0",
                 "fastlio exit=0",
                 "ego registered role runner exit=0",
-                "inspect owned_and_alive exit=0",
+                "inspect owned_orphan exit=0",
             ], calls
 
     def check_doctor_accepts_nul_terminated_distro_name() -> None:
@@ -963,6 +1021,10 @@ def main() -> int:
     check("root CLI contract", check_root_contract)
     check("active manifest resolution", check_active_manifest_resolution)
     check("Stage 7 fail-closed helpers", check_stage7_fail_closed_helpers)
+    check(
+        "protected batch ignores detached child lifetime",
+        check_protected_batch_does_not_wait_for_detached_child,
+    )
     check("dev start rejects failed readiness", check_dev_start_rejects_failed_readiness)
     check("dry-run repository dispatch", check_dry_run_repository_dispatch)
     check("protected wrapper exit propagation", check_protected_wrapper_exit_propagation)
