@@ -17,6 +17,7 @@ SENSOR_STARTUP_TIMEOUT_SEC="${STAGE7_SENSOR_STARTUP_TIMEOUT_SEC:-120}"
 READINESS_TOPIC_TIMEOUT_SEC="${STAGE7_READINESS_TOPIC_TIMEOUT_SEC:-10}"
 ODOM_INIT_TIMEOUT_SEC="${STAGE7_ODOM_INIT_TIMEOUT_SEC:-60}"
 MAVROS_FEEDBACK_INIT_TIMEOUT_SEC="${STAGE7_MAVROS_FEEDBACK_INIT_TIMEOUT_SEC:-90}"
+SENSOR_MODE="${STAGE7_SENSOR_MODE:-lidar_only}"
 
 FASTLIO_SESSION_PGID="$(ps -o pgid= -p $$ | tr -d ' ')"
 stack_register wsl "$$" "$FASTLIO_SESSION_PGID" "wsl:fastlio_session" \
@@ -39,6 +40,10 @@ if ! [[ "$MAVROS_FEEDBACK_INIT_TIMEOUT_SEC" =~ ^[1-9][0-9]*$ ]]; then
   echo "[ERROR] STAGE7_MAVROS_FEEDBACK_INIT_TIMEOUT_SEC must be a positive integer" >&2
   exit 2
 fi
+case "$SENSOR_MODE" in
+  lidar_only|full) ;;
+  *) echo "[ERROR] STAGE7_SENSOR_MODE must be lidar_only or full" >&2; exit 2 ;;
+esac
 
 mkdir -p "$RUN_DIR"
 source /opt/ros/noetic/setup.bash
@@ -126,7 +131,7 @@ setsid nohup env ROS_NAMESPACE=/uav1 python3 \
   --raw-imu-topic /uav1/rflysim/imu_raw \
   --identity-topic /uav1/rflysim/sensor_identity \
   --process-start-marker "$RUN_ID:uav1:bridge" \
-  --sensor-mode lidar_only \
+  --sensor-mode "$SENSOR_MODE" \
   --imu-rate-hz 200 \
   --keepalive \
   __name:=rflysim_sensor_bridge \
@@ -134,7 +139,7 @@ setsid nohup env ROS_NAMESPACE=/uav1 python3 \
 SENSOR_PIDS+=("$!")
 SENSOR_PGIDS+=("$!")
 stack_register wsl "$!" "$!" "wsl:sensor_bridge_uav1" \
-  "python3 .../rflysim_sensor_bridge.py --copter-id 1 --sensor-mode lidar_only" \
+  "python3 .../rflysim_sensor_bridge.py --copter-id 1 --sensor-mode $SENSOR_MODE" \
   "created by stage7_live_fastlio_dual.sh (setsid)"
 
 setsid nohup env ROS_NAMESPACE=/uav2 python3 \
@@ -149,7 +154,7 @@ setsid nohup env ROS_NAMESPACE=/uav2 python3 \
   --raw-imu-topic /uav2/rflysim/imu_raw \
   --identity-topic /uav2/rflysim/sensor_identity \
   --process-start-marker "$RUN_ID:uav2:bridge" \
-  --sensor-mode lidar_only \
+  --sensor-mode "$SENSOR_MODE" \
   --imu-rate-hz 200 \
   --keepalive \
   __name:=rflysim_sensor_bridge \
@@ -157,7 +162,7 @@ setsid nohup env ROS_NAMESPACE=/uav2 python3 \
 SENSOR_PIDS+=("$!")
 SENSOR_PGIDS+=("$!")
 stack_register wsl "$!" "$!" "wsl:sensor_bridge_uav2" \
-  "python3 .../rflysim_sensor_bridge.py --copter-id 2 --sensor-mode lidar_only" \
+  "python3 .../rflysim_sensor_bridge.py --copter-id 2 --sensor-mode $SENSOR_MODE" \
   "created by stage7_live_fastlio_dual.sh (setsid)"
 
 RAW_TOPICS=(

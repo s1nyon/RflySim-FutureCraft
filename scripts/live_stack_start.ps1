@@ -2,7 +2,9 @@ param(
     [switch]$DryRun,
     [switch]$Execute,
     [string]$TaskUser = 'PC-202307281902\Administrator',
-    [string]$Distro = 'RflySim-20.04'
+    [string]$Distro = 'RflySim-20.04',
+    [ValidateSet('predicted_narrow_course', 'competition_course_v2')]
+    [string]$Course = 'predicted_narrow_course'
 )
 
 # P0 Safe Live Stack Lifecycle: start a NEW stack with a unique stack_id and a
@@ -11,7 +13,11 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $python = 'D:\PX4PSP\Python38\python.exe'
 $lifecycle = Join-Path $PSScriptRoot 'lifecycle'
-$startup = Join-Path $PSScriptRoot 'start_predicted_course_two_uav.bat'
+$startupNames = @{
+    predicted_narrow_course = 'start_predicted_course_two_uav.bat'
+    competition_course_v2 = 'start_competition_course_v2_two_uav.bat'
+}
+$startup = Join-Path $PSScriptRoot $startupNames[$Course]
 
 if (-not $Execute) { $DryRun = $true }
 
@@ -40,10 +46,12 @@ Write-Host "[live-stack-start] stack_id=$stackId"
 Write-Host "[live-stack-start] scheduled_task=$taskName"
 Write-Host "[live-stack-start] manifest=$manifestPath"
 Write-Host "[live-stack-start] health_dir=$healthDirWsl"
+Write-Host "[live-stack-start] course=$Course"
 
 if ($DryRun) {
     Write-Host '[DRY-RUN] 1. init run-scoped manifest v2 (stack_id, git commit, start time, launcher identity, ROS master)'
     Write-Host "[DRY-RUN] 2. create one-shot scheduled task $taskName (far-future /st, then /run) launching $startup --stack-id --health-dir --manifest"
+    Write-Host "[DRY-RUN] COURSE=$Course (default remains predicted_narrow_course)"
     Write-Host '[DRY-RUN] 3. write stack_context.env (STACK_ID/STACK_MANIFEST/STACK_HEALTH_DIR) for later runners'
     Write-Host '[DRY-RUN] 4. launchers register owned processes AT CREATION (cmd windows via register_launcher.py; GUI via generated SITL wrapper; roscore/MAVROS via stage2 setsid)'
     Write-Host '[DRY-RUN] 5. set simulation_instance_id + ROS master in manifest; wait for per-status health gate all-ready'
@@ -68,7 +76,8 @@ Write-Host "[live-stack-start] scheduled task launched: $taskName"
     "STACK_MANIFEST=$manifestPath",
     "STACK_MANIFEST_WSL=$(ConvertTo-WslPath -Path $manifestPath)",
     "STACK_HEALTH_DIR=$healthDir",
-    "STACK_HEALTH_DIR_WSL=$healthDirWsl"
+    "STACK_HEALTH_DIR_WSL=$healthDirWsl",
+    "COURSE=$Course"
 ) | Set-Content -LiteralPath $contextFile -Encoding ASCII
 Write-Host "[live-stack-start] stack context: $contextFile"
 
