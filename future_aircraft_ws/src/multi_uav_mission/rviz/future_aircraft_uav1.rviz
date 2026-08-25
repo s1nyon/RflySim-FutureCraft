@@ -88,7 +88,7 @@ Visualization Manager:
       Color: 85; 170; 255
       Color Transformer: FlatColor
       Decay Time: 0.2
-      Enabled: true
+      Enabled: false
       Name: LiDAR (sensor frame)
       Position Transformer: XYZ
       Queue Size: 2
@@ -122,7 +122,7 @@ Visualization Manager:
     Background Color: 48; 48; 48
     Default Light: true
     Fixed Frame: uav1_camera_init
-    Frame Rate: 30
+    Frame Rate: 10
   Name: root
   Tools:
     - Class: rviz/Interact

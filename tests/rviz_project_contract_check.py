@@ -73,6 +73,7 @@ def main() -> int:
         config = package / "rviz" / "future_aircraft_{}.rviz".format(uav)
         text = config.read_text(encoding="utf-8")
         assert "Fixed Frame: {}_camera_init".format(uav) in text
+        assert "Frame Rate: 10" in text
         for topic in (
             "/{}/mavros/odometry/out".format(uav),
             "/{}/viz/path".format(uav),
@@ -82,6 +83,14 @@ def main() -> int:
             "/{}/viz/position_command".format(uav),
         ):
             assert "Topic: {}".format(topic) in text
+        # Raw LiDAR remains available for on-demand inspection, but two live
+        # PointCloud2 renderers saturated more than one CPU core in the
+        # dual-window live run.  Keep the expensive display off by default so
+        # enabling RViz cannot silently perturb the protected flight path.
+        lidar_block = text.split("Name: LiDAR (sensor frame)", 1)[0].rsplit(
+            "- Class: rviz/PointCloud2", 1
+        )[-1]
+        assert "Enabled: false" in lidar_block
         other = "uav2" if uav == "uav1" else "uav1"
         assert "/{}/".format(other) not in text
         assert "competition_world" not in text
