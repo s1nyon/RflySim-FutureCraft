@@ -62,11 +62,11 @@ The implementation will centralize the transition policy in a small
 project-owned helper used by both explicit map entrypoints. The helper will:
 
 1. validate that declared course ranges are disjoint;
-2. clear the inactive known project course range before loading the selected
-   course;
-3. clear the selected course's range before recreating its deterministic
-   entities;
-4. record the selected course, cleared ranges, created IDs, spec hashes, and
+2. derive the exact entity IDs declared by each tracked course spec and verify
+   that every ID stays inside that course's reserved range;
+3. destroy only those exact declared IDs for both the inactive and selected
+   course before recreating the selected course's deterministic entities;
+4. record the selected course, destroyed IDs, created IDs, spec hashes, and
    timestamp in a transition receipt;
 5. fail closed if a course, range, or receipt does not match a tracked spec.
 
