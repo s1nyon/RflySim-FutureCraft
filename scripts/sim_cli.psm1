@@ -753,7 +753,10 @@ function Invoke-SimStart {
 
     $currentRunPath = Join-Path $ProjectRoot 'logs\stage7_live\current_run.env'
     try {
-        $previousRun = Get-Stage7RunContext -ContextPath $currentRunPath
+        # A host crash can leave the previous pointer partially written. It is
+        # only a comparison snapshot here; the new run is still validated
+        # strictly through its complete readiness report below.
+        $previousRun = Get-Stage7RunContext -ContextPath $currentRunPath -AllowIncomplete
     }
     catch {
         Write-SimCheck -Status FAIL -Message "Stage 7 current-run snapshot (exit 2): $($_.Exception.Message)"

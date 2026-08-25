@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -582,6 +583,13 @@ def main() -> int:
                 run_process(["attrib", "-h", str(active.parent)], cwd=root)
 
     def check_stage7_fail_closed_helpers() -> None:
+        source = module.read_text(encoding="utf-8")
+        assert re.search(
+            r"\$previousRun\s*=\s*Get-Stage7RunContext\s+"
+            r"-ContextPath\s+\$currentRunPath\s+-AllowIncomplete",
+            source,
+        ), "the pre-launch snapshot must tolerate a crash-truncated prior context"
+
         with tempfile.TemporaryDirectory(prefix="sim-cli-stage7-context-") as directory:
             root = Path(directory)
             context = root / "current_run.env"
