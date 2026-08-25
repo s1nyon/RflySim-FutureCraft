@@ -27,7 +27,7 @@
 
 **Interfaces:**
 - Consumes: `--stack-id STACK_ID`, `--manifest STACK_MANIFEST_WINDOWS`, current `stack_manifest.json`, `scripts/wsl/lifecycle_common.sh::stack_register`.
-- Produces: registered role `wsl:rviz_session`, then `roslaunch multi_uav_mission rflysim_rviz.launch rviz_mode:=<mode>`.
+- Produces: registered role `wsl:rviz_session`, then `roslaunch multi_uav_mission rflysim_rviz.launch` with `rviz_mode:=uav1`, `uav2`, or `dual`.
 
 - [ ] **Step 1: Keep the failing ownership contract test**
 
@@ -111,7 +111,7 @@ Expected: exit 0, or a documented unrelated optional timeout that does not affec
 ### Task 3: Standard-stop the suspect live instance
 
 **Files:**
-- Runtime artifacts only under `logs/live_stack/<stack_id>/`.
+- Runtime artifacts only under `logs/live_stack/STACK_ID/`.
 
 **Interfaces:**
 - Consumes: current stack manifest and explicit user authorization.
