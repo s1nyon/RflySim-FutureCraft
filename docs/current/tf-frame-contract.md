@@ -1,15 +1,16 @@
-# Dual-UAV TF / Frame Contract (Task 1A Audit Draft)
+# Dual-UAV TF / Frame Contract
 
-Audit date: 2026-08-24
+Audit dates: 2026-08-24 source audit; 2026-08-25 live verification
 
-Scope: source-level/static audit plus previously accepted run-scoped evidence; no new live stack was started.
+Scope: source-level/static audit plus a fresh, run-scoped dual-UAV live verification and protected-baseline flight.
 
-Live parity: **NOT RE-VALIDATED IN THIS AUDIT**. `sim.ps1 status` reported no active stack, so the dynamic TF tree is **PENDING LIVE CONFIRMATION**.
+Live parity: **LIVE-VERIFIED** on stack `stack-20260825T042058Z-4951e4e0`, Stage 7 run `stage7-20260825T042715Z-6157`. The accepted probe report is `logs/frame_contract_probe/20260825T043348.458053Z/report.json`; the existing-route flight completed successfully and the manifest recorded a clean standard stop.
 
 ## Evidence notation
 
 - **[SOURCE-VERIFIED]**: directly established by current launch, adapter, dependency, or plugin source.
 - **[ACCEPTED-LIVE]**: established by an already accepted run-scoped artifact; not fresh evidence from this audit.
+- **[LIVE-VERIFIED]**: directly observed in the 2026-08-25 run-scoped frame probe or matching flight artifact.
 - **[INFERRED]**: follows from multiple verified facts but was not observed directly on a running ROS graph.
 - **[UNKNOWN]**: requires live or other direct evidence.
 
@@ -29,14 +30,14 @@ There is no verified transform between the two Faster-LIO origins. The zero alia
 
 | Role | UAV1 | UAV2 | Current meaning | Evidence |
 | --- | --- | --- | --- | --- |
-| Faster-LIO localization/world | `uav1_camera_init` | `uav2_camera_init` | Independent local SLAM origin; dynamic TF parent | [SOURCE-VERIFIED] |
-| Faster-LIO IMU/body | `uav1_body` | `uav2_body` | Body pose estimated by Faster-LIO; dynamic TF child | [SOURCE-VERIFIED] |
-| MAVROS ROS body | `uav1_base_link` | `uav2_base_link` | FLU compatibility body, zero-aliased from Faster-LIO body | [SOURCE-VERIFIED] |
-| LiDAR message frame | `uav1_lidar` | `uav2_lidar` | Adapter-assigned label for unchanged raw XYZ | [SOURCE-VERIFIED] |
-| MAVROS map | `uav1_map` | `uav2_map` | Per-UAV ROS ENU map label used by MAVROS odometry plugin | [SOURCE-VERIFIED] |
-| MAVROS odom | `uav1_odom` | `uav2_odom` | Per-UAV ROS ENU odom label, zero-aliased to local SLAM origin | [SOURCE-VERIFIED] |
-| MAVROS parent NED | `uav1_odom_ned`, `uav1_map_ned` | `uav2_odom_ned`, `uav2_map_ned` | Convention-conversion targets used by MAVROS odometry | [SOURCE-VERIFIED] |
-| MAVROS body FRD | `uav1_base_link_frd` | `uav2_base_link_frd` | Convention-conversion target used by MAVROS odometry | [SOURCE-VERIFIED] |
+| Faster-LIO localization/world | `uav1_camera_init` | `uav2_camera_init` | Independent local SLAM origin; dynamic TF parent | [SOURCE + LIVE-VERIFIED] |
+| Faster-LIO IMU/body | `uav1_body` | `uav2_body` | Body pose estimated by Faster-LIO; dynamic TF child | [SOURCE + LIVE-VERIFIED] |
+| MAVROS ROS body | `uav1_base_link` | `uav2_base_link` | FLU compatibility body, zero-aliased from Faster-LIO body | [SOURCE + LIVE-VERIFIED] |
+| LiDAR message frame | `uav1_lidar` | `uav2_lidar` | Adapter-assigned label for unchanged raw XYZ | [SOURCE + LIVE-VERIFIED] |
+| MAVROS map | `uav1_map` | `uav2_map` | Per-UAV ROS ENU map label used by MAVROS odometry plugin | [SOURCE + LIVE-VERIFIED] |
+| MAVROS odom | `uav1_odom` | `uav2_odom` | Per-UAV ROS ENU odom label, zero-aliased to local SLAM origin | [SOURCE + LIVE-VERIFIED] |
+| MAVROS parent NED | `uav1_odom_ned`, `uav1_map_ned` | `uav2_odom_ned`, `uav2_map_ned` | Convention-conversion targets used by MAVROS odometry | [SOURCE + LIVE-VERIFIED] |
+| MAVROS body FRD | `uav1_base_link_frd` | `uav2_base_link_frd` | Convention-conversion target used by MAVROS odometry | [SOURCE + LIVE-VERIFIED] |
 
 ### A.3 Sensor and Faster-LIO contract
 
@@ -107,7 +108,7 @@ The installed MAVROS version is 1.20.1. Its odometry plugin publishes private to
 | `/uavX/mavros/odometry/in` | MAVROS publisher | FCU MAVLink `ODOMETRY` -> ROS | `uavX_map`, child `uavX_base_link` | MAVROS converts FCU NED/FRD data through `uavX_map_ned -> uavX_map` and `uavX_base_link_frd -> uavX_base_link`. Availability/data rate depend on FCU `ODOMETRY` output. |
 | `/uavX/mavros/local_position/odom` | MAVROS local-position publisher | FCU `LOCAL_POSITION_NED(_COV)` -> ROS | source-configured generic `map`, child `base_link` | MAVROS converts PX4 local NED position/velocity to ROS ENU and expresses twist in the body frame. This is PX4/EKF local-navigation feedback, not the relayed Faster-LIO message. |
 
-`rflysim_mavros_px4.launch` overrides only odometry-plugin `map_id_des`, `odom_parent_id_des`, and `odom_child_id_des`. It does not override local-position `frame_id` or `tf/child_frame_id`. Installed `px4_config.yaml` sets those to `map` and `base_link`, with `local_position/tf/send=false`. Those expected message headers are source-verified; a live `rostopic echo` is **PENDING LIVE CONFIRMATION**.
+`rflysim_mavros_px4.launch` overrides only odometry-plugin `map_id_des`, `odom_parent_id_des`, and `odom_child_id_des`. It does not override local-position `frame_id` or `tf/child_frame_id`. Installed `px4_config.yaml` sets those to `map` and `base_link`, with `local_position/tf/send=false`. The live probe confirmed `map` / `base_link` on both local-position odometry topics and `uavX_map` / `uavX_base_link` on both `/uavX/mavros/odometry/in` topics at about 30 Hz.
 
 ### A.6 EGO-Swarm contract
 
@@ -127,15 +128,16 @@ The old generic static publishers `world -> map` and `base_link -> camera_link` 
 | Generic string | Current use | Current TF publisher? | Collision assessment |
 | --- | --- | --- | --- |
 | `world` | Both EGO grid-map outputs and both `PositionCommand` headers | No | Semantic collision/ambiguity: two independent local numeric spaces share one label |
-| `map` | RflySim raw sensor default header; both MAVROS local-position odometry headers | No (`uavX_map` is used in TF) | Semantic collision/ambiguity; no current duplicate TF edge |
-| `base_link` | Both MAVROS local-position odometry child strings | No (`uavX_base_link` is used in TF) | Semantic collision/ambiguity; `tf/send=false` prevents duplicate local-position TF publication |
+| `map` | RflySim raw sensor default header; both MAVROS local-position odometry headers | Yes: both MAVROS nodes publish `map -> map_ned` convention transforms | Semantic label reuse plus duplicate broadcaster. Source configuration gives both instances the same fixed convention transform, but the probe did not compare values per broadcaster; no multiple parent was observed |
+| `odom` | MAVROS convention frame | Yes: both MAVROS nodes publish `odom -> odom_ned` convention transforms | Duplicate broadcaster. Source configuration gives both instances the same fixed convention transform, but live per-broadcaster value equality was not measured; it does not connect the per-UAV localization trees |
+| `base_link` | Both MAVROS local-position odometry child strings | Yes: both MAVROS nodes publish `base_link -> base_link_frd` convention transforms | Semantic label reuse plus duplicate broadcaster. Source configuration gives both instances the same fixed convention transform, but the probe did not compare values per broadcaster; no multiple parent was observed |
 | `camera_link` | No current active project launch use | No | No current collision; historical static edge removed |
 | `camera_init`, `body` | Hardcoded Faster-LIO raw message headers | No generic TF; dynamic TF uses `uavX_*` | Message/TF naming inconsistency |
 | `imu` | Both SDK IMU message headers | No | Semantic collision/ambiguity |
 
 ### A.7 Data / Frame Matrix
 
-Rows marked accepted-live use the latest trusted run artifacts only for publisher isolation/timestamps; no header was freshly echoed in this audit.
+The 2026-08-25 live probe observed all 18 expected topics during the existing route. It found no header-contract error, cross-UAV topic edge, or timestamp warning.
 
 | Data | Topic | Publisher | `header.frame_id` | `child_frame_id` | Actual coordinate semantics | Consumer |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -147,11 +149,11 @@ Rows marked accepted-live use the latest trusted run artifacts only for publishe
 | UAV1 registered cloud | `/uav1/slam/cloud_registered` | `/uav1/slam/laserMapping` | `camera_init` | n/a | XYZ transformed into UAV1 local SLAM origin; `lidar_end_time_` | UAV1 EGO grid map |
 | UAV1 registered body cloud | `/uav1/slam/cloud_registered_body` | `/uav1/slam/laserMapping` | `body` | n/a | XYZ in Faster-LIO IMU/body after internal LiDAR extrinsic; `lidar_end_time_` | No active project planner consumer found |
 | UAV1 MAVROS odometry out | `/uav1/mavros/odometry/out` | `/uav1/slam/odom_frame_relay` | `uav1_camera_init` | `uav1_body` | Same numeric pose/twist/covariance/stamp as raw odom; labels only changed | MAVROS odometry plugin and UAV1 EGO |
-| UAV1 MAVROS local-position odom | `/uav1/mavros/local_position/odom` | `/uav1/mavros` local-position plugin | `map` [SOURCE; live pending] | `base_link` [SOURCE; live pending] | PX4/EKF local navigation converted NED -> ENU; FCU-synchronized stamp | mission executor/watchdog/recorders |
-| UAV1 MAVROS odometry in | `/uav1/mavros/odometry/in` | `/uav1/mavros` odometry plugin | `uav1_map` | `uav1_base_link` | FCU MAVLink ODOMETRY converted NED/FRD -> configured ROS frames | diagnostics/legacy mission config; actual live production UNKNOWN |
+| UAV1 MAVROS local-position odom | `/uav1/mavros/local_position/odom` | `/uav1/mavros` local-position plugin | `map` [LIVE-VERIFIED] | `base_link` [LIVE-VERIFIED] | PX4/EKF local navigation converted NED -> ENU; FCU-synchronized stamp | mission executor/watchdog/recorders |
+| UAV1 MAVROS odometry in | `/uav1/mavros/odometry/in` | `/uav1/mavros` odometry plugin | `uav1_map` [LIVE-VERIFIED] | `uav1_base_link` [LIVE-VERIFIED] | FCU MAVLink ODOMETRY converted NED/FRD -> configured ROS frames; observed at about 30 Hz | diagnostics/legacy mission config |
 | UAV1 EGO odom input | `/uav1/mavros/odometry/out` | odom relay | `uav1_camera_init` | `uav1_body` | UAV1 local SLAM numeric space; EGO ignores frame strings | `/uav1/planner/rflysim_ego_swarm_node` |
 | UAV1 EGO cloud input | `/uav1/slam/cloud_registered` | UAV1 Faster-LIO | `camera_init` | n/a | Same UAV1 local SLAM numeric space; EGO ignores frame string | `/uav1/planner/rflysim_ego_swarm_node` |
-| UAV1 EGO position command | `/uav1/planning/pos_cmd` | `/uav1/planner/rflysim_traj_server` | `world` | n/a | UAV1 local SLAM/planner numeric space, not shared world; stamp=`ros::Time::now()` | project setpoint bridge -> MAVROS raw local setpoint |
+| UAV1 EGO position command | `/uav1/planning/pos_cmd` | `/uav1/planner/rflysim_traj_server` | `world` [LIVE-VERIFIED] | n/a | UAV1 local SLAM/planner numeric space, not shared world; observed at about 99.5 Hz; stamp=`ros::Time::now()` | project setpoint bridge -> MAVROS raw local setpoint |
 | UAV2 LiDAR raw | `/rflysim/sensor10/mid360_lidar` | `/uav2/rflysim_sensor_bridge` [ACCEPTED-LIVE] | `map` [SOURCE + accepted log branch] | n/a | XYZ passed through from TypeID 23; SDK says `map` is a visualization default, not a conversion. Intended LiDAR-local; direct geometric confirmation UNKNOWN | UAV2 point-cloud adapter |
 | UAV2 LiDAR adapted | `/uav2/rflysim/lidar` | `/uav2/rflysim_pointcloud_adapter` [ACCEPTED-LIVE] | `uav2_lidar` | n/a | Same XYZ as raw; layout changed, no rotation/translation; source stamp preserved | UAV2 Faster-LIO |
 | UAV2 IMU raw | `/uav2/rflysim/imu_raw` | `/uav2/rflysim_sensor_bridge` [ACCEPTED-LIVE] | `imu` | n/a | SDK sign-mapped IMU values; exact named convention UNKNOWN | `/uav2/rflysim_imu_relay` |
@@ -160,11 +162,11 @@ Rows marked accepted-live use the latest trusted run artifacts only for publishe
 | UAV2 registered cloud | `/uav2/slam/cloud_registered` | `/uav2/slam/laserMapping` | `camera_init` | n/a | XYZ transformed into UAV2 local SLAM origin; `lidar_end_time_` | UAV2 EGO grid map |
 | UAV2 registered body cloud | `/uav2/slam/cloud_registered_body` | `/uav2/slam/laserMapping` | `body` | n/a | XYZ in Faster-LIO IMU/body after internal LiDAR extrinsic; `lidar_end_time_` | No active project planner consumer found |
 | UAV2 MAVROS odometry out | `/uav2/mavros/odometry/out` | `/uav2/slam/odom_frame_relay` | `uav2_camera_init` | `uav2_body` | Same numeric pose/twist/covariance/stamp as raw odom; labels only changed | MAVROS odometry plugin and UAV2 EGO |
-| UAV2 MAVROS local-position odom | `/uav2/mavros/local_position/odom` | `/uav2/mavros` local-position plugin | `map` [SOURCE; live pending] | `base_link` [SOURCE; live pending] | PX4/EKF local navigation converted NED -> ENU; FCU-synchronized stamp | mission executor/watchdog/recorders |
-| UAV2 MAVROS odometry in | `/uav2/mavros/odometry/in` | `/uav2/mavros` odometry plugin | `uav2_map` | `uav2_base_link` | FCU MAVLink ODOMETRY converted NED/FRD -> configured ROS frames | diagnostics/legacy mission config; actual live production UNKNOWN |
+| UAV2 MAVROS local-position odom | `/uav2/mavros/local_position/odom` | `/uav2/mavros` local-position plugin | `map` [LIVE-VERIFIED] | `base_link` [LIVE-VERIFIED] | PX4/EKF local navigation converted NED -> ENU; FCU-synchronized stamp | mission executor/watchdog/recorders |
+| UAV2 MAVROS odometry in | `/uav2/mavros/odometry/in` | `/uav2/mavros` odometry plugin | `uav2_map` [LIVE-VERIFIED] | `uav2_base_link` [LIVE-VERIFIED] | FCU MAVLink ODOMETRY converted NED/FRD -> configured ROS frames; observed at about 30 Hz | diagnostics/legacy mission config |
 | UAV2 EGO odom input | `/uav2/mavros/odometry/out` | odom relay | `uav2_camera_init` | `uav2_body` | UAV2 local SLAM numeric space; EGO ignores frame strings | `/uav2/planner/rflysim_ego_swarm_node` |
 | UAV2 EGO cloud input | `/uav2/slam/cloud_registered` | UAV2 Faster-LIO | `camera_init` | n/a | Same UAV2 local SLAM numeric space; EGO ignores frame string | `/uav2/planner/rflysim_ego_swarm_node` |
-| UAV2 EGO position command | `/uav2/planning/pos_cmd` | `/uav2/planner/rflysim_traj_server` | `world` | n/a | UAV2 local SLAM/planner numeric space, not shared world; stamp=`ros::Time::now()` | project setpoint bridge -> MAVROS raw local setpoint |
+| UAV2 EGO position command | `/uav2/planning/pos_cmd` | `/uav2/planner/rflysim_traj_server` | `world` [LIVE-VERIFIED] | n/a | UAV2 local SLAM/planner numeric space, not shared world; observed at about 99.6 Hz; stamp=`ros::Time::now()` | project setpoint bridge -> MAVROS raw local setpoint |
 
 ### A.8 Project static TF inventory
 
@@ -189,9 +191,9 @@ The final CLI argument is a period in milliseconds, not Hz. ROS 1 `tf/static_tra
 
 There is no class-A physical sensor extrinsic in the current project TF inventory. The physical LiDAR-to-IMU/body offset is represented inside Faster-LIO. There is also no current project-side generic `world -> map` or `base_link -> camera_link` static publisher.
 
-### A.9 Current source-provable TF trees
+### A.9 Current live-verified TF trees
 
-Every edge below is **[SOURCE-VERIFIED]**. The dynamic edge is configured in Faster-LIO source/launch. None was freshly observed in this audit, so runtime multiple-parent, duplicate-publisher, timestamp, and cross-UAV checks remain **PENDING LIVE CONFIRMATION**.
+Every per-UAV edge below is **[SOURCE + LIVE-VERIFIED]**. The live probe observed all 16 expected per-UAV lookups, no multiple parent, and no cross-UAV connection.
 
 ```text
 UAV1
@@ -221,13 +223,14 @@ uav2_map
 
 ```text
 Shared/generic TF
-world       (no current project TF edge)
-map         (no current project TF edge)
-base_link   (no current project TF edge)
-camera_link (no current project TF edge)
+world       (message label only; no observed TF edge)
+map         --[MAVROS ENU/NED convention; two broadcasters]--> map_ned
+odom        --[MAVROS ENU/NED convention; two broadcasters]--> odom_ned
+base_link   --[MAVROS FLU/FRD convention; two broadcasters]--> base_link_frd
+camera_link (no observed TF edge)
 
-uav1_* and uav2_* trees have no source-level cross-edge.
-There is no source-level transform between uav1_camera_init and uav2_camera_init.
+uav1_* and uav2_* trees had no observed cross-edge.
+Lookups between uav1/uav2 camera_init, map, and body frames all returned NO_TRANSFORM.
 ```
 
 ### A.10 Findings
@@ -240,12 +243,15 @@ There is no source-level transform between uav1_camera_init and uav2_camera_init
 - MAVROS has the per-UAV NED/FRD TF paths its odometry plugin requests.
 - The 0.1 m LiDAR-to-IMU/body translation is applied internally once by Faster-LIO.
 - Old duplicated generic EGO static transforms are absent from the current launch.
+- Live probe: 16/16 expected per-UAV TF lookups succeeded; all three cross-UAV lookups were absent; no multiple parent, cross-UAV topic edge, cross-UAV TF edge, or timestamp warning was observed.
+- The existing dual-UAV route completed with OFFBOARD, arming, navigation, landing, and disarm confirmed for both vehicles; collision, offboard-loss, and timeout counts were zero.
 
 #### Suspicious but not proven wrong
 
 - Zero `uavX_base_link -> uavX_lidar` looks physical by name but is only an alias; a general TF consumer would not recover the Faster-LIO internal 0.1 m extrinsic.
 - Both planners label independent local spaces as `world`.
 - MAVROS local-position feedback for both UAVs uses generic `map`/`base_link` message strings.
+- Both MAVROS nodes publish the same three generic convention edges. The probe classified these as duplicate broadcasters and observed no multiple parent. The shared MAVROS source/configuration specifies the same fixed value for each instance, but this probe version did not retain transform values per broadcaster, so live value equality is not independently measured.
 - The SDK IMU uses generic `imu`, and its exact named physical axis convention is not documented in this project.
 
 #### Confirmed inconsistencies
@@ -255,14 +261,10 @@ There is no source-level transform between uav1_camera_init and uav2_camera_init
 - EGO uses the two inputs as if co-framed because it ignores both headers; numerical consistency exists, but the ROS message-level frame contract is inconsistent.
 - RflySim's raw cloud header `map` is explicitly a visualization default and no coordinate transform is performed before the adapter relabels it `uavX_lidar`.
 
-#### Unknown / needs live evidence
+#### Remaining unknowns
 
-- Fresh `view_frames`, `tf_monitor`, and `tf_echo` results, including multiple parents, duplicate runtime broadcasters, or cross-UAV contamination.
-- Live message headers for MAVROS local-position odometry and FCU odometry input.
-- Whether `/uavX/mavros/odometry/in` currently receives FCU `ODOMETRY` at a useful rate.
 - Direct geometric confirmation that raw TypeID 23 XYZ is LiDAR-local under the currently installed simulator/SDK build.
 - Exact physical naming of the SDK's sign-mapped IMU axes.
-- Cross-topic timestamp skew during a current run; accepted artifacts prove monotonic/current samples but are not fresh TF evidence.
 
 ### A.11 Answers to the required questions
 
@@ -275,13 +277,19 @@ There is no source-level transform between uav1_camera_init and uav2_camera_init
 7. `/uavX/slam/cloud_registered` XYZ is in UAV X's Faster-LIO local origin, while its literal header is generic `camera_init`.
 8. `/uavX/slam/cloud_registered_body` XYZ is in Faster-LIO's IMU/body after internal LiDAR extrinsic application, while its literal header is generic `body`.
 9. Yes numerically, per UAV: both come from the same Faster-LIO state/local origin. No at strict message-contract level: their frame strings differ and EGO performs no TF validation/conversion.
-10. Current launch does not publish the historical `world -> map` or `base_link -> camera_link` static transforms, so it does not currently duplicate those TF edges. It still reuses `world` for both independent EGO outputs and reuses generic `map`/`base_link` in both MAVROS local-position messages, creating semantic frame-label collisions.
+10. Current EGO launch does not publish the historical `world -> map` or `base_link -> camera_link` edges. Live evidence found both MAVROS nodes publishing the generic `map -> map_ned`, `odom -> odom_ned`, and `base_link -> base_link_frd` convention edges. They are duplicate broadcasters, not multiple parents or a cross-UAV localization connection. Their equal fixed values are source-configured rather than independently compared per live broadcaster. `world`, `map`, and `base_link` remain semantically ambiguous message labels.
 11. Yes. `body -> base_link`, `odom -> camera_init`, `map -> odom`, and zero `base_link -> lidar` are aliases/compatibility edges; the NED/FRD edges are convention rotations. The zero LiDAR edge is not the physical 0.1 m sensor extrinsic.
 12. The current protected baseline needs an explicit per-UAV frame contract, not an invented unified global TF. A unified competition frame is only justified after a real alignment source exists.
 
 ### A.12 Live verification tooling
 
-`frame_contract_probe.py` is a bounded, read-only ROS diagnostic for the next live-verification task. Run `rosrun multi_uav_mission frame_contract_probe.py --duration 8` only after a clean owned stack is READY; it writes ignored Markdown and JSON reports under `logs/frame_contract_probe/<UTC timestamp>/`, covering audited topic headers/stamps and graph endpoints, TF lookups and direct broadcasters, generic message-label reuse, cross-UAV edges, and timestamp statistics. It does not publish, set parameters, modify TF, or act as a lifecycle health gate.
+`frame_contract_probe.py` is a bounded, read-only ROS diagnostic. Run `rosrun multi_uav_mission frame_contract_probe.py --duration 8` only after a clean owned stack is READY; it writes ignored Markdown and JSON reports under `logs/frame_contract_probe/<UTC timestamp>/`, covering audited topic headers/stamps and graph endpoints, TF lookups and direct broadcasters, generic message-label reuse, cross-UAV edges, and timestamp statistics. It does not publish, set parameters, modify TF, or act as a lifecycle health gate.
+
+The accepted no-arm report is `logs/frame_contract_probe/20260825T042919.377393Z/report.json`. The route-overlap report is `logs/frame_contract_probe/20260825T043348.458053Z/report.json`; it observed all 18 topics, including both `world`-labeled `pos_cmd` streams, with no header mismatch, timestamp warning, multiple parent, cross-UAV topic edge, or cross-UAV TF edge. The matching Stage 7 readiness reported `accepted_points=17408` for both vehicles and `accepted_scans=3347`/`3348` for UAV1/UAV2.
+
+### A.13 Phase 1 closure
+
+**PHASE 1 CLOSED.** Live evidence confirms that the two localization trees are isolated and that no multiple parent, cross-UAV topic edge, or cross-UAV TF edge was observed. Source analysis establishes that odometry and registered cloud carry the same Faster-LIO-local numeric coordinates per UAV; the successful existing-route flight is consistent with that contract but is not a direct numeric equivalence measurement. The generic labels are understood compatibility/legacy semantics. The duplicate MAVROS convention edges are source-configured with equal fixed values, while live per-broadcaster value equality remains unmeasured by this probe version. No runtime frame correction is justified by the combined source and live evidence; changing high-bandwidth cloud labels, MAVROS convention frames, or EGO's historical `world` label now would add protected-baseline risk without correcting the coordinate mathematics.
 
 ## B. Proposed Target Contract
 
@@ -329,6 +337,6 @@ The future relationship should be expressed as measured transforms such as `comp
 
 | Priority | Candidate | Files/area | Risk and required validation |
 | --- | --- | --- | --- |
-| P0 | **IMPLEMENTED OFFLINE / LIVE PENDING:** the read-only, run-scoped frame probe records publishers/subscribers, bounded header/stamp statistics, TF parent ownership, duplicate edges, and cross-UAV edges | New project diagnostic + focused offline test; no launch wiring | Offline validation is complete. Runtime claims remain pending one manually invoked capture on an already healthy no-arm stack. |
-| P1 | Correct message labels without changing numbers: per-UAV registered-cloud label, MAVROS local-position frame params, and per-UAV EGO output/command label | Project adapter/launch; possibly a narrowly reviewed upstream EGO parameterization | Medium/high protected-baseline risk. Require design review, focused tests, Stage 7/8, no-arm header/TF capture, single-UAV, dual-UAV, short navigation, full route, repeated fresh instances. |
+| P0 | **IMPLEMENTED / LIVE-VERIFIED:** the read-only, run-scoped frame probe records publishers/subscribers, bounded header/stamp statistics, TF parent ownership, duplicate edges, and cross-UAV edges | Project diagnostic + focused offline test; no launch wiring | Live no-arm and route-overlap captures completed on 2026-08-25. |
+| P1 | Optional future cleanup of generic message labels without changing numbers; not required for Phase 1 closure | Project adapter/launch; possibly a narrowly reviewed upstream EGO parameterization | Medium/high protected-baseline risk. Reconsider only for a concrete consumer that requires strict frame strings, then repeat the full validation ladder. |
 | P2 | Resolve the zero LiDAR TF alias and introduce `competition_world` only after deriving physical/global transforms | Frame adapter/launch and an alignment provider; do not patch Faster-LIO extrinsic casually | High coordinate/regression risk. Require independent transform math, double-application tests, ground-truth comparison, and the full PBL-1 ladder. |
