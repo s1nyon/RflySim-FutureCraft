@@ -37,7 +37,8 @@ class BoxObject:
 ROOT_FIELDS = {
     "schema_version", "map_id", "coordinate_frame", "units", "base_scene",
     "object_id_range", "requirements", "wall", "vehicle_envelope",
-    "takeoff_area", "spawns", "course", "static_obstacles",
+    "clearance_policy", "takeoff_area", "spawns", "spawn_yaw_deg",
+    "arena_objects", "zone_surfaces", "course", "static_obstacles",
     "dynamic_obstacle", "mission_target_slot", "landing", "terrain",
     "spec_sha256",
 }
@@ -146,8 +147,37 @@ def validate_spec(spec: Dict[str, Any]) -> None:
     required_sep = _number(spec["vehicle_envelope"]["horizontal_diameter"], "vehicle diameter")
     if _distance(positions[0], positions[1]) <= required_sep:
         raise CourseValidationError("spawn separation must exceed vehicle diameter")
+    yaw_by_uav = spec.get("spawn_yaw_deg", {})
+    if set(yaw_by_uav) != {"uav1", "uav2"}:
+        raise CourseValidationError("spawn_yaw_deg must contain uav1 and uav2")
+    for name in ("uav1", "uav2"):
+        _number(yaw_by_uav[name], "{} spawn yaw".format(name))
 
-    explicit = list(spec["static_obstacles"]) + [spec["dynamic_obstacle"], spec["mission_target_slot"]]
+    policy = spec.get("clearance_policy", {})
+    required_policy = {
+        "vehicle_diameter_m", "lateral_margin_each_side_m",
+        "minimum_passable_gap_m", "minimum_dynamic_safe_window_sec",
+        "sampling_hz",
+    }
+    if set(policy) != required_policy:
+        raise CourseValidationError("clearance_policy fields do not match contract")
+    for key in required_policy:
+        if _number(policy[key], "clearance policy {}".format(key)) <= 0:
+            raise CourseValidationError("clearance policy {} must be positive".format(key))
+    if abs(float(policy["vehicle_diameter_m"]) - required_sep) > 1e-9:
+        raise CourseValidationError("clearance vehicle diameter must match vehicle envelope")
+
+    arena = list(spec.get("arena_objects", []))
+    surfaces = list(spec.get("zone_surfaces", []))
+    if len(arena) != 8 or len(surfaces) != 2:
+        raise CourseValidationError("accepted substrate requires eight arena objects and two zone surfaces")
+    for item in arena + surfaces:
+        size = _vec(item["size"], 3, "{} size".format(item["name"]))
+        _vec(item["center"], 3, "{} center".format(item["name"]))
+        if any(value <= 0 for value in size):
+            raise CourseValidationError("{} size must be positive".format(item["name"]))
+
+    explicit = arena + surfaces + list(spec["static_obstacles"]) + [spec["dynamic_obstacle"], spec["mission_target_slot"]]
     explicit += list(spec["landing"]["platforms"]) + list(spec["landing"]["markers"])
     ids = []
     for item in explicit:
@@ -258,7 +288,9 @@ def _entity(item: Dict[str, Any], category: str) -> Dict[str, Any]:
 
 def build_entity_manifest(spec: Dict[str, Any]) -> List[Dict[str, Any]]:
     walls = [{"name": item.name, "id": item.object_id, "category": item.category, "center": list(asdict(item.center).values()), "size": list(asdict(item.size).values()), "yaw_rad": item.yaw_rad, "vehicle_type": item.vehicle_type, "collision": item.collision} for item in build_wall_boxes(spec)]
-    entities = walls + [_entity(item, "static_obstacle") for item in spec["static_obstacles"]]
+    entities = walls + [_entity(item, item["category"]) for item in spec["arena_objects"]]
+    entities += [_entity(item, "zone_surface") for item in spec["zone_surfaces"]]
+    entities += [_entity(item, "static_obstacle") for item in spec["static_obstacles"]]
     entities += [_entity(spec["dynamic_obstacle"], "dynamic_obstacle"), _entity(spec["mission_target_slot"], "mission_target_slot")]
     entities += [_entity(item, "landing_platform") for item in spec["landing"]["platforms"]]
     entities += [_entity(item, "aruco") for item in spec["landing"]["markers"]]

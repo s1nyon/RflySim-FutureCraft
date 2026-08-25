@@ -2,6 +2,9 @@
 """Static contracts for opt-in map selection and full-sensor diagnostics."""
 
 import argparse
+import json
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -19,6 +22,37 @@ def main():
     for expected in ("!MOTION!", "!SPEC!", "!MOTION_EVIDENCE!", "!MOTION_STOP!", "--pid-file", "Get-Process -Id"):
         assert expected in v2, "motion controller startup must preserve delayed values and prove child alive: {}".format(expected)
     assert "predicted_narrow_course" not in v2.lower()
+    env_template = (root / "config/env_template.bat").read_text(encoding="utf-8")
+    assert "COMPETITION_COURSE_V2_POS_X_STR" not in env_template
+    assert "COMPETITION_COURSE_V2_POS_Y_STR" not in env_template
+    assert "COMPETITION_COURSE_V2_YAW_STR" not in env_template
+    assert "competition_course_spawn_args.py" in v2
+    spec = json.loads((root / "config/maps/competition_course_v2.json").read_text(encoding="utf-8"))
+    sys.path.insert(0, str(root / "future_aircraft_ws/src/multi_uav_mission/scripts"))
+    from competition_course_spawn_args import spawn_environment
+    assert spawn_environment(spec) == {
+        "STAGE2_POS_X_STR": "-0.7,0.7",
+        "STAGE2_POS_Y_STR": "16,16",
+        "STAGE2_YAW_STR": "90,90",
+    }
+    output = subprocess.check_output([
+        sys.executable,
+        str(root / "future_aircraft_ws/src/multi_uav_mission/scripts/competition_course_spawn_args.py"),
+        "--spec", str(root / "config/maps/competition_course_v2.json"),
+    ], text=True).splitlines()
+    assert output == [
+        "set STAGE2_POS_X_STR=-0.7,0.7",
+        "set STAGE2_POS_Y_STR=16,16",
+        "set STAGE2_YAW_STR=90,90",
+    ]
+    dry_run = subprocess.run(
+        ["cmd", "/c", str(root / "scripts/start_competition_course_v2_two_uav.bat"), "--dry-run"],
+        cwd=str(root), capture_output=True, text=True, check=False,
+    )
+    assert dry_run.returncode == 0, dry_run.stdout + dry_run.stderr
+    assert "[DRY-RUN] NED PosX: -0.7,0.7" in dry_run.stdout
+    assert "[DRY-RUN] NED PosY: 16,16" in dry_run.stdout
+    assert "The system cannot find the path specified" not in dry_run.stderr
     batch = (root / "scripts/run_live_fastlio_dual.bat").read_text(encoding="utf-8")
     shell = (root / "scripts/wsl/stage7_live_fastlio_dual.sh").read_text(encoding="utf-8")
     assert "SENSOR_MODE=lidar_only" in batch
@@ -33,7 +67,6 @@ def main():
         "future_aircraft_ws/src/multi_uav_mission/scripts/odom_frame_relay.py",
         "future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_pointcloud_adapter.py",
     ]
-    import subprocess
     changed = subprocess.check_output(["git", "diff", "f23de934205b6776ef0531d46c26444bf9f7f65e", "--name-only"], cwd=str(root), text=True).splitlines()
     assert not set(protected) & set(changed)
     print("competition_course_v2_entrypoint_check: PASS")

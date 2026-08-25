@@ -4,9 +4,21 @@ set SCRIPT_DIR=%~dp0
 call "%SCRIPT_DIR%..\config\env_template.bat"
 if exist "%SCRIPT_DIR%..\config\env_local.bat" call "%SCRIPT_DIR%..\config\env_local.bat"
 set RFLYSIM_UE4_MAP=SLAMScene
-set STAGE2_POS_X_STR=%COMPETITION_COURSE_V2_POS_X_STR%
-set STAGE2_POS_Y_STR=%COMPETITION_COURSE_V2_POS_Y_STR%
-set STAGE2_YAW_STR=%COMPETITION_COURSE_V2_YAW_STR%
+set SPAWN_ARGS=%FUTURE_AIRCRAFT_SIM_DIR%\future_aircraft_ws\src\multi_uav_mission\scripts\competition_course_spawn_args.py
+set SPAWN_SPEC=%FUTURE_AIRCRAFT_SIM_DIR%\config\maps\competition_course_v2.json
+set STAGE2_POS_X_STR=
+set STAGE2_POS_Y_STR=
+set STAGE2_YAW_STR=
+set SPAWN_ENV_FILE=%TEMP%\competition_course_v2_spawn_%RANDOM%_%RANDOM%.bat
+"%PYTHON_EXE%" "%SPAWN_ARGS%" --spec "%SPAWN_SPEC%" > "%SPAWN_ENV_FILE%"
+if errorlevel 1 del /q "%SPAWN_ENV_FILE%" >nul 2>&1 & echo [ERROR] Failed to derive V2 spawn environment from spec. & exit /b 2
+call "%SPAWN_ENV_FILE%"
+set SPAWN_RESULT=%ERRORLEVEL%
+del /q "%SPAWN_ENV_FILE%" >nul 2>&1
+if not "%SPAWN_RESULT%"=="0" echo [ERROR] Failed to apply V2 spawn environment. & exit /b 2
+if not defined STAGE2_POS_X_STR echo [ERROR] Failed to derive V2 spawn PosX from spec. & exit /b 2
+if not defined STAGE2_POS_Y_STR echo [ERROR] Failed to derive V2 spawn PosY from spec. & exit /b 2
+if not defined STAGE2_YAW_STR echo [ERROR] Failed to derive V2 spawn yaw from spec. & exit /b 2
 set DRY_RUN=0
 set STACK_ID=
 set STACK_HEALTH_DIR=
