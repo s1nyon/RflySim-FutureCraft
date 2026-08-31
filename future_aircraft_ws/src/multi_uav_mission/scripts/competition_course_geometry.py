@@ -243,6 +243,68 @@ def pendulum_clearance_report(spec: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _route_polyline(spec: Dict[str, Any]) -> List[Tuple[float, float]]:
+    """Approximate the centreline with the same chord-error bound as the walls."""
+    points: List[Tuple[float, float]] = []
+    chord_error = float(spec["wall"]["max_chord_error"])
+    for item in spec["course"]:
+        if item["kind"] == "line":
+            candidates = [tuple(float(value) for value in item["start"]),
+                          tuple(float(value) for value in item["end"])]
+        else:
+            radius = float(item["radius"])
+            start_angle, sweep = _arc_angles(item)
+            max_delta = 2.0 * math.acos(max(-1.0, 1.0 - chord_error / radius))
+            count = max(1, int(math.ceil(abs(sweep) / max_delta)))
+            center = item["center"]
+            candidates = [
+                (center[0] + radius * math.cos(start_angle + sweep * index / count),
+                 center[1] + radius * math.sin(start_angle + sweep * index / count))
+                for index in range(count + 1)
+            ]
+        for point in candidates:
+            if not points or _distance(points[-1], point) > 1e-12:
+                points.append(point)
+    return points
+
+
+def _proper_segment_intersection(a: Tuple[float, float], b: Tuple[float, float],
+                                 c: Tuple[float, float], d: Tuple[float, float]) -> bool:
+    """Return true only for a non-endpoint crossing of two line segments."""
+    def cross(p, q, r):
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+
+    ab_c, ab_d = cross(a, b, c), cross(a, b, d)
+    cd_a, cd_b = cross(c, d, a), cross(c, d, b)
+    tolerance = 1e-10
+    return ((ab_c > tolerance and ab_d < -tolerance) or
+            (ab_c < -tolerance and ab_d > tolerance)) and ((cd_a > tolerance and cd_b < -tolerance) or
+                                                            (cd_a < -tolerance and cd_b > tolerance))
+
+
+def route_geometry_report(spec: Dict[str, Any]) -> Dict[str, Any]:
+    """Conservatively check route envelope width and approximate self-crossings."""
+    points = _route_polyline(spec)
+    intersections: List[Dict[str, int]] = []
+    for first in range(len(points) - 1):
+        for second in range(first + 2, len(points) - 1):
+            if _proper_segment_intersection(points[first], points[first + 1],
+                                            points[second], points[second + 1]):
+                intersections.append({"first_segment": first, "second_segment": second})
+    minimum_width = min(float(item["width"]) for item in spec["course"])
+    required_width = (float(spec["clearance_policy"]["vehicle_diameter_m"]) +
+                      2.0 * float(spec["clearance_policy"]["lateral_margin_each_side_m"]))
+    return {
+        "method": "centreline chord sampling plus proper segment intersections",
+        "sample_count": len(points),
+        "sampling_max_chord_error_m": float(spec["wall"]["max_chord_error"]),
+        "self_intersections": intersections,
+        "minimum_clear_width_m": minimum_width,
+        "required_envelope_width_m": required_width,
+        "passes": not intersections and minimum_width + 1e-12 >= required_width,
+    }
+
+
 def validate_spec(spec: Dict[str, Any]) -> None:
     unknown = sorted(set(spec) - ROOT_FIELDS)
     if unknown:
@@ -317,6 +379,16 @@ def validate_spec(spec: Dict[str, Any]) -> None:
             raise CourseValidationError("clearance policy {} must be positive".format(key))
     if abs(float(policy["vehicle_diameter_m"]) - required_sep) > 1e-9:
         raise CourseValidationError("clearance vehicle diameter must match vehicle envelope")
+
+    route_report = route_geometry_report(spec)
+    if not route_report["passes"]:
+        if route_report["self_intersections"]:
+            raise CourseValidationError("course centreline has an approximate self-intersection")
+        raise CourseValidationError(
+            "minimum corridor width {:.6f} m is below vehicle safety envelope {:.6f} m".format(
+                route_report["minimum_clear_width_m"], route_report["required_envelope_width_m"]
+            )
+        )
 
     arena = list(spec.get("arena_objects", []))
     surfaces = list(spec.get("zone_surfaces", []))

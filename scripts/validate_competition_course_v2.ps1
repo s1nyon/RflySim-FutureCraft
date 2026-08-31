@@ -6,6 +6,7 @@ $tests = @(
     'competition_course_v2_substrate_check.py',
     'course_layer_transition_check.py',
     'competition_course_v2_geometry_check.py',
+    'competition_course_v2_transform_check.py',
     'competition_course_v2_clearance_check.py',
     'competition_course_v2_preview_check.py',
     'competition_course_v2_evaluation_reference_check.py',

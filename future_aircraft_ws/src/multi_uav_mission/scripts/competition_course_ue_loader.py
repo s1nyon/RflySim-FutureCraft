@@ -84,9 +84,22 @@ def _load_prior_ids(receipt_path: Path, spec_sha256: str) -> List[int]:
     return ids
 
 
-def _create_box(api, item: Dict[str, Any], window_id: int) -> None:
+def rflysim_box_request(item: Dict[str, Any], window_id: int) -> Dict[str, Any]:
+    """Build the exact SDK request at the ENU-metres to RflySim boundary."""
     center, size = item["center"], item["size"]
-    api.sendUE4PosScale(copterID=item["id"], vehicleType=item["vehicle_type"], MotorRPMSMean=0, PosE=_ned(center), AngEuler=[0.0, 0.0, yaw_enu_to_ned(float(item.get("yaw_rad", 0.0)))], Scale=[float(value) for value in size], windowID=window_id)
+    return {
+        "copterID": item["id"],
+        "vehicleType": item["vehicle_type"],
+        "MotorRPMSMean": 0,
+        "PosE": _ned(center),
+        "AngEuler": [0.0, 0.0, yaw_enu_to_ned(float(item.get("yaw_rad", 0.0)))],
+        "Scale": [float(value) for value in size],
+        "windowID": window_id,
+    }
+
+
+def _create_box(api, item: Dict[str, Any], window_id: int) -> None:
+    api.sendUE4PosScale(**rflysim_box_request(item, window_id))
 
 
 def _create_marker(api, marker: Dict[str, Any], source: Path, asset_path: Optional[Path], window_id: int, sleep, expected_asset_sha256: str) -> Dict[str, Any]:

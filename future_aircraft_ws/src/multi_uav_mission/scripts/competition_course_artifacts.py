@@ -18,6 +18,7 @@ from competition_course_geometry import (
     build_wall_boxes,
     load_spec,
     pendulum_clearance_report,
+    route_geometry_report,
     spawn_clearance_report,
     static_clearance_reports,
     turn_clearance_reports,
@@ -140,6 +141,14 @@ def build_preview_svg(spec: Dict[str, Any], entities: List[Dict[str, Any]], repo
     rows.append('<g id="landing">')
     for item in spec["landing"]["platforms"]:
         rows.append(_rect(item, "#e9c46a"))
+    for marker in spec["landing"]["markers"]:
+        border = float(marker["white_border_size_m"])
+        physical = float(marker["physical_size_m"])
+        footprint = {"center": marker["center"], "size": [border, border], "yaw_rad": math.radians(float(marker["yaw_deg"]))}
+        marker_face = {"center": marker["center"], "size": [physical, physical], "yaw_rad": footprint["yaw_rad"]}
+        rows.append(_rect(footprint, "#ffffff"))
+        rows.append(_rect(marker_face, "#202020", 0.82))
+        rows.append(_text(marker["center"][0] + 0.55, -marker["center"][1], "ArUco {}".format(marker["marker_id"]), 0.20))
     rows.append('</g>')
 
     rows.append('<g id="dimensions">')
@@ -295,11 +304,12 @@ def generate_artifacts(spec_path: Path, output_dir: Path) -> Dict[str, Any]:
         "turns": turn_clearance_reports(spec),
         "spawn": spawn_clearance_report(spec),
         "pendulum": pendulum_clearance_report(spec),
+        "route": route_geometry_report(spec),
     }
     _json(output / "entity_manifest.json", {"map_id": spec["map_id"], "coordinate_frame": "ENU", "spec_sha256": spec["spec_sha256"], "owned_cleanup": "receipt_only", "entities": entities})
     _json(output / "planning_points.json", {"frame_id": "competition_course_v2_enu", "semantic_note": "map geometry only; not an established shared UAV TF", "spec_sha256": spec["spec_sha256"], "points": _course_points(spec)})
     _json(output / "evaluation_reference.json", build_evaluation_reference(spec, entities, reports))
-    _json(output / "validation_report.json", {"result": "PASS", "validation_level": "STRUCTURAL", "spec_sha256": spec["spec_sha256"], "entity_count": len(entities), "wall_count": len(build_wall_boxes(spec)), "static_obstacle_count": len(spec["static_obstacles"]), "dynamic_obstacle_count": 1, "aruco_marker_ids": sorted(item["marker_id"] for item in spec["landing"]["markers"]), "full_mission": "NOT_REQUIRED"})
+    _json(output / "validation_report.json", {"result": "PASS", "validation_level": "STRUCTURAL", "spec_sha256": spec["spec_sha256"], "entity_count": len(entities), "wall_count": len(build_wall_boxes(spec)), "route_geometry": reports["route"], "static_obstacle_count": len(spec["static_obstacles"]), "dynamic_obstacle_count": 1, "aruco_marker_ids": sorted(item["marker_id"] for item in spec["landing"]["markers"]), "full_mission": "NOT_REQUIRED"})
     (output / "course_preview.svg").write_text(build_preview_svg(spec, entities, reports), encoding="utf-8")
     terrain = spec["terrain"]
     write_flat_png16(output / "SLAMScene.png", int(terrain["pixels"][0]), int(terrain["pixels"][1]), int(terrain["height_raw"]))
@@ -307,7 +317,18 @@ def generate_artifacts(spec_path: Path, output_dir: Path) -> Dict[str, Any]:
     (output / "SLAMScene.txt").write_text("{},{},0,{},{},0,0,0,0\n".format(int(round(bounds[1] * 100)), int(round(bounds[3] * 100)), int(round(bounds[0] * 100)), int(round(bounds[2] * 100))), encoding="ascii")
     for marker in spec["landing"]["markers"]:
         _write_marker(marker_dir / "marker_{}.png".format(marker["marker_id"]), int(marker["marker_id"]))
-    files = sorted(path for path in output.rglob("*") if path.is_file())
+    files = [
+        output / "SLAMScene.png",
+        output / "SLAMScene.txt",
+        output / "course_preview.svg",
+        output / "entity_manifest.json",
+        output / "evaluation_reference.json",
+        output / "planning_points.json",
+        output / "validation_report.json",
+    ]
+    files.extend(output / "aruco" / "marker_{}.png".format(marker["marker_id"])
+                 for marker in spec["landing"]["markers"])
+    files = sorted(files)
     return {"spec_sha256": spec["spec_sha256"], "artifacts": {str(path.relative_to(output)).replace("\\", "/"): _sha(path) for path in files}}
 
 

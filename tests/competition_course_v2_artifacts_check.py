@@ -26,15 +26,20 @@ def main():
 
     with tempfile.TemporaryDirectory() as temp:
         first, second = Path(temp) / "first", Path(temp) / "second"
+        first.mkdir()
+        stale = first / "stale-run-evidence.json"
+        stale.write_text("{}\n", encoding="utf-8")
         manifest1 = generate_artifacts(root / "config/maps/competition_course_v2.json", first)
         manifest2 = generate_artifacts(root / "config/maps/competition_course_v2.json", second)
         assert manifest1 == manifest2
-        assert tree_hashes(first) == tree_hashes(second)
+        assert "stale-run-evidence.json" not in manifest1["artifacts"]
+        assert stale.exists()
         expected = {
             "SLAMScene.png", "SLAMScene.txt", "course_preview.svg", "entity_manifest.json",
             "planning_points.json", "evaluation_reference.json", "validation_report.json",
             "aruco/marker_31.png", "aruco/marker_47.png",
         }
+        assert set(manifest1["artifacts"]) == expected
         assert expected <= set(tree_hashes(first))
         entities = json.loads((first / "entity_manifest.json").read_text(encoding="utf-8"))
         ids = [item["id"] for item in entities["entities"]]
@@ -42,6 +47,9 @@ def main():
         assert entities["spec_sha256"] == manifest1["spec_sha256"]
         report = json.loads((first / "validation_report.json").read_text(encoding="utf-8"))
         assert report["result"] == "PASS"
+        assert report["route_geometry"]["passes"]
+        assert report["route_geometry"]["self_intersections"] == []
+        assert report["route_geometry"]["required_envelope_width_m"] == 0.95
         assert report["static_obstacle_count"] == 2
         assert report["aruco_marker_ids"] == [31, 47]
         for marker_id in (31, 47):

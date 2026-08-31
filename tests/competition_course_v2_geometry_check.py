@@ -32,6 +32,7 @@ def main():
         build_wall_boxes,
         load_spec,
         pendulum_pose,
+        route_geometry_report,
         validate_spec,
     )
 
@@ -63,6 +64,19 @@ def main():
         "static_box_a", "static_pillar_b", "moving_pendulum", "mission_target_slot",
         "landing_platform_uav1", "landing_platform_uav2", "aruco_uav1", "aruco_uav2"
     }
+
+    route = route_geometry_report(model)
+    assert route["passes"]
+    assert route["self_intersections"] == []
+    assert route["minimum_clear_width_m"] == 1.4
+    assert route["required_envelope_width_m"] == 0.95
+    assert route["sampling_max_chord_error_m"] <= model["wall"]["max_chord_error"]
+    crossed = copy.deepcopy(model)
+    crossed["course"][-1]["end"] = [19.0, -1.0]
+    assert route_geometry_report(crossed)["self_intersections"]
+    narrow = copy.deepcopy(model)
+    narrow["course"][2]["width"] = 0.9
+    assert not route_geometry_report(narrow)["passes"]
 
     p0 = pendulum_pose(model["dynamic_obstacle"], 0.0)
     pq = pendulum_pose(model["dynamic_obstacle"], 1.5)

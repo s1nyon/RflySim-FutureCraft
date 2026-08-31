@@ -52,6 +52,7 @@ def main():
         "static_box_a gap 1.225 m", "static_pillar_b gap 1.150 m",
         "safe window 1.858 s", "uav1 (16.000,-0.700)",
         "uav2 (16.000,0.700)", "minimum passable gap 1.000 m",
+        "ArUco 31", "ArUco 47",
         "OFFLINE VISUAL REVIEW",
     ):
         assert text in svg, text
