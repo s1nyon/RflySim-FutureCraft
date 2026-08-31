@@ -1,6 +1,11 @@
 # Infrastructure Baseline
 
-Updated: 2026-08-25
+Updated: 2026-09-01
+
+Competition Course V2 reached its independent no-arm map baseline on 2026-09-01.
+That acceptance did not modify or reopen lifecycle, RViz, PX4/MAVROS ownership,
+or the protected `predicted_narrow_course` default. See
+[`competition-map-v2.md`](competition-map-v2.md).
 
 ## Project RViz
 

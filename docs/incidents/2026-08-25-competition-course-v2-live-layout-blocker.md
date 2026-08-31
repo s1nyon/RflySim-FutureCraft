@@ -1,7 +1,14 @@
 # Competition Course V2 live layout blocker
 
 Date: 2026-08-25
-Status: OPEN — map acceptance blocked; infrastructure baseline unaffected
+Status: RESOLVED 2026-09-01 — historical incident; infrastructure baseline unaffected
+
+Resolution: the V2 course was rebased onto the accepted arena/spawn substrate,
+gained deterministic geometry/transform validation and a top-down preview, and
+was live-revalidated no-arm. The live run also exposed and fixed Class `1000813`
+native-height scale calibration. Final 42/42 entity metadata, RGB/LiDAR/IMU,
+Faster-LIO and obstacle evidence are recorded in
+[`2026-09-01-competition-course-v2-map-acceptance.md`](../evidence/2026-09-01-competition-course-v2-map-acceptance.md).
 
 ## Scope
 

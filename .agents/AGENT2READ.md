@@ -55,14 +55,14 @@
 - 2026-08-25 单次 Windows `0x1E` 蓝屏在上述 5 个 fresh run 中未再现，当前不再是
   infrastructure blocker；未获得符号化 dump 根因，仍保留为宿主机历史风险，见
   `../docs/incidents/2026-08-25-live-startup-bsod-0x1e.md`。
-- 2026-08-26 Competition Course V2 已完成**离线布局恢复**：复用 accepted
-  predicted-course arena/spawn substrate（ENU x≈13.5..39.3），V2 仍为 opt-in；新旧
-  course 通过 tracked specs 派生的精确实体 ID 互斥，不做 range sweep。静态绕行
-  开口为 1.225/1.150m（门槛 1.00m），摆锤 120Hz 结构采样最长安全窗口 1.858s
-  （门槛 1.50s）。生成物新增 dimensioned SVG 与 `evaluation_reference.json`；
-  RflySim GT transport 尚未在地图任务中审计，RViz 不是评分源。修订后尚未重新
-  live 加载，LiDAR/RGB、动态实体、Faster-LIO/EGO 均保持 live gate，不得沿用
-  2026-08-25 近原点错误布局的 live 结果宣称 V2 READY。
+- **2026-09-01 Competition Course V2 MAP READY**：single-source spec、validator、
+  dimensioned preview、真实 loader 共用同一几何；Class `1000813` 原生 `1×1×3m`
+  scale 已校准。run `stack-20260831T173615Z-6d6e09b6` no-arm 验收中 42/42 实体
+  metadata 与 spec 对齐（position/dimension error 均 0），双机 RGB/LiDAR/IMU 与
+  Faster-LIO 正常；首段墙、静态箱和动态摆障有量化点云证据，摆障实测完整
+  `y=-0.600..+0.600m`。EGO/mission/OFFBOARD/arming 均未启动；下一阶段仅为
+  Competition Course V2 Navigation Baseline。证据见
+  `../docs/evidence/2026-09-01-competition-course-v2-map-acceptance.md`。
 - 2026-08-11 旧栈 OFFBOARD 失败已定位为运行时序问题（旧栈重试窗口内 setpoint
   流中断），**不是代码回归**；恢复靠「完整清理 → fresh 栈背靠背启动」，
   见 `../docs/incidents/2026-08-11-offboard-stale-retry-setpoint-stream.md`。
@@ -70,11 +70,8 @@
 - 当前阶段是 Phase 2「Competition-Grade Narrow-Corridor Navigation」；权威路线见 [`docs/current/competition-roadmap.md`](../docs/current/competition-roadmap.md)。
 - 当前 infrastructure 已有 fresh PBL 路线 2/2 PASS；下一工程缺口是按比赛几何/障碍
   验收导航，以及真实视觉目标感知。
-- **2026-08-25 Competition Course V2 原型 live 验收 BLOCKED**：no-arm 双机 RGB/LiDAR/
-  IMU/Faster-LIO transport 可用，动态实体有实际位移，但相机证据显示起飞区/墙体/入口的
-  空间关系不符合预期；ArUco 与障碍物可见性未证明，因此未启动 EGO，未执行 mission，
-  旧 `predicted_narrow_course` 默认基线不变。下一步必须先离线复核 ENU→RflySim/UE
-  坐标、墙体 extent/orientation、spawn/yaw 与相机轴并生成俯视几何预览。详见
+- 2026-08-25 Competition Course V2 近原点错误布局已归档为 resolved incident；
+  不得再作为 current blocker，历史见
   `../docs/incidents/2026-08-25-competition-course-v2-live-layout-blocker.md`。
 - D435i `full` 模式仍需 live 飞行闭环；默认 `lidar_only`。Depth transport、目标测距和 Depth→EGO 是三个独立验收层。
 - `planner_commands=0` 的 PositionCommand md5、executor subscriber churn 与 lifecycle 强杀事故均已解决；只有 fresh evidence 再现时才重新作为 blocker，历史见 [`docs/incidents/`](../docs/incidents/)。
