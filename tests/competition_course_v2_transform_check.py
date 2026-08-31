@@ -44,6 +44,7 @@ def main():
         "vehicle_type": 1000813,
         "center": [3.0, -2.0, 4.0],
         "size": [2.0, 3.0, 4.0],
+        "scale": [2.0, 3.0, 2.0],
         "yaw_rad": math.pi,
     }
     request = rflysim_box_request(item, window_id=7)
@@ -52,7 +53,7 @@ def main():
     assert request["windowID"] == 7
     close_list(request["PosE"], [-2.0, 3.0, -4.0])
     close_list(request["AngEuler"], [0.0, 0.0, -math.pi / 2.0])
-    close_list(request["Scale"], [2.0, 3.0, 4.0])
+    close_list(request["Scale"], [2.0, 3.0, 2.0])
 
     api = FakeApi()
     _create_box(api, item, 7)

@@ -37,6 +37,7 @@ class BoxObject:
 ROOT_FIELDS = {
     "schema_version", "map_id", "coordinate_frame", "units", "base_scene",
     "object_id_range", "requirements", "wall", "vehicle_envelope",
+    "box_asset",
     "clearance_policy", "takeoff_area", "spawns", "spawn_yaw_deg",
     "arena_objects", "zone_surfaces", "course", "static_obstacles",
     "dynamic_obstacle", "mission_target_slot", "landing", "terrain",
@@ -327,6 +328,12 @@ def validate_spec(spec: Dict[str, Any]) -> None:
     for key in ("height", "thickness", "max_chord_error"):
         if _number(wall[key], "wall {}".format(key)) <= 0:
             raise CourseValidationError("wall {} must be positive".format(key))
+    box_asset = spec.get("box_asset", {})
+    if box_asset.get("vehicle_type") != wall.get("vehicle_type"):
+        raise CourseValidationError("box asset vehicle_type must match wall vehicle_type")
+    native_size = _vec(box_asset.get("native_size_m"), 3, "box asset native_size_m")
+    if any(value <= 0 for value in native_size):
+        raise CourseValidationError("box asset native_size_m must be positive")
     course = spec.get("course")
     if not isinstance(course, list) or [x.get("kind") for x in course] != ["line", "arc", "line", "arc", "line"]:
         raise CourseValidationError("course must contain line/arc/line/arc/line")
@@ -408,6 +415,8 @@ def validate_spec(spec: Dict[str, Any]) -> None:
         if not isinstance(object_id, int) or not id_range[0] <= object_id <= id_range[1]:
             raise CourseValidationError("object ID must be in owned range")
         ids.append(object_id)
+        if item not in spec["landing"]["markers"] and item.get("vehicle_type") != box_asset["vehicle_type"]:
+            raise CourseValidationError("{} must use the declared box asset".format(item.get("name", "entity")))
     if len(ids) != len(set(ids)):
         raise CourseValidationError("duplicate object ID")
 
@@ -536,18 +545,26 @@ def build_wall_boxes(spec: Dict[str, Any]) -> List[BoxObject]:
     return result
 
 
-def _entity(item: Dict[str, Any], category: str) -> Dict[str, Any]:
-    return {"name": item["name"], "id": item["id"], "category": category, "center": item.get("center", item.get("pivot")), "size": item.get("size"), "vehicle_type": item.get("vehicle_type", item.get("class_id")), "collision": bool(item.get("collision", False))}
+def _box_scale(size: Sequence[float], spec: Dict[str, Any]) -> List[float]:
+    native = spec["box_asset"]["native_size_m"]
+    return [float(value) / float(native[index]) for index, value in enumerate(size)]
+
+
+def _entity(item: Dict[str, Any], category: str, spec: Dict[str, Any]) -> Dict[str, Any]:
+    result = {"name": item["name"], "id": item["id"], "category": category, "center": item.get("center", item.get("pivot")), "size": item.get("size"), "vehicle_type": item.get("vehicle_type", item.get("class_id")), "collision": bool(item.get("collision", False))}
+    if category != "aruco":
+        result["scale"] = _box_scale(result["size"], spec)
+    return result
 
 
 def build_entity_manifest(spec: Dict[str, Any]) -> List[Dict[str, Any]]:
-    walls = [{"name": item.name, "id": item.object_id, "category": item.category, "center": list(asdict(item.center).values()), "size": list(asdict(item.size).values()), "yaw_rad": item.yaw_rad, "vehicle_type": item.vehicle_type, "collision": item.collision} for item in build_wall_boxes(spec)]
-    entities = walls + [_entity(item, item["category"]) for item in spec["arena_objects"]]
-    entities += [_entity(item, "zone_surface") for item in spec["zone_surfaces"]]
-    entities += [_entity(item, "static_obstacle") for item in spec["static_obstacles"]]
-    entities += [_entity(spec["dynamic_obstacle"], "dynamic_obstacle"), _entity(spec["mission_target_slot"], "mission_target_slot")]
-    entities += [_entity(item, "landing_platform") for item in spec["landing"]["platforms"]]
-    entities += [_entity(item, "aruco") for item in spec["landing"]["markers"]]
+    walls = [{"name": item.name, "id": item.object_id, "category": item.category, "center": list(asdict(item.center).values()), "size": list(asdict(item.size).values()), "scale": _box_scale(list(asdict(item.size).values()), spec), "yaw_rad": item.yaw_rad, "vehicle_type": item.vehicle_type, "collision": item.collision} for item in build_wall_boxes(spec)]
+    entities = walls + [_entity(item, item["category"], spec) for item in spec["arena_objects"]]
+    entities += [_entity(item, "zone_surface", spec) for item in spec["zone_surfaces"]]
+    entities += [_entity(item, "static_obstacle", spec) for item in spec["static_obstacles"]]
+    entities += [_entity(spec["dynamic_obstacle"], "dynamic_obstacle", spec), _entity(spec["mission_target_slot"], "mission_target_slot", spec)]
+    entities += [_entity(item, "landing_platform", spec) for item in spec["landing"]["platforms"]]
+    entities += [_entity(item, "aruco", spec) for item in spec["landing"]["markers"]]
     ids = [item["id"] for item in entities]
     if len(ids) != len(set(ids)):
         raise CourseValidationError("duplicate object ID including generated walls")

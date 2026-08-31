@@ -86,14 +86,14 @@ def _load_prior_ids(receipt_path: Path, spec_sha256: str) -> List[int]:
 
 def rflysim_box_request(item: Dict[str, Any], window_id: int) -> Dict[str, Any]:
     """Build the exact SDK request at the ENU-metres to RflySim boundary."""
-    center, size = item["center"], item["size"]
+    center, scale = item["center"], item["scale"]
     return {
         "copterID": item["id"],
         "vehicleType": item["vehicle_type"],
         "MotorRPMSMean": 0,
         "PosE": _ned(center),
         "AngEuler": [0.0, 0.0, yaw_enu_to_ned(float(item.get("yaw_rad", 0.0)))],
-        "Scale": [float(value) for value in size],
+        "Scale": [float(value) for value in scale],
         "windowID": window_id,
     }
 

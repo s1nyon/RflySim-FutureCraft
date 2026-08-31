@@ -42,6 +42,7 @@ def main():
     assert model["coordinate_frame"] == "ENU"
     assert model["base_scene"] == "SLAMScene"
     assert model["object_id_range"] == [15000, 15999]
+    assert model["box_asset"] == {"vehicle_type": 1000813, "native_size_m": [1.0, 1.0, 3.0]}
     assert len(model["course"]) == 5
     assert [item["kind"] for item in model["course"]] == ["line", "arc", "line", "arc", "line"]
     assert [item["width"] for item in model["course"]] == [1.5, 1.5, 1.4, 1.4, 1.5]
@@ -64,6 +65,12 @@ def main():
         "static_box_a", "static_pillar_b", "moving_pendulum", "mission_target_slot",
         "landing_platform_uav1", "landing_platform_uav2", "aruco_uav1", "aruco_uav2"
     }
+    first_wall = next(item for item in entity_manifest if item["id"] == 15000)
+    assert first_wall["size"] == [4.5, 0.15, 2.5]
+    assert first_wall["scale"] == [4.5, 0.15, 2.5 / 3.0]
+    static_box = next(item for item in entity_manifest if item["id"] == 15100)
+    assert static_box["size"] == [0.35, 0.25, 0.9]
+    assert static_box["scale"] == [0.35, 0.25, 0.3]
 
     route = route_geometry_report(model)
     assert route["passes"]
@@ -81,7 +88,9 @@ def main():
     p0 = pendulum_pose(model["dynamic_obstacle"], 0.0)
     pq = pendulum_pose(model["dynamic_obstacle"], 1.5)
     ph = pendulum_pose(model["dynamic_obstacle"], 3.0)
-    assert math.isclose(p0[1], 4.9, abs_tol=1e-9)
+    assert model["dynamic_obstacle"]["segment"] == "section_a"
+    assert model["dynamic_obstacle"]["pivot"][:2] == [22.0, 0.0]
+    assert math.isclose(p0[1], model["dynamic_obstacle"]["pivot"][1], abs_tol=1e-9)
     assert pq[1] > p0[1]
     assert math.isclose(ph[1], p0[1], abs_tol=1e-9)
     assert all(math.isfinite(value) for pose in (p0, pq, ph) for value in pose)

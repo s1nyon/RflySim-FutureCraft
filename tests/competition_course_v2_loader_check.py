@@ -54,6 +54,10 @@ def main():
         assert len(result["created_ids"]) == len(manifest["entities"])
         assert set(result["created_ids"]) == {item["id"] for item in manifest["entities"]}
         assert len([call for call in api.created if call[0] == "new"]) == 2
+        wall_call = next(call[1] for call in api.created if call[0] == "scale" and call[1]["copterID"] == 15000)
+        assert wall_call["Scale"] == [4.5, 0.15, 2.5 / 3.0]
+        static_call = next(call[1] for call in api.created if call[0] == "scale" and call[1]["copterID"] == 15100)
+        assert static_call["Scale"] == [0.35, 0.25, 0.3]
         assert len(api.ext) == 2
         assert [call["ActExt"][:2] for call in api.ext] == [[0.6, 0.8], [0.6, 0.8]]
         assert ("RflyChangeViewKeyCmd P", -1) in api.commands
