@@ -196,6 +196,18 @@ def main() -> int:
     )
     assert table_mod.parse_lstart_iso("Sat Aug  8 16:12:20 2026") == expected_utc
 
+    # The WSL snapshot command appears in its own `ps` output.  It is an
+    # ephemeral observer, not a process that can still be owned or stopped;
+    # retaining it can create a false PID-reuse transition between the two
+    # retirement admission snapshots.
+    parsed = table_mod.parse_wsl_snapshot(
+        "  374 373 374 Tue Sep  1 09:02:33 2026 ps -eo pid=,ppid=,pgid=,lstart=,args=\n"
+        "  752   1 752 Tue Sep  1 09:00:00 2026 /opt/ros/noetic/bin/roscore\n"
+    )
+    assert [item.pid for item in parsed] == [752], (
+        "the WSL process observer must not be treated as a reusable stack occupant"
+    )
+
     # Stop record carries failure reasons.
     ownership.record_stop(manifest, reason="test", clean=False, failure_reasons=["still alive"])
     assert manifest["stop"]["clean"] is False

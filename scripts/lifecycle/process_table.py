@@ -159,6 +159,7 @@ def parse_wsl_snapshot(text: str) -> List[ProcessInfo]:
     import re
 
     processes: List[ProcessInfo] = []
+    observer_command = "ps -eo pid=,ppid=,pgid=,lstart=,args="
     # lstart: "Sat Aug  8 12:00:14 2026" (day right-aligned).
     line_re = re.compile(
         r"^\s*(\d+)\s+(\d+)\s+(\d+)\s+"
@@ -173,6 +174,8 @@ def parse_wsl_snapshot(text: str) -> List[ProcessInfo]:
         if not m:
             continue
         pid, ppid, pgid, weekday, month, day, time, year, args = m.groups()
+        if args.strip() == observer_command:
+            continue
         lstart = f"{weekday} {month} {day:>2} {time} {year}"
         iso = parse_lstart_iso(lstart)
         processes.append(

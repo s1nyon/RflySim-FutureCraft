@@ -122,7 +122,7 @@
   preview、validator、RflySim entity metadata 与 no-arm RGB/LiDAR/IMU/Faster-LIO
   验收均通过；没有通过 EGO、mission 或控制参数掩盖地图问题。见
   [`2026-09-01-competition-course-v2-map-acceptance.md`](../evidence/2026-09-01-competition-course-v2-map-acceptance.md)。
-- current navigation gate：**STALE RETIREMENT DRYRUN READY / EXECUTION PENDING (2026-09-01)**。
+- current navigation gate：**LIFECYCLE STALE OWNERSHIP BLOCKER RESOLVED / LIVE FLIGHT NOT STARTED (2026-09-01)**。
   UAV1 Section A 的 spec-derived world↔local transform、`short_smoke` / `full_section_a`
   单目标 plan、opt-in terminal settle、AUTO.LAND disarm confirmation、UAV2 连续隔离监控、
   collision heartbeat 与 provenance-labelled clearance report 已实现；V2 navigation、V2 map、
@@ -134,16 +134,18 @@
   scripts\run_competition_course_v2_navigation.bat --dry-run --profile short_smoke --stack-id <id> --manifest <path>
   ```
 
-  live 仍未执行，因此不得描述为 navigation PASS。重启后的只读 inspect 对旧 stack
-  `stack-20260831T173615Z-6d6e09b6` 报告 `stale_pid_reuse=1`：manifest 中原
-  RflySim3D PID `20072` 现属于系统 `svchost.exe`。端口为空且没有 owned-alive 进程，
-  但 lifecycle 规则要求 fail closed；不得 kill 该系统进程、不得自动清理或绕过。
-  显式、token-bound、metadata-only recovery 已实现并通过 lifecycle offline tests；普通
-  inspect/stop/fresh 行为未放宽。真实 manifest retirement 尚需独立 Red-Zone 授权，
-  因此当前仍不得启动 stack 或进入 flight ladder。
+  live navigation 仍未执行，因此不得描述为 navigation PASS。重启后旧 stack
+  `stack-20260831T173615Z-6d6e09b6` 曾因 RflySim3D PID `20072` 被系统
+  `svchost.exe` 复用而 fail closed。经显式授权，token-bound metadata-only retirement
+  已执行；transaction 归档 26 条死亡 ownership records，逐条记录
+  `signal_sent=false`，没有调用 stop backend，也没有向 PID `20072` 或任何进程发 signal。
+  执行后普通 inspect 为 clean（owned/stale/orphan/unknown/port conflict 全 0），随后
+  `live_stack_fresh_instance.ps1 -DryRun` PASS。普通 inspect/stop/fresh 的 fail-closed
+  行为没有放宽；lifecycle blocker 已解决，但启动新 stack、OFFBOARD 与 arm 仍需各自
+  Red-Zone 授权。
   证据见
   [`2026-09-01-v2-section-a-live-lifecycle-blocker.md`](../evidence/2026-09-01-v2-section-a-live-lifecycle-blocker.md)。
-  lifecycle 状态经人工安全处置后，下一内部阶梯是 current-instance no-arm →
+  下一内部阶梯是 fresh V2 stack start/inspect → current-instance no-arm →
   1× short smoke → 1× full Section A diagnostic → 3× consecutive fresh-instance full Section A。
   设计与执行边界见
   [`2026-09-01-competition-course-v2-navigation-baseline-design.md`](../architecture/2026-09-01-competition-course-v2-navigation-baseline-design.md)。

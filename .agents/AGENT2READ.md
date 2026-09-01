@@ -72,6 +72,13 @@
   Red-Zone 授权执行 no-arm → short smoke → full diagnostic → 3× fresh repeatability。入口为
   `scripts/validate_competition_course_v2_navigation.ps1` 与 opt-in
   `scripts/run_competition_course_v2_navigation.bat`；不得把此状态写成 navigation CLOSED。
+- **2026-09-01 lifecycle stale ownership blocker RESOLVED**：旧 stack
+  `stack-20260831T173615Z-6d6e09b6` 的 pre-existing PID reuse 已经通过显式、token-bound、
+  metadata-only retirement 归档；26 条记录均为 `signal_sent=false`。post-inspect 的
+  owned/stale/orphan/unknown/port conflict 全 0，`live_stack_fresh_instance.ps1 -DryRun`
+  PASS。普通 inspect/stop/fresh 仍对 stale fail closed。尚未启动新 stack、OFFBOARD 或 arm；
+  下一步必须重新展示 Red-Zone DryRun/ownership 后取得独立授权。证据见
+  `../docs/evidence/2026-09-01-v2-section-a-live-lifecycle-blocker.md`。
 - 2026-08-11 旧栈 OFFBOARD 失败已定位为运行时序问题（旧栈重试窗口内 setpoint
   流中断），**不是代码回归**；恢复靠「完整清理 → fresh 栈背靠背启动」，
   见 `../docs/incidents/2026-08-11-offboard-stale-retry-setpoint-stream.md`。

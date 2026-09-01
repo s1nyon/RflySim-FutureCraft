@@ -2,11 +2,9 @@
 
 ## Result
 
-`BLOCKED_AT_LIVE_LIFECYCLE_GATE`
+`RESOLVED`
 
-Implementation update: `RECOVERY_DRYRUN_READY / RETIREMENT_EXECUTION_PENDING`.
-This evidence is intentionally not marked RESOLVED until the authorized
-metadata transaction succeeds and ordinary inspect returns clean.
+Resolution: `STALE OWNERSHIP METADATA RETIRED / POST-INSPECT CLEAN / FRESH DRYRUN PASS`.
 
 The V2 Section A implementation and offline regressions are ready, but no
 current-instance no-arm or armed flight was started after the host reboot.
@@ -48,13 +46,38 @@ The final targeted code review found no remaining high-confidence defect in
 setpoint-source handoff, strict disarm confirmation, planner-goal correlation,
 or run-scoped executor ownership.
 
-## Required safe next action
+## Resolution evidence
 
-Resolve or explicitly retire the stale *manifest context* through the protected
-lifecycle procedure. Do not kill PID `20072`, do not run a name-based cleanup,
-and do not bypass inspect. After inspect returns clean, generate a new V2 stack
-with `-Course competition_course_v2`, inspect its actual PID/PGID ownership, and
-then resume at the no-arm gate.
+The user authorized only the metadata retirement for
+`stack-20260831T173615Z-6d6e09b6`. The first Execute attempt aborted atomically
+with `state changed after admission; manifest unchanged`. Read-only comparison
+showed the changing occupant was the WSL snapshot command itself: its ephemeral
+`ps -eo pid=,ppid=,pgid=,lstart=,args=` process reused historical WSL PID `374`
+between admission snapshots. The parser now excludes only that exact observer
+command; a focused test reproduces the observer snapshot condition, and full
+`validate_lifecycle.ps1` remains PASS.
+
+The same authorized plan token
+`34ae397fd8a96e657ed161c1b6b68ec9ebc05b3d712098f285f293b2419cfa83`
+then committed the metadata-only transaction. At commit time PID `20072` was
+absent, so its audit record says `recorded_pid_absent`; the earlier svchost PID
+reuse remains preserved above as historical admission evidence. The operation:
+
+- retired 26 dead ownership entries into `stop.retired_stale_ownership`;
+- recorded `signal_sent=false` for every entry and for the transaction summary;
+- invoked no Windows/WSL stop backend and sent no process signal;
+- did not start a stack, enter OFFBOARD, arm, or fly.
+
+Post-transaction ordinary inspect reported:
+
+- `fail_closed=false`
+- `owned_and_alive=0`, `owned_but_exited=0`, `owned_orphan=0`
+- `stale_pid_reuse=0`, `orphans=0`, `unknown_suspicious=0`
+- `ports_occupied_by_unknown=0`; UDP 14600/14601/14610/14611 and TCP 11311 free
+
+`scripts\live_stack_fresh_instance.ps1 -DryRun` then exited 0 with the same
+clean summary and explicitly reported that no process or scheduled task was
+touched. The lifecycle stale ownership blocker is therefore resolved.
 
 ## Explicit recovery implementation
 
@@ -68,9 +91,15 @@ unknown suspicious process, required-port activity, ROS/MAVROS/course activity,
 or probe ambiguity exists. The operation has no stop backend and records
 `signal_sent=false` for each archived ownership entry.
 
-The real DryRun for this manifest reports `eligible=true`, 0 owned-alive, 0
+The pre-execution DryRun reported `eligible=true`, 0 owned-alive, 0
 owned-orphan, 0 unknown suspicious, all five required ports free, and all ROS
-activity false. For PID `20072`, it records RflySim3D fingerprint
-`a59267ae8330c287` versus observed `svchost.exe` fingerprint
-`9db7da97ed447310`; planned process signals are `NONE`. No manifest mutation has
-yet been authorized or executed.
+activity false. For PID `20072`, the historical DryRun recorded RflySim3D
+fingerprint `a59267ae8330c287` versus observed `svchost.exe` fingerprint
+`9db7da97ed447310`; planned process signals were `NONE`.
+
+## Next protected gate
+
+Generate a fresh V2 stack with `-Course competition_course_v2`, inspect its
+actual PID/PGID ownership, and resume at the no-arm gate. Stack start,
+OFFBOARD, arm, and flight are not authorized by this retirement transaction
+and require their own Red-Zone presentation and explicit approval.
