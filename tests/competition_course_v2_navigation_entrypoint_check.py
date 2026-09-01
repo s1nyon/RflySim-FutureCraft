@@ -79,8 +79,18 @@ def main():
         "simulation_instance_id",
         "spec_sha256",
         "safe_land_uav1",
+        "--wait-for-matching-planner-goal",
+        "--expected-goal-frame",
+        '"wsl:v2_mission_executor"',
+        'wait "$EXECUTOR_PID"',
     ):
         assert required in source, required
+    executor_start = source.index('setsid python3 "$SCRIPTS/mission_executor.py"')
+    executor_register = source.index('"wsl:v2_mission_executor"', executor_start)
+    executor_wait = source.index('wait "$EXECUTOR_PID"', executor_register)
+    assert executor_start < executor_register < executor_wait
+    executor_remove = source.index('remove_owned_child "$EXECUTOR_PID"', executor_wait)
+    assert executor_wait < executor_remove
     print("competition_course_v2_navigation_entrypoint_check: PASS")
 
 

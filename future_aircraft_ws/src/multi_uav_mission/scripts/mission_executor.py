@@ -546,7 +546,8 @@ class RosBackend:
                 latest_state = state
                 if latest_odom is not None and not bool(latest_state.armed):
                     z = float(latest_odom.pose.pose.position.z)
-                    if z <= max(threshold_z + 0.5, 1.0):
+                    accepted_threshold = threshold_z if require_disarmed else max(threshold_z + 0.5, 1.0)
+                    if z <= accepted_threshold:
                         return latest_odom
             except Exception:
                 pass
@@ -569,7 +570,7 @@ class RosBackend:
             touchdown = z <= threshold_z
             if not require_disarmed and (touchdown or disarmed_low):
                 return message
-            if require_disarmed and (touchdown or disarmed_low):
+            if require_disarmed and touchdown:
                 if latest_state is not None and not bool(latest_state.armed):
                     return message
                 if disarm_deadline is None:

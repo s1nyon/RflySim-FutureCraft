@@ -105,6 +105,30 @@ def main():
     assert target.type_mask & DummyPositionTarget.IGNORE_AFX
     assert target.type_mask & DummyPositionTarget.IGNORE_YAW_RATE
 
+    initial = bridge.initial_target(DummyPositionTarget, 0.0, 0.0, 1.0, 0.0)
+    state = {"target": initial, "matching_goal_received": False, "planner_command_received": False}
+    assert bridge.target_for_publication(state, wait_for_first_planner_command=False) is initial
+    assert bridge.target_for_publication(state, wait_for_first_planner_command=True) is None
+    state["planner_command_received"] = True
+    assert bridge.target_for_publication(state, wait_for_first_planner_command=True) is None
+    state["matching_goal_received"] = True
+    assert bridge.target_for_publication(state, wait_for_first_planner_command=True) is initial
+    expected_goal = SimpleNamespace(frame_id="map", x=7.0, y=0.7, z=1.0, tolerance_m=1e-3)
+    assert bridge.goal_matches_expected(
+        SimpleNamespace(
+            header=SimpleNamespace(frame_id="map"),
+            pose=SimpleNamespace(position=SimpleNamespace(x=7.0, y=0.7, z=1.0)),
+        ),
+        expected_goal,
+    )
+    assert not bridge.goal_matches_expected(
+        SimpleNamespace(
+            header=SimpleNamespace(frame_id="odom"),
+            pose=SimpleNamespace(position=SimpleNamespace(x=7.0, y=0.7, z=1.0)),
+        ),
+        expected_goal,
+    )
+
     plan_module = load_module("stage7_flight_plan", args.plan_module)
     plan = plan_module.build_plan(json.loads(args.config.read_text(encoding="utf-8")))
     navigation_actions = [

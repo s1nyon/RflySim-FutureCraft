@@ -241,7 +241,34 @@ def build_report(*, plan, spec, mission_events, recorder_events, flight_events,
     uav2 = _uav2_monitor(recorder_events, active_interval)
     perception = _perception(recorder_events)
     wall_clearance, static_clearance = _clearance_metrics(spec, section, trajectory)
-    planner_count = sum(item.get("kind") == "planner_command" for item in recorder_events)
+    expected_terminal = [float(value) for value in contract["terminal_local"]]
+    expected_frame = str(_terminal_action(plan)["goal"]["frame_id"])
+    active_goals = []
+    if active_interval is not None:
+        active_goals = [
+            item for item in recorder_events
+            if item.get("kind") == "planner_goal"
+            and item.get("receive_wall_time") is not None
+            and active_interval[0] <= float(item["receive_wall_time"]) <= active_interval[1]
+            and str(item.get("frame_id")) == expected_frame
+            and len(item.get("position_local", [])) == 3
+            and math.dist(
+                [float(value) for value in item["position_local"]],
+                expected_terminal,
+            ) <= 1e-3
+        ]
+    planner_goal_observed = bool(active_goals)
+    goal_wall_time = min(
+        (float(item["receive_wall_time"]) for item in active_goals),
+        default=None,
+    )
+    planner_count = sum(
+        item.get("kind") == "planner_command"
+        and item.get("receive_wall_time") is not None
+        and goal_wall_time is not None
+        and goal_wall_time <= float(item["receive_wall_time"]) <= active_interval[1]
+        for item in recorder_events
+    )
     collision_available = False
     if bool(collision_monitor.get("available")) and active_interval is not None:
         try:
@@ -307,7 +334,7 @@ def build_report(*, plan, spec, mission_events, recorder_events, flight_events,
     failures = []
     if int(executor_exit_code) != 0:
         failures.append("executor_error")
-    if not all(event_checks.values()) or not goal_accepted:
+    if not all(event_checks.values()) or not goal_accepted or not planner_goal_observed:
         failures.append("mission_contract")
     if planner_count <= 0:
         failures.append("planner_commands")
@@ -360,6 +387,7 @@ def build_report(*, plan, spec, mission_events, recorder_events, flight_events,
         "executor_exit_code": int(executor_exit_code),
         "uav1_event_checks": event_checks,
         "planner_goal_accepted": goal_accepted,
+        "planner_goal_observed": planner_goal_observed,
         "planner_command_count": planner_count,
         "progress": progress,
         "perception": perception,

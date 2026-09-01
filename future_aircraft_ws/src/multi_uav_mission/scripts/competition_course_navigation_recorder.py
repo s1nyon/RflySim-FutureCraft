@@ -129,6 +129,7 @@ def uav2_state_event(*, armed, mode, connected, receive_monotonic, receive_wall_
 def run_ros(args, spec):
     import rospy
     from mavros_msgs.msg import State
+    from geometry_msgs.msg import PoseStamped
     from nav_msgs.msg import Odometry
     from quadrotor_msgs.msg import PositionCommand
     from sensor_msgs import point_cloud2
@@ -164,6 +165,16 @@ def run_ros(args, spec):
             "receive_monotonic": time.monotonic(),
             "receive_wall_time": time.time(),
             "position_local": [float(message.position.x), float(message.position.y), float(message.position.z)],
+        })
+
+    def on_goal(message):
+        position = message.pose.position
+        write_event({
+            "kind": "planner_goal",
+            "receive_monotonic": time.monotonic(),
+            "receive_wall_time": time.time(),
+            "frame_id": str(message.header.frame_id),
+            "position_local": [float(position.x), float(position.y), float(position.z)],
         })
 
     def on_uav2(message):
@@ -215,6 +226,7 @@ def run_ros(args, spec):
     })
     rospy.Subscriber("/uav1/mavros/local_position/odom", Odometry, on_odom, queue_size=100)
     rospy.Subscriber("/uav1/planning/pos_cmd", PositionCommand, on_planner, queue_size=100)
+    rospy.Subscriber("/uav1/planning/goal", PoseStamped, on_goal, queue_size=10)
     rospy.Subscriber("/uav1/slam/cloud_registered", PointCloud2, on_cloud, queue_size=1)
     rospy.Subscriber("/uav2/mavros/state", State, on_uav2, queue_size=10)
     rospy.Timer(rospy.Duration(float(args.uav2_sample_interval_s)), sample_uav2)

@@ -37,7 +37,13 @@ def mission_events():
 
 
 def recorder_events():
-    result = []
+    result = [{
+        "kind": "planner_goal",
+        "receive_monotonic": 10.5,
+        "receive_wall_time": 100.75,
+        "frame_id": "map",
+        "position_local": [7.0, 0.7, 1.0],
+    }]
     for index, local_x in enumerate((2.5, 4.5, 6.0, 7.0)):
         result.append({
             "kind": "uav1_odom",
@@ -55,7 +61,11 @@ def recorder_events():
             "connected": True,
         })
     for index in range(12):
-        result.append({"kind": "planner_command", "receive_monotonic": 11.0 + index * 0.1})
+        result.append({
+            "kind": "planner_command",
+            "receive_monotonic": 11.0 + index * 0.1,
+            "receive_wall_time": 101.0 + index * 0.1,
+        })
     result.extend([
         {
             "kind": "registered_cloud_roi",
@@ -132,6 +142,7 @@ def main():
     assert accepted["perception"]["static_obstacle_observed"] is True
     assert accepted["perception"]["dynamic_temporal_change_observed"] is True
     assert accepted["planner_command_count"] == 12
+    assert accepted["planner_goal_observed"] is True
     assert accepted["collision_count"] == {
         "value": 0,
         "source_class": "simulator_evaluation",
@@ -161,6 +172,39 @@ def main():
     assert unavailable["result"] == "NAVIGATION_SUCCESS_COLLISION_EVIDENCE_INCOMPLETE"
     assert unavailable["collision_count"]["value"] is None
     assert unavailable["collision_count"]["source_class"] == "unavailable"
+
+    stale_commands = copy.deepcopy(recorder_events())
+    for item in stale_commands:
+        if item.get("kind") == "planner_command":
+            item["receive_wall_time"] = 100.6
+    stale = report_module.build_report(
+        plan=plan,
+        spec=spec,
+        mission_events=mission_events(),
+        recorder_events=stale_commands,
+        flight_events=[],
+        watchdog_events=[],
+        collision_monitor=monitor_status(),
+        executor_exit_code=0,
+    )
+    assert stale["planner_command_count"] == 0
+    assert "planner_commands" in stale["failure_reasons"]
+
+    wrong_goal = copy.deepcopy(recorder_events())
+    next(item for item in wrong_goal if item.get("kind") == "planner_goal")["frame_id"] = "odom"
+    wrong = report_module.build_report(
+        plan=plan,
+        spec=spec,
+        mission_events=mission_events(),
+        recorder_events=wrong_goal,
+        flight_events=[],
+        watchdog_events=[],
+        collision_monitor=monitor_status(),
+        executor_exit_code=0,
+    )
+    assert wrong["planner_goal_observed"] is False
+    assert wrong["planner_command_count"] == 0
+    assert "mission_contract" in wrong["failure_reasons"]
 
     late_uav2 = recorder_events()
     late_uav2[:] = [

@@ -145,6 +145,13 @@ for key, value in {
     "GF_MAX_SPEED": plan["geofence"]["max_speed_mps"],
     "GF_MAX_ODOM_AGE": plan["geofence"]["max_odom_age_s"],
     "INITIAL_Z": plan["actions"][1]["goal"]["z"],
+    "TERMINAL_X": plan["navigation_contract"]["terminal_local"][0],
+    "TERMINAL_Y": plan["navigation_contract"]["terminal_local"][1],
+    "TERMINAL_Z": plan["navigation_contract"]["terminal_local"][2],
+    "TERMINAL_FRAME": next(
+        item["goal"]["frame_id"] for item in plan["actions"]
+        if item["action"] == "publish_planner_goal"
+    ),
 }.items():
     print(key + "=" + shlex.quote(str(value)))
 PY
@@ -206,6 +213,16 @@ cleanup_owned_children() {
       wait "$pid" >/dev/null 2>&1 || true
     fi
   done
+}
+remove_owned_child() {
+  local removed_pid="$1" pid
+  local remaining=()
+  for pid in "${OWNED_CHILD_PIDS[@]}"; do
+    if [ "$pid" != "$removed_pid" ]; then
+      remaining+=("$pid")
+    fi
+  done
+  OWNED_CHILD_PIDS=("${remaining[@]}")
 }
 trap cleanup_owned_children EXIT
 
@@ -279,6 +296,9 @@ fi
 setsid python3 "$SCRIPTS/ego_swarm_setpoint_bridge.py" \
   --setpoint-topic /uav1/mavros/setpoint_raw/local --planner-topic /uav1/planning/pos_cmd \
   --initial-x 0.0 --initial-y 0.0 --initial-z "$INITIAL_Z" \
+  --wait-for-matching-planner-goal --goal-topic /uav1/planning/goal \
+  --expected-goal-frame "$TERMINAL_FRAME" \
+  --expected-goal-x "$TERMINAL_X" --expected-goal-y "$TERMINAL_Y" --expected-goal-z "$TERMINAL_Z" \
   --min-x "$GF_MIN_X" --max-x "$GF_MAX_X" --min-y "$GF_MIN_Y" --max-y "$GF_MAX_Y" \
   --min-z "$GF_MIN_Z" --max-z "$GF_MAX_Z" --yaw 0.0 --rate-hz 20 \
   >"$OUTPUT_DIR/uav1_setpoint_bridge.log" 2>&1 &
@@ -310,13 +330,20 @@ for pid in "$RECORDER_PID" "$FLIGHT_RECORDER_PID" "$BRIDGE_PID" "$WATCHDOG_PID";
 done
 
 ACTIVE_START_WALL_TIME="$(python3 -c 'import time; print(time.time())')"
-set +e
-python3 "$SCRIPTS/mission_executor.py" \
+setsid python3 "$SCRIPTS/mission_executor.py" \
   --plan "$PLAN" --live-config "$EXECUTOR_CONFIG" --backend ros \
   --allow-arm --simulation-only --events "$EVENTS" --trace "$TRACE" --score "$SCORE" \
-  >"$EXECUTOR_LOG" 2>&1
+  >"$EXECUTOR_LOG" 2>&1 &
+EXECUTOR_PID=$!
+OWNED_CHILD_PIDS+=("$EXECUTOR_PID")
+register_owned "$EXECUTOR_PID" "$EXECUTOR_PID" "wsl:v2_mission_executor" \
+  "python3 mission_executor.py --plan $PLAN --allow-arm --simulation-only" \
+  "created by V2 runner at process creation (setsid)"
+set +e
+wait "$EXECUTOR_PID"
 EXECUTOR_EXIT_CODE=$?
 set -e
+remove_owned_child "$EXECUTOR_PID"
 ACTIVE_END_WALL_TIME="$(python3 -c 'import time; print(time.time())')"
 
 if [ "$EXECUTOR_EXIT_CODE" -ne 0 ]; then

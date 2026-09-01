@@ -145,6 +145,20 @@ def main() -> int:
     assert [event["event"] for event in verification] == ["landing_confirmed", "disarm_confirmed"]
     assert verification[1]["armed"] is False
 
+    backend6 = executor.RosBackend.__new__(executor.RosBackend)
+    backend6.rospy = FakeRospy(armed=False, odom_z=0.8)
+    backend6.State = DummyState
+    backend6.Odometry = DummyOdometry
+    try:
+        backend6._wait_for_landing(
+            uav_config(),
+            landing_action(timeout_s=0.05, require_disarmed=True, disarm_timeout_s=0.05),
+        )
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("strict opt-in landing must require the touchdown altitude threshold")
+
     invalid = landing_action(timeout_s=1.0, require_disarmed=True, disarm_timeout_s=-1.0)
     try:
         executor.validate_action(invalid)
