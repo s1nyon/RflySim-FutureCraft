@@ -2,8 +2,10 @@
 """Offline fake-SDK and reversible-file tests for the V2 scene loader."""
 
 import argparse
+import copy
 import hashlib
 import json
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -33,6 +35,24 @@ class FailingApi(FakeApi):
 def sha(data): return hashlib.sha256(data).hexdigest()
 
 
+def expect_manifest_rejected(load_scene, spec, manifest, receipt, marker_dir):
+    try:
+        load_scene(
+            FakeApi(),
+            spec,
+            manifest,
+            receipt,
+            marker_dir,
+            -1,
+            sleep=lambda _: None,
+            asset_path=None,
+        )
+    except ValueError as exc:
+        assert "manifest" in str(exc).lower()
+    else:
+        raise AssertionError("tampered entity manifest must fail closed")
+
+
 def main():
     parser = argparse.ArgumentParser(); parser.add_argument("--project-root", default="."); args = parser.parse_args()
     root = Path(args.project_root).resolve(); sys.path.insert(0, str(root / "future_aircraft_ws/src/multi_uav_mission/scripts"))
@@ -46,6 +66,54 @@ def main():
         temp = Path(temp); generated = temp / "generated"
         generate_artifacts(root / "config/maps/competition_course_v2.json", generated)
         manifest = json.loads((generated / "entity_manifest.json").read_text(encoding="utf-8"))
+        tampered_manifests = []
+        changed_center = copy.deepcopy(manifest)
+        changed_center["entities"][0]["center"][0] += 0.25
+        tampered_manifests.append(changed_center)
+        changed_scale = copy.deepcopy(manifest)
+        changed_scale["entities"][0]["scale"][2] += 0.25
+        tampered_manifests.append(changed_scale)
+        changed_id = copy.deepcopy(manifest)
+        changed_id["entities"][0]["id"] += 500
+        tampered_manifests.append(changed_id)
+        added_entity = copy.deepcopy(manifest)
+        extra = copy.deepcopy(added_entity["entities"][0])
+        extra["id"] = 15998
+        extra["name"] = "tampered_extra"
+        added_entity["entities"].append(extra)
+        tampered_manifests.append(added_entity)
+        for index, tampered in enumerate(tampered_manifests):
+            assert tampered["spec_sha256"] == spec["spec_sha256"]
+            expect_manifest_rejected(
+                load_scene,
+                spec,
+                tampered,
+                temp / "tampered_receipt_{}.json".format(index),
+                generated / "aruco",
+            )
+
+        tampered_generated = temp / "tampered_generated"
+        tampered_generated.mkdir()
+        (tampered_generated / "entity_manifest.json").write_text(
+            json.dumps(changed_center), encoding="utf-8"
+        )
+        dry_run = subprocess.run(
+            [
+                sys.executable,
+                str(root / "future_aircraft_ws/src/multi_uav_mission/scripts/competition_course_ue_loader.py"),
+                "--spec",
+                str(root / "config/maps/competition_course_v2.json"),
+                "--generated",
+                str(tampered_generated),
+                "--receipt",
+                str(temp / "dry_run_receipt.json"),
+                "--dry-run",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert dry_run.returncode != 0, dry_run.stdout
+
         receipt = temp / "receipt.json"
         receipt.write_text(json.dumps({"spec_sha256": spec["spec_sha256"], "cleanup_policy": "receipt_only", "created_ids": [15100, 15120]}), encoding="utf-8")
         api = FakeApi()

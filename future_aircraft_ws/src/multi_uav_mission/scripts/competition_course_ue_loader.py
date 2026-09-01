@@ -15,7 +15,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
-from competition_course_geometry import load_spec
+from competition_course_geometry import build_entity_manifest, load_spec
 from narrow_course_geometry import Vec3, enu_to_ned, yaw_enu_to_ned
 
 
@@ -84,6 +84,20 @@ def _load_prior_ids(receipt_path: Path, spec_sha256: str) -> List[int]:
     return ids
 
 
+def validated_runtime_entities(spec: Dict[str, Any], generated_manifest: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Return spec-derived entities only after full generated-artifact parity."""
+    expected = {
+        "map_id": spec["map_id"],
+        "coordinate_frame": "ENU",
+        "spec_sha256": spec["spec_sha256"],
+        "owned_cleanup": "receipt_only",
+        "entities": build_entity_manifest(spec),
+    }
+    if generated_manifest != expected:
+        raise ValueError("generated entity manifest does not match spec-derived payload")
+    return expected["entities"]
+
+
 def rflysim_box_request(item: Dict[str, Any], window_id: int) -> Dict[str, Any]:
     """Build the exact SDK request at the ENU-metres to RflySim boundary."""
     center, scale = item["center"], item["scale"]
@@ -109,22 +123,16 @@ def _create_marker(api, marker: Dict[str, Any], source: Path, asset_path: Option
         api.sendUE4PosNew(copterID=marker["id"], vehicleType=marker["vehicle_type"], PosE=_ned(marker["center"]), AngEuler=[0.0, 90.0, yaw_enu_to_ned(0.0)], windowID=window_id)
         sleep(0.5)
         api.sendUE4ExtAct(copterID=marker["id"], ActExt=[marker["physical_size_m"], marker["white_border_size_m"]] + [0.0] * 14, windowID=window_id)
-        if asset_path is not None:
-            evidence["asset_transaction"] = dict(asset_evidence)
     if asset_path is not None:
         evidence["asset_transaction"] = dict(asset_evidence)
     return evidence
 
 
 def load_scene(api, spec: Dict[str, Any], generated_manifest: Dict[str, Any], receipt_path: Path, marker_dir: Path, window_id: int, sleep=time.sleep, asset_path: Optional[Path] = None, expected_asset_sha256: str = INSTALLED_ARUCO_SHA256) -> Dict[str, Any]:
-    if generated_manifest.get("spec_sha256") != spec["spec_sha256"]:
-        raise ValueError("entity manifest checksum does not match spec")
+    entities = validated_runtime_entities(spec, generated_manifest)
     prior_ids = _load_prior_ids(Path(receipt_path), spec["spec_sha256"])
     for object_id in prior_ids:
         api.sendUE4Destroy(object_id, window_id)
-    entities = generated_manifest.get("entities")
-    if not isinstance(entities, list):
-        raise ValueError("entity manifest entities must be a list")
     created, marker_evidence = [], []
     markers_by_name = {item["name"]: item for item in spec["landing"]["markers"]}
     try:
@@ -176,17 +184,18 @@ def _client(rflysim_root: Path):
     return UE4CtrlAPI.UE4CtrlAPI()
 
 
-def main() -> int:
+def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--spec", type=Path, required=True); parser.add_argument("--generated", type=Path, required=True)
     parser.add_argument("--receipt", type=Path, required=True); parser.add_argument("--window-id", type=int, default=-1)
     parser.add_argument("--asset-path", type=Path); parser.add_argument("--expected-asset-sha256", default=INSTALLED_ARUCO_SHA256)
     parser.add_argument("--rflysim-root", type=Path, default=Path(os.environ.get("RFLYSIM_ROOT", r"D:\PX4PSP"))); parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--unload", action="store_true"); parser.add_argument("--motion-stop-file", type=Path)
-    args = parser.parse_args(); spec = load_spec(args.spec)
+    args = parser.parse_args(argv); spec = load_spec(args.spec)
     manifest = json.loads((args.generated / "entity_manifest.json").read_text(encoding="utf-8"))
+    entities = validated_runtime_entities(spec, manifest)
     if args.dry_run:
-        print(json.dumps({"mode": "dry-run", "operation": "unload" if args.unload else "load", "spec_sha256": spec["spec_sha256"], "receipt": str(args.receipt), "cleanup_policy": "receipt_only", "create_ids": [] if args.unload else [item["id"] for item in manifest["entities"]], "would_replace_asset": str(args.asset_path) if args.asset_path and not args.unload else None}, indent=2, sort_keys=True)); return 0
+        print(json.dumps({"mode": "dry-run", "operation": "unload" if args.unload else "load", "spec_sha256": spec["spec_sha256"], "receipt": str(args.receipt), "cleanup_policy": "receipt_only", "create_ids": [] if args.unload else [item["id"] for item in entities], "would_replace_asset": str(args.asset_path) if args.asset_path and not args.unload else None}, indent=2, sort_keys=True)); return 0
     if args.unload:
         print(json.dumps(unload_scene(_client(args.rflysim_root), spec, args.receipt, args.window_id, args.motion_stop_file), indent=2, sort_keys=True)); return 0
     receipt = load_scene(_client(args.rflysim_root), spec, manifest, args.receipt, args.generated / "aruco", args.window_id, asset_path=args.asset_path, expected_asset_sha256=args.expected_asset_sha256)
