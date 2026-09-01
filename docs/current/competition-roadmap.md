@@ -122,7 +122,7 @@
   preview、validator、RflySim entity metadata 与 no-arm RGB/LiDAR/IMU/Faster-LIO
   验收均通过；没有通过 EGO、mission 或控制参数掩盖地图问题。见
   [`2026-09-01-competition-course-v2-map-acceptance.md`](../evidence/2026-09-01-competition-course-v2-map-acceptance.md)。
-- current navigation gate：**BLOCKED AT LIVE LIFECYCLE GATE (2026-09-01)，offline ready**。
+- current navigation gate：**STALE RETIREMENT DRYRUN READY / EXECUTION PENDING (2026-09-01)**。
   UAV1 Section A 的 spec-derived world↔local transform、`short_smoke` / `full_section_a`
   单目标 plan、opt-in terminal settle、AUTO.LAND disarm confirmation、UAV2 连续隔离监控、
   collision heartbeat 与 provenance-labelled clearance report 已实现；V2 navigation、V2 map、
@@ -138,6 +138,9 @@
   `stack-20260831T173615Z-6d6e09b6` 报告 `stale_pid_reuse=1`：manifest 中原
   RflySim3D PID `20072` 现属于系统 `svchost.exe`。端口为空且没有 owned-alive 进程，
   但 lifecycle 规则要求 fail closed；不得 kill 该系统进程、不得自动清理或绕过。
+  显式、token-bound、metadata-only recovery 已实现并通过 lifecycle offline tests；普通
+  inspect/stop/fresh 行为未放宽。真实 manifest retirement 尚需独立 Red-Zone 授权，
+  因此当前仍不得启动 stack 或进入 flight ladder。
   证据见
   [`2026-09-01-v2-section-a-live-lifecycle-blocker.md`](../evidence/2026-09-01-v2-section-a-live-lifecycle-blocker.md)。
   lifecycle 状态经人工安全处置后，下一内部阶梯是 current-instance no-arm →

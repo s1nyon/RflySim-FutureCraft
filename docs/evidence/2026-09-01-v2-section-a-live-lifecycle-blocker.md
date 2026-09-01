@@ -4,6 +4,10 @@
 
 `BLOCKED_AT_LIVE_LIFECYCLE_GATE`
 
+Implementation update: `RECOVERY_DRYRUN_READY / RETIREMENT_EXECUTION_PENDING`.
+This evidence is intentionally not marked RESOLVED until the authorized
+metadata transaction succeeds and ordinary inspect returns clean.
+
 The V2 Section A implementation and offline regressions are ready, but no
 current-instance no-arm or armed flight was started after the host reboot.
 
@@ -51,3 +55,22 @@ lifecycle procedure. Do not kill PID `20072`, do not run a name-based cleanup,
 and do not bypass inspect. After inspect returns clean, generate a new V2 stack
 with `-Course competition_course_v2`, inspect its actual PID/PGID ownership, and
 then resume at the no-arm gate.
+
+## Explicit recovery implementation
+
+The repository now provides `scripts\live_stack_retire_stale.ps1`, backed by
+`scripts\lifecycle\stack_retire_stale.py`. Default execution is DryRun. A real
+transaction requires `-Execute -PlanToken <exact-dry-run-token>` and performs a
+second complete snapshot immediately before the atomic manifest update.
+
+The admission contract denies retirement if any owned process, WSL PGID/orphan,
+unknown suspicious process, required-port activity, ROS/MAVROS/course activity,
+or probe ambiguity exists. The operation has no stop backend and records
+`signal_sent=false` for each archived ownership entry.
+
+The real DryRun for this manifest reports `eligible=true`, 0 owned-alive, 0
+owned-orphan, 0 unknown suspicious, all five required ports free, and all ROS
+activity false. For PID `20072`, it records RflySim3D fingerprint
+`a59267ae8330c287` versus observed `svchost.exe` fingerprint
+`9db7da97ed447310`; planned process signals are `NONE`. No manifest mutation has
+yet been authorized or executed.

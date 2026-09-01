@@ -137,6 +137,24 @@ ros_master_alive / mavros_uav1_connected / mavros_uav2_connected / course_ready
   调用方不得继续（fail closed）；
 - inspect 没有任何 kill/stop API，纯查询。
 
+### 5.1 显式 pre-existing stale retirement
+
+普通 inspect/stop/fresh-instance 对 `stale_pid_reuse` 的 fail-closed 语义保持不变。
+当且仅当旧 stack 已被完整证明死亡时，可使用独立入口：
+
+```powershell
+scripts\live_stack_retire_stale.ps1 -Manifest <path> -DryRun
+scripts\live_stack_retire_stale.ps1 -Manifest <path> -Execute -PlanToken <dry-run-token>
+```
+
+该入口只做 ownership metadata retirement，不导入 stop backend，也不发送 process/PGID
+signal，不关闭窗口、不删除 scheduled task。Admission 要求 owned alive/orphan、unknown
+suspicious、required-port activity、ROS/MAVROS/course activity 全部为零；进程/端口/ROS
+probe ambiguity 一律拒绝。DryRun token 绑定 recorded/observed identity 与完整 admission
+snapshot；Execute 核对 token 后，在 manifest 写入前再次 snapshot，任一变化均原子中止。
+历史记录保存在 `stop.retired_stale_ownership`，包含 recorded/observed identity、command
+fingerprint、retirement reason/time 和 `signal_sent=false`。
+
 ## 6. Graceful Stop（manifest-only）
 
 每类 owned 进程按顺序：
