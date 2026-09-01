@@ -122,8 +122,22 @@
   preview、validator、RflySim entity metadata 与 no-arm RGB/LiDAR/IMU/Faster-LIO
   验收均通过；没有通过 EGO、mission 或控制参数掩盖地图问题。见
   [`2026-09-01-competition-course-v2-map-acceptance.md`](../evidence/2026-09-01-competition-course-v2-map-acceptance.md)。
-- next gate：Competition Course V2 Navigation Baseline，从 single-UAV EGO short smoke
-  开始，再逐级覆盖完整 corridor、静态障碍、动态障碍和双机导航。
+- current navigation gate：**IMPLEMENTATION / OFFLINE READY (2026-09-01)，live pending Red-Zone authorization**。
+  UAV1 Section A 的 spec-derived world↔local transform、`short_smoke` / `full_section_a`
+  单目标 plan、opt-in terminal settle、AUTO.LAND disarm confirmation、UAV2 连续隔离监控、
+  collision heartbeat 与 provenance-labelled clearance report 已实现；V2 navigation、V2 map、
+  Stage 7 和 Stage 8 离线回归均 PASS。没有修改 EGO/Faster-LIO 参数、PBL route 或 dual-UAV
+  mission semantics。入口与验证：
+
+  ```powershell
+  scripts\validate_competition_course_v2_navigation.ps1
+  scripts\run_competition_course_v2_navigation.bat --dry-run --profile short_smoke --stack-id <id> --manifest <path>
+  ```
+
+  live 仍未执行，因此不得描述为 navigation PASS；下一内部阶梯是 current-instance no-arm →
+  1× short smoke → 1× full Section A diagnostic → 3× consecutive fresh-instance full Section A。
+  设计与执行边界见
+  [`2026-09-01-competition-course-v2-navigation-baseline-design.md`](../architecture/2026-09-01-competition-course-v2-navigation-baseline-design.md)。
 - work：motion baseline metrics；corridor/gate guidance；look-ahead goal transition；online local replanning；
   静态障碍回归；动态障碍回归；velocity/acceleration tuning；clearance monitoring。
 - KPI：collision=0；min wall clearance；navigation success rate；time to enter corridor；

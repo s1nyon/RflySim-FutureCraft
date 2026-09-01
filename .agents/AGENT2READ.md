@@ -63,6 +63,15 @@
   `y=-0.600..+0.600m`。EGO/mission/OFFBOARD/arming 均未启动；下一阶段仅为
   Competition Course V2 Navigation Baseline。证据见
   `../docs/evidence/2026-09-01-competition-course-v2-map-acceptance.md`。
+- **2026-09-01 UAV1 / Section A Navigation offline implementation READY，live 尚未开始**：
+  V2 runtime manifest 改为从 spec derive 并对 generated artifact 做 full-payload parity；新增
+  spec-derived rigid transform、`short_smoke` / `full_section_a` 单机 plan、opt-in 3 s settle
+  + 0.15 m/s terminal gate、AUTO.LAND disarm confirmation、UAV2 连续 state evidence、
+  RflySim crash-listener heartbeat、LiDAR ROI 与 wall/static clearance report。focused V2、map、
+  Stage 7、Stage 8 离线门均 PASS；没有 live stack、OFFBOARD 或 arm evidence，下一步必须按
+  Red-Zone 授权执行 no-arm → short smoke → full diagnostic → 3× fresh repeatability。入口为
+  `scripts/validate_competition_course_v2_navigation.ps1` 与 opt-in
+  `scripts/run_competition_course_v2_navigation.bat`；不得把此状态写成 navigation CLOSED。
 - 2026-08-11 旧栈 OFFBOARD 失败已定位为运行时序问题（旧栈重试窗口内 setpoint
   流中断），**不是代码回归**；恢复靠「完整清理 → fresh 栈背靠背启动」，
   见 `../docs/incidents/2026-08-11-offboard-stale-retry-setpoint-stream.md`。
