@@ -44,7 +44,7 @@
 | `scripts/deploy_competition_course_v2_terrain.bat` | Competition Course V2 可逆 terrain 部署 helper。 |
 | `scripts/generate_competition_course_v2.bat` | Competition Course V2 确定性生成 helper。 |
 | `scripts/generate_predicted_narrow_course.bat` | 当前赛道确定性生成 helper。 |
-| `scripts/load_competition_course_v2.bat` | Competition Course V2 receipt-owned 加载/卸载 helper。 |
+| `scripts/load_competition_course_v2.bat` | Competition Course V2 stack-scoped idempotent upsert / unload helper（live 需要 `--stack-id` 与 `--simulation-instance-id`）。 |
 | `scripts/load_predicted_narrow_course.bat` | 当前 RflySim 动态赛道加载 helper。 |
 | `scripts/start_competition_course_v2_two_uav.bat` | 显式选择 Competition Course V2 的双机启动 helper。 |
 | `scripts/start_predicted_course_two_uav.bat` | 当前双机赛道启动链 helper。 |

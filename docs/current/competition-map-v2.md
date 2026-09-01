@@ -16,6 +16,15 @@ the build-session command. Stop correctly refuses to signal that identity-mismat
 member. This is a lifecycle cleanup blocker, not map evidence and not a reason to
 weaken PID/PGID ownership checks.
 
+2026-09-01 的 fresh-startup closure plan（
+[`2026-09-01-competition-course-v2-fresh-startup-closure-plan.md`](2026-09-01-competition-course-v2-fresh-startup-closure-plan.md)
+）已完成 **Gate A 离线实现**：transition 不再销毁 selected course；V2 live receipt
+迁移到 `logs/live_stack/<stack_id>/competition_course_v2/` 并绑定 stack /
+simulation instance；normal load 改为幂等 upsert + 静态双 pass；pendulum 初始
+center 与 Scale 语义修正；新增 post-load retention probe，`COURSE_READY` 只在
+probe A/B 都 PASS 后写入。V2 / V2-navigation / Stage 7 / Stage 8 / lifecycle
+离线门全部 PASS；fresh map-only live run 1/2 仍需用户 Red-Zone 授权。
+
 `competition_course_v2` is one reproducible RflySim development environment for the official narrow-corridor task family. It is not the final official competition map, and selecting it does not establish a shared `competition_world` TF. The protected default remains `predicted_narrow_course`.
 
 ## Requirements matrix
@@ -128,10 +137,12 @@ Omitting `-Course` continues to select `predicted_narrow_course`. Real execution
 
 ## Ownership and reversible deployment
 
-- The predicted and V2 specs reserve disjoint ID ranges. Course selection derives exact IDs from both tracked specs and sends destroy commands only for those IDs; unknown scene entities are never range-swept.
-- The V2 loader still uses its matching `load_receipt.json` for same-course reload/unload rollback.
+- The predicted and V2 specs reserve disjoint ID ranges. Course selection derives exact IDs from both tracked specs; transition cleanup destroys only **inactive** course IDs and never destroys the selected course. Unknown scene entities are never range-swept.
+- The V2 loader now writes its live `load_receipt.json` under `logs/live_stack/<stack_id>/competition_course_v2/` and binds `stack_id`, `simulation_instance_id`, `spec_sha256` and `created_at`. `generated/competition_course_v2/` contains only deterministic artifacts; cross-instance receipts never drive destroy/create.
+- Normal V2 loading is an idempotent upsert (`sendUE4PosScale` create/update). Static entities are delivered in two identical passes with a 0.3 s settle; the pendulum is created at `pendulum_pose(t=0)` and every motion update keeps the spec-derived SDK Scale.
+- `COURSE_READY` is written `true` only after two run-scoped world-state retention probes (A after ~3 s, B after another ~2 s) verify all expected entity IDs, positions, yaw, dimensions and pendulum motion. Probe evidence is stored beside the run-scoped receipt.
 - The pendulum process is registered at creation as `windows:competition_course_v2_motion` in the current stack manifest.
-- Before standard stop, `scripts\load_competition_course_v2.bat --unload` requests a graceful controller stop and destroys only receipt-owned entities.
+- Before standard stop, `scripts\load_competition_course_v2.bat --unload --stack-id <id> --simulation-instance-id <id>` requests a graceful controller stop and destroys only IDs owned by the matching run-scoped receipt.
 - RflySim ClassID 43 reads one fixed installed `Aruco.png`. Each marker creation uses an atomic, checksum-guarded temporary replacement and byte-exact restoration in `finally`. The installed original expected SHA-256 is `0a2983af793349abc5cccb1e30c4a491263b63b6413be703a4a3f810fe9c592a`.
 - Both marker entities and their top-facing landing geometry were live-observed at the declared positions. Marker detection/decoding and simultaneous texture recognition remain navigation/perception work, not map-baseline work.
 

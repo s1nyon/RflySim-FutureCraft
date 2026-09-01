@@ -66,6 +66,17 @@
   与 manifest build-session command identity 不符，Execute 因此不发 signal 并 fail closed；
   不得以地图验证名义放宽 lifecycle ownership。历史证据保留见
   `../docs/evidence/2026-09-01-competition-course-v2-map-acceptance.md`。
+- **2026-09-01 Competition Course V2 Gate A runtime fixes IMPLEMENTED（live 未开始）**：
+  fresh-startup closure plan（`docs/current/2026-09-01-competition-course-v2-fresh-startup-closure-plan.md`）
+  的离线修复已落地，V2 / V2-navigation / Stage 7 / Stage 8 / lifecycle 离线门全 PASS：
+  transition 只销毁 inactive course；V2 live receipt 迁移到
+  `logs/live_stack/<stack_id>/competition_course_v2/` 并绑定 `stack_id` +
+  `simulation_instance_id` + `spec_sha256` + `created_at`；normal load 改为幂等
+  upsert（不销毁 selected IDs）+ 静态双 pass；pendulum 以 `pendulum_pose(t=0)`
+  创建且 motion 每帧保留 spec-derived Scale；新增 run-scoped world-state retention
+  probe（A/B），`COURSE_READY` 仅在双 probe PASS 后写入。fresh map-only run 1/2
+  属于 Red-Zone live 操作（真实 start/stop），须先向用户展示 DryRun/ownership
+  证据并获得授权，不得用 hot reload 替代 fresh acceptance。
 - **2026-09-01 UAV1 / Section A Navigation offline implementation READY，live 尚未开始**：
   V2 runtime manifest 改为从 spec derive 并对 generated artifact 做 full-payload parity；新增
   spec-derived rigid transform、`short_smoke` / `full_section_a` 单机 plan、opt-in 3 s settle
