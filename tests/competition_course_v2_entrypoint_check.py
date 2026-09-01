@@ -17,6 +17,10 @@ def main():
     assert "start_competition_course_v2_two_uav.bat" in lifecycle
     assert "$Course" in lifecycle and '"COURSE=$Course"' in lifecycle
     v2 = (root / "scripts/start_competition_course_v2_two_uav.bat").read_text(encoding="utf-8")
+    for line in v2.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("echo") and "(" in stripped and "^(" not in stripped:
+            raise AssertionError("echo inside batch block must escape parentheses: {}".format(stripped))
     for expected in ("generate_competition_course_v2.bat", "deploy_competition_course_v2_terrain.bat", "load_competition_course_v2.bat", "register_launcher.py", "windows:competition_course_v2_motion", "COURSE_READY", "competition_course_world_probe.py", "--probe-id A", "--probe-id B", "world-state retention", "run-scoped receipt"):
         assert expected in v2
     for expected in ("!MOTION!", "!SPEC!", "!MOTION_EVIDENCE!", "!MOTION_STOP!", "--pid-file", "Get-Process -Id"):

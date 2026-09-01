@@ -49,9 +49,9 @@ if "%DRY_RUN%"=="1" (
   call "%SCRIPT_DIR%start_two_uav.bat" --dry-run || exit /b 1
   echo [DRY-RUN] 5. transition destroys only inactive predicted IDs; selected V2 IDs are preserved
   call "%SCRIPT_DIR%transition_project_course_layer.bat" competition_course_v2 --dry-run || exit /b 1
-  echo [DRY-RUN] 6. load selected V2 by idempotent upsert (2 static passes, no selected destroy)
+  echo [DRY-RUN] 6. load selected V2 by idempotent upsert - 2 static passes, no selected destroy
   call "%SCRIPT_DIR%load_competition_course_v2.bat" --dry-run || exit /b 1
-  echo [DRY-RUN] 7. world-state retention probe A (wait 3s) then B (wait 2s); COURSE_READY only after both PASS
+  echo [DRY-RUN] 7. world-state retention probe A wait 3s then B wait 2s; COURSE_READY only after both PASS
   echo [DRY-RUN] register Competition Course V2 motion controller at creation
   exit /b 0
 )
