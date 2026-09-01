@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "map_id": "competition_course_v2",
+  "active_uav": "uav1",
+  "flight_altitude_m": 1.0,
+  "planner_goal_frame_id": "map",
+  "warmup_count": 40,
+  "setpoint_rate_hz": 20.0,
+  "takeoff_timeout_s": 8.0,
+  "planner_goal_timeout_s": 5.0,
+  "terminal": {
+    "tolerance_m": 0.25,
+    "maximum_speed_mps": 0.15,
+    "settle_duration_s": 3.0
+  },
+  "landing": {
+    "timeout_s": 30.0,
+    "require_disarmed": true,
+    "disarm_timeout_s": 20.0
+  },
+  "profiles": {
+    "short_smoke": {
+      "section": "section_a",
+      "along_track_offset_m": 0.75,
+      "navigation_timeout_s": 30.0
+    },
+    "full_section_a": {
+      "section": "section_a",
+      "terminal": "section_end",
+      "navigation_timeout_s": 90.0
+    }
+  },
+  "geofence": {
+    "horizontal_margin_m": 0.5,
+    "min_z": -0.5,
+    "max_z": 2.0,
+    "max_speed_mps": 2.0,
+    "max_odom_age_s": 0.5
+  }
+}
