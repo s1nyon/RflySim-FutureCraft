@@ -1,29 +1,31 @@
 # Competition Course V2
 
-Status: **MAP REGRESSION — OFFLINE FIX PASS; FRESH LIVE REVALIDATION REQUIRED (2026-09-01)**
+Status: **MAP READY — CLOSED (2026-09-01)**
 
-Fresh stack `stack-20260901T091442Z-ff2e5d81` invalidated the prior startup
-acceptance: the tunnel was absent and the moving obstacle reverted to its native
-asset dimensions. The loader receipt alone was not authoritative proof of retained
-entities. Root cause was a same-ID asynchronous destroy/recreate race plus motion
-updates that omitted SDK Scale. The offline fix inserts a 2 s destroy-drain barrier
-and sends the spec-derived pendulum Scale on every update. Navigation remains frozen
-until a fresh map-only inspection proves the fix in RflySim.
+Two independent fresh RflySim startup runs passed the acceptance contract from
+[`2026-09-01-competition-course-v2-fresh-startup-closure-plan.md`](2026-09-01-competition-course-v2-fresh-startup-closure-plan.md):
 
-The first regression stack cannot currently be restarted for that inspection:
-its final owned WSL PGID contains `tail -f /dev/null` where the manifest records
-the build-session command. Stop correctly refuses to signal that identity-mismatched
-member. This is a lifecycle cleanup blocker, not map evidence and not a reason to
-weaken PID/PGID ownership checks.
+```text
+fresh run #1: stack-20260901T103159Z-8f44a047 / px4-5b85f20c86d288ef
+  probe A PASS (40/40), probe B PASS (40/40), pendulum Scale + motion PASS
+fresh run #2: stack-20260901T104544Z-833460ff / px4-fb04034ec43fccc0
+  probe A PASS (40/40), probe B PASS (40/40), pendulum Scale + motion PASS
+COURSE_READY=true only after world-state retention probes A and B
+```
 
-2026-09-01 的 fresh-startup closure plan（
-[`2026-09-01-competition-course-v2-fresh-startup-closure-plan.md`](2026-09-01-competition-course-v2-fresh-startup-closure-plan.md)
-）已完成 **Gate A 离线实现**：transition 不再销毁 selected course；V2 live receipt
-迁移到 `logs/live_stack/<stack_id>/competition_course_v2/` 并绑定 stack /
-simulation instance；normal load 改为幂等 upsert + 静态双 pass；pendulum 初始
-center 与 Scale 语义修正；新增 post-load retention probe，`COURSE_READY` 只在
-probe A/B 都 PASS 后写入。V2 / V2-navigation / Stage 7 / Stage 8 / lifecycle
-离线门全部 PASS；fresh map-only live run 1/2 仍需用户 Red-Zone 授权。
+Both runs used the selected-course-preserving transition (only inactive
+predicted IDs destroyed), stack/instance-scoped receipts, idempotent upsert with
+two static passes, and the pendulum created at `pendulum_pose(t=0)` with
+spec-derived Scale on every motion update. Live ownership inspection was clean
+(`fail_closed=false`, no unknown processes/ports). Visual acceptance was
+confirmed by the user for both runs. Full evidence:
+[`2026-09-01-competition-course-v2-map-ready-closure.md`](../evidence/2026-09-01-competition-course-v2-map-ready-closure.md).
+
+The earlier fresh-startup regression
+(`stack-20260901T091442Z-ff2e5d81`) and its lifecycle cleanup note are
+historical; the old acceptance is marked
+`SUPERSEDED BY FRESH-START FAILURE`. Navigation remains frozen and has not
+started on either fresh run.
 
 `competition_course_v2` is one reproducible RflySim development environment for the official narrow-corridor task family. It is not the final official competition map, and selecting it does not establish a shared `competition_world` TF. The protected default remains `predicted_narrow_course`.
 
@@ -156,8 +158,8 @@ Course-layer exclusivity contract: PASS
 Minimum required static gap: 1.00 m
 Observed static passable gaps: 1.225 m / 1.150 m
 Pendulum predicted safe window: 1.858 s (required >=1.50 s)
-Map-only live entity inspection: REVALIDATION REQUIRED
-LiDAR/RGB/IMU visibility and transport: HISTORICAL PASS; rerun after map gate
+Map-only live entity inspection: PASS — 2× fresh startup closure (2026-09-01)
+LiDAR/RGB/IMU visibility and transport: HISTORICAL PASS; rerun belongs to Navigation Baseline
 Faster-LIO output: HISTORICAL PASS; EGO remains intentionally NOT STARTED
 Competition evaluator: NOT IMPLEMENTED; map-side reference only
 ```
@@ -165,7 +167,8 @@ Competition evaluator: NOT IMPLEMENTED; map-side reference only
 | Level | Status | Meaning |
 | --- | --- | --- |
 | STRUCTURAL VALIDATION | PASS | Strict schema, IDs, geometry, spawn, obstacle, pendulum, ArUco, target, determinism, fake-SDK loader and dry-run contracts |
-| LIVE SENSOR VALIDATION | REVALIDATION REQUIRED | Prior evidence was collected after an extra exact-ID reload and did not prove reliable fresh startup |
+| MAP-ONLY ENTITY INSPECTION | PASS (2× fresh, 2026-09-01) | 40/40 entities retained with correct position/yaw/dimensions and pendulum motion on two independent fresh startups |
+| LIVE SENSOR VALIDATION | HISTORICAL PASS | Prior ROS/RGB/LiDAR evidence came from the 2026-08-31 stack; rerun belongs to Navigation Baseline |
 | LOCALIZATION SMOKE | HISTORICAL PASS | Rerun only after fresh map-only entity inspection passes |
 | PLANNER SMOKE | NOT RUN | Deliberately deferred to Competition Course V2 Navigation Baseline |
 | FULL MISSION | NOT REQUIRED | Map correctness is separate from future mission/planner development |
@@ -173,6 +176,8 @@ Competition evaluator: NOT IMPLEMENTED; map-side reference only
 The no-arm probe is installed as `competition_course_live_probe.py`. Stage 7 remains `lidar_only` by default; `--sensor-mode full` is an explicit no-arm diagnostic choice for RGB evidence. Topic activity alone is not accepted as proof that a wall, moving obstacle, or marker is visible.
 
 Acceptance evidence and exact run paths are recorded in
+[`2026-09-01-competition-course-v2-map-ready-closure.md`](../evidence/2026-09-01-competition-course-v2-map-ready-closure.md).
+The withdrawn earlier acceptance is
 [`2026-09-01-competition-course-v2-map-acceptance.md`](../evidence/2026-09-01-competition-course-v2-map-acceptance.md).
 
 ## Known boundaries

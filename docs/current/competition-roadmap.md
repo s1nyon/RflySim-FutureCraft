@@ -118,12 +118,14 @@
 ### Phase 2 — Competition-Grade Narrow-Corridor Navigation（ACTIVE）
 
 - goal：两架无人机在比赛规定的窄通道中连续、安全、高效导航，对未知静态/动态障碍在线响应，满足进入时限与碰撞约束。
-- current map gate：**REOPENED / LIVE STARTUP REGRESSION (2026-09-01)**。fresh stack
-  `stack-20260901T091442Z-ff2e5d81` 中 tunnel 未保留、pendulum 尺寸回退到资产原生值，
-  推翻了此前“fresh startup MAP READY”的结论。根因是 transition 对相同 ID 的异步
-  destroy/recreate 竞态，以及 motion update 未携带 spec-derived Scale。最小离线修复与
-  focused/V2 tests 已通过；必须 fresh map-only revalidation 后才能重新关闭 map gate。见
-  [`2026-09-01-competition-course-v2-map-acceptance.md`](../evidence/2026-09-01-competition-course-v2-map-acceptance.md)。
+- current map gate：**CLOSED — MAP READY (2026-09-01)**。两次独立 fresh RflySim
+  startup（`stack-20260901T103159Z-8f44a047` /
+  `stack-20260901T104544Z-833460ff`）均通过 world-state retention probe A/B
+  （40/40、0 errors）与用户视觉验收；transition 只销毁 inactive course、
+  selected V2 使用幂等 upsert、receipt 绑定 stack/instance、pendulum Scale 与
+  运动正确。历史回归
+  `stack-20260901T091442Z-ff2e5d81` 与旧 acceptance 保留为 superseded。证据见
+  [`2026-09-01-competition-course-v2-map-ready-closure.md`](../evidence/2026-09-01-competition-course-v2-map-ready-closure.md)。
 - current navigation gate：**BLOCKED AT MAP GATE / LIVE FLIGHT NOT STARTED (2026-09-01)**。
   UAV1 Section A 的 spec-derived world↔local transform、`short_smoke` / `full_section_a`
   单目标 plan、opt-in terminal settle、AUTO.LAND disarm confirmation、UAV2 连续隔离监控、

@@ -55,28 +55,23 @@
 - 2026-08-25 单次 Windows `0x1E` 蓝屏在上述 5 个 fresh run 中未再现，当前不再是
   infrastructure blocker；未获得符号化 dump 根因，仍保留为宿主机历史风险，见
   `../docs/incidents/2026-08-25-live-startup-bsod-0x1e.md`。
-- **2026-09-01 Competition Course V2 MAP GATE REOPENED**：fresh run
-  `stack-20260901T091442Z-ff2e5d81` 中 tunnel 完全未保留且动态摆障尺寸异常，fresh
-  live evidence 推翻此前 MAP READY。根因定位为 course transition 异步 destroy 后立即
-  same-ID recreate 的竞态，以及 motion controller 的 `sendUE4PosNew` 丢失 Scale；此前
-  acceptance 的额外 exact-ID reload 掩盖了 startup 缺陷。最小修复已增加 2 s destroy
-  drain barrier，并在每次 pendulum update 携带 spec-derived Scale，focused/V2 offline
-  tests PASS；在 fresh map-only revalidation 前禁止进入 Navigation live ladder。当前
-  `stack-20260901T091442Z-ff2e5d81` stop 留下 PGID 12：其唯一成员 `tail -f /dev/null`
-  与 manifest build-session command identity 不符，Execute 因此不发 signal 并 fail closed；
-  不得以地图验证名义放宽 lifecycle ownership。历史证据保留见
-  `../docs/evidence/2026-09-01-competition-course-v2-map-acceptance.md`。
-- **2026-09-01 Competition Course V2 Gate A runtime fixes IMPLEMENTED（live 未开始）**：
-  fresh-startup closure plan（`docs/current/2026-09-01-competition-course-v2-fresh-startup-closure-plan.md`）
-  的离线修复已落地，V2 / V2-navigation / Stage 7 / Stage 8 / lifecycle 离线门全 PASS：
-  transition 只销毁 inactive course；V2 live receipt 迁移到
-  `logs/live_stack/<stack_id>/competition_course_v2/` 并绑定 `stack_id` +
-  `simulation_instance_id` + `spec_sha256` + `created_at`；normal load 改为幂等
-  upsert（不销毁 selected IDs）+ 静态双 pass；pendulum 以 `pendulum_pose(t=0)`
-  创建且 motion 每帧保留 spec-derived Scale；新增 run-scoped world-state retention
-  probe（A/B），`COURSE_READY` 仅在双 probe PASS 后写入。fresh map-only run 1/2
-  属于 Red-Zone live 操作（真实 start/stop），须先向用户展示 DryRun/ownership
-  证据并获得授权，不得用 hot reload 替代 fresh acceptance。
+- **2026-09-01 Competition Course V2 MAP GATE CLOSED（MAP READY）**：
+  两次独立 fresh RflySim startup 均通过 world-state retention（probe A/B 各
+  40/40、0 errors，pendulum 尺寸 `0.25×0.2×0.7` m 且运动正常，`COURSE_READY=true`
+  仅在双 probe PASS 后写入），用户已确认两次视觉验收。Run #1 =
+  `stack-20260901T103159Z-8f44a047` / `px4-5b85f20c86d288ef`；Run #2 =
+  `stack-20260901T104544Z-833460ff` / `px4-fb04034ec43fccc0`。runtime contract：
+  transition 只销毁 inactive predicted（34 个 ID）、selected V2 永不 destroy；
+  live receipt 位于 `logs/live_stack/<stack_id>/competition_course_v2/` 并绑定
+  stack/instance/spec；normal load 为幂等 upsert + 静态双 pass；pendulum 以
+  `pendulum_pose(t=0)` 创建且 motion 每帧保留 Scale。关闭期间另修复了两个 P0：
+  world-probe dynamic acceptance（`7bb5d38`）与 start bat 块解析（`354d5a6`）。
+  历史回归 `stack-20260901T091442Z-ff2e5d81` 与旧 acceptance 保留为 superseded
+  证据（`../docs/evidence/2026-09-01-competition-course-v2-map-acceptance.md`）；
+  最新关闭证据见
+  `../docs/evidence/2026-09-01-competition-course-v2-map-ready-closure.md`。
+  **地图阶段到此停止；Navigation 仍冻结、未开始**（下一阶段从 current-instance
+  no-arm → short smoke → Section A 恢复，需另行授权）。
 - **2026-09-01 UAV1 / Section A Navigation offline implementation READY，live 尚未开始**：
   V2 runtime manifest 改为从 spec derive 并对 generated artifact 做 full-payload parity；新增
   spec-derived rigid transform、`short_smoke` / `full_section_a` 单机 plan、opt-in 3 s settle
