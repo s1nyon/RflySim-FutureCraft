@@ -74,6 +74,7 @@ class WindowsProcessTable:
 
     def __init__(self, powershell: str = "powershell.exe"):
         self.powershell = powershell
+        self.last_error = None
 
     def snapshot(self) -> List[ProcessInfo]:
         script = (
@@ -81,22 +82,29 @@ class WindowsProcessTable:
             "Select-Object ProcessId,ParentProcessId,Name,CreationDate,CommandLine | "
             "ConvertTo-Json -Compress"
         )
-        result = subprocess.run(
-            [self.powershell, "-NoLogo", "-NoProfile", "-Command", script],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=60,
-        )
+        try:
+            result = subprocess.run(
+                [self.powershell, "-NoLogo", "-NoProfile", "-Command", script],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=60,
+            )
+        except (subprocess.SubprocessError, OSError) as exc:
+            self.last_error = str(exc)
+            return []
         if result.returncode != 0:
+            self.last_error = f"exit={result.returncode}"
             return []
         import json
 
         try:
             data = json.loads(result.stdout)
         except json.JSONDecodeError:
+            self.last_error = "invalid JSON"
             return []
+        self.last_error = None
         if isinstance(data, dict):
             data = [data]
         processes: List[ProcessInfo] = []
@@ -122,21 +130,28 @@ class WslProcessTable:
     def __init__(self, distro: str = "RflySim-20.04", wsl: str = "wsl.exe"):
         self.distro = distro
         self.wsl = wsl
+        self.last_error = None
 
     def snapshot(self) -> List[ProcessInfo]:
         command = (
             "ps -eo pid=,ppid=,pgid=,lstart=,args="
         )
-        result = subprocess.run(
-            [self.wsl, "-d", self.distro, "-e", "bash", "-lic", command],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=60,
-        )
-        if result.returncode != 0:
+        try:
+            result = subprocess.run(
+                [self.wsl, "-d", self.distro, "-e", "bash", "-lic", command],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=60,
+            )
+        except (subprocess.SubprocessError, OSError) as exc:
+            self.last_error = str(exc)
             return []
+        if result.returncode != 0:
+            self.last_error = f"exit={result.returncode}"
+            return []
+        self.last_error = None
         return parse_wsl_snapshot(result.stdout)
 
 

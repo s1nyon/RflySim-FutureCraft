@@ -171,7 +171,10 @@ def main() -> int:
                 errors.append(f"start_wsl_mavros_two.bat must not wipe inherited {wiped.strip()}")
 
     # 6. Lifecycle entries exist and no shared health.json producer.
-    for name in ("live_stack_start.ps1", "live_stack_inspect.ps1", "live_stack_stop.ps1", "live_stack_fresh_instance.ps1"):
+    for name in (
+        "live_stack_start.ps1", "live_stack_inspect.ps1", "live_stack_stop.ps1",
+        "live_stack_fresh_instance.ps1", "live_stack_retire_stale.ps1",
+    ):
         if not (project_root / "scripts" / name).exists():
             errors.append(f"missing {name}")
     live_start_text = (project_root / "scripts" / "live_stack_start.ps1").read_text(encoding="utf-8", errors="replace")

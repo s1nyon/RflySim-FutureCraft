@@ -41,6 +41,14 @@ try {
         '--manifest-module', "$lifecycle\stack_manifest.py",
         '--ownership-module', "$lifecycle\stack_ownership.py"
     )
+    Invoke-Checked $python @(
+        'tests\lifecycle_retire_stale_check.py',
+        '--retire-module', "$lifecycle\stack_retire_stale.py",
+        '--inspect-module', "$lifecycle\stack_inspect.py",
+        '--process-table-module', "$lifecycle\process_table.py",
+        '--manifest-module', "$lifecycle\stack_manifest.py",
+        '--ownership-module', "$lifecycle\stack_ownership.py"
+    )
     Invoke-Checked $python @('tests\lifecycle_health_gate_check.py', '--health-module', "$lifecycle\health_gate.py")
     Invoke-Checked $python @('tests\lifecycle_fresh_instance_check.py', '--fresh-module', "$lifecycle\fresh_instance.py")
     Invoke-Checked $python @(

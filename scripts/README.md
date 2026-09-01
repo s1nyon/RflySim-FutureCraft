@@ -9,6 +9,7 @@
 | `scripts/end_live_stack.ps1` | 受支持的 Stage 7 收尾与 manifest stop 入口。 |
 | `scripts/live_stack_fresh_instance.ps1` | Manifest 化 fresh-instance 编排，默认 DryRun。 |
 | `scripts/live_stack_inspect.ps1` | 当前 stack 的只读 ownership/health 检查。 |
+| `scripts/live_stack_retire_stale.ps1` | 已证明死亡 stack 的显式 stale ownership metadata retirement；默认 DryRun、零进程信号。 |
 | `scripts/live_stack_start.ps1` | Manifest 化 live stack 启动入口。 |
 | `scripts/live_stack_stop.ps1` | Manifest-only graceful stop，默认 DryRun。 |
 | `scripts/run_live_ego_swarm_dual.bat` | 当前双机 EGO-Swarm runner。 |
@@ -65,6 +66,7 @@
 | `scripts/lifecycle/stack_manifest.py` | Stack manifest schema/identity 核心。 |
 | `scripts/lifecycle/stack_ownership.py` | Ownership 判定核心。 |
 | `scripts/lifecycle/stack_register.py` | 创建时 ownership 唯一登记入口。 |
+| `scripts/lifecycle/stack_retire_stale.py` | Pre-existing PID reuse 的双快照、token-bound metadata retirement 核心；不包含 stop backend。 |
 | `scripts/lifecycle/stack_stop.py` | Manifest-only graceful stop 核心。 |
 | `scripts/lifecycle/stack_topology.py` | 双机 stack topology contract。 |
 | `scripts/lifecycle/to_wsl_path.ps1` | Windows 到 WSL 路径转换 helper。 |
