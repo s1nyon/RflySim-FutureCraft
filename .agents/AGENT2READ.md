@@ -88,6 +88,23 @@
   PASS。普通 inspect/stop/fresh 仍对 stale fail closed。尚未启动新 stack、OFFBOARD 或 arm；
   下一步必须重新展示 Red-Zone DryRun/ownership 后取得独立授权。证据见
   `../docs/evidence/2026-09-01-v2-section-a-live-lifecycle-blocker.md`。
+- **2026-09-02 V2 Navigation live 首日：Gate 3 no-arm PASS、Gate 4 short_smoke PASS、full Section A 首次 live FAIL**：
+  - Gate 3（`stack-20260901T171332Z-1872ae48`）no-arm 验证全 PASS：Stage 7 readiness、EGO
+    control-chain smoke、V2 goal/frame 语义、UAV2 连续 no-arm 监控，证据在
+    `logs/competition_course_v2_navigation/stack-20260901T171332Z-1872ae48/gate3_no_arm/`。
+  - Gate 4 short_smoke（`stack-20260901T173302Z-1471abcd` / `v2-nav-20260901T173953Z-short_smoke`）
+    **PASS**：OFFBOARD→arm→takeoff→EGO goal→settle→AUTO.LAND→disarm 全确认，collision 0，
+    wall/static clearance 0.369/0.943m，UAV2 0 违规。
+  - full_section_a 首次 live **FAIL**（`v2-nav-20260901T174335Z-full_section_a`）：UAV 起飞后
+    s≈0.83 贴右墙（wall clearance -0.297m）、全程横向摆动、local x≈6 悬停 2s 后突然加速至
+    1.5+ m/s（EGO max_vel=0.45）、冲出 geofence（x>7.5）触发 AUTO.LAND、odom 冻结、settle/landing
+    未确认。责任层初步指向 EGO planner 行为 + LiDAR 感知证据缺失（static_box 0 points），
+    **未调任何 EGO/Faster-LIO 参数**。诊断详见
+    `../docs/evidence/2026-09-02-v2-full-section-a-live-first-diagnostic.md`。
+  - 同日 live 验证两个小修复（离线回归全 PASS）：`competition_course_ue_loader.py` parity 改
+    字段级浮点容差（跨 Python 版本 ULP）；`competition_course_v2_navigation.sh` receipt
+    `created_ids` 改无序集合校验。均未提交。
+  - 两次 stop 均遇 WSL PGID kill 无效 open defect，按 manifest 显式 PID 补清后环境 clean。
 - 2026-08-11 旧栈 OFFBOARD 失败已定位为运行时序问题（旧栈重试窗口内 setpoint
   流中断），**不是代码回归**；恢复靠「完整清理 → fresh 栈背靠背启动」，
   见 `../docs/incidents/2026-08-11-offboard-stale-retry-setpoint-stream.md`。
