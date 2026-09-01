@@ -258,6 +258,7 @@ trap 'handle_flight_signal 143' TERM
 
 setsid python3 "$SCRIPTS/competition_course_navigation_recorder.py" \
   --spec "$MAP_SPEC" --output "$RECORDER_EVENTS" --duration-s 300 --roi-margin-m 0.015 \
+  --roi-frame-ids uav1_camera_init camera_init \
   >"$RECORDER_LOG" 2>&1 &
 RECORDER_PID=$!
 OWNED_CHILD_PIDS+=("$RECORDER_PID")

@@ -48,7 +48,11 @@ def recorder_events():
         result.append({
             "kind": "uav1_odom",
             "receive_monotonic": 10.0 + index,
+            "receive_wall_time": 101.0 + index * 0.1,
+            "header_stamp_sec": 101.0 + index * 0.1,
+            "frame_id": "uav1_odom",
             "position_local": [local_x, 0.7, 1.0],
+            "velocity_local": [0.3, 0.0, 0.0],
             "speed_mps": 0.3 if index < 3 else 0.05,
         })
     for index in range(8):
@@ -65,11 +69,44 @@ def recorder_events():
             "kind": "planner_command",
             "receive_monotonic": 11.0 + index * 0.1,
             "receive_wall_time": 101.0 + index * 0.1,
+            "header_stamp_sec": 101.0 + index * 0.1,
+            "frame_id": "map",
+            "position_local": [6.0, 0.7, 1.0],
+            "velocity_local": [0.3, 0.0, 0.0],
+            "velocity_norm_mps": 0.3,
+            "acceleration_local": [0.05, 0.0, 0.0],
+            "acceleration_norm_mps2": 0.05,
+            "yaw": 0.0,
+            "yaw_dot": 0.0,
+            "trajectory_id": 1,
+            "trajectory_flag": 1,
+        })
+    for index in range(8):
+        result.append({
+            "kind": "mavros_position_target",
+            "receive_monotonic": 11.0 + index * 0.1,
+            "receive_wall_time": 101.0 + index * 0.1,
+            "header_stamp_sec": 101.0 + index * 0.1,
+            "frame_id": "uav1_odom",
+            "coordinate_frame": 1,
+            "type_mask": 8 | 16 | 32 | 64 | 128 | 256 | 512 | 2048,
+            "position_local": [6.0, 0.7, 1.0],
+            "velocity_local": [0.0, 0.0, 0.0],
+            "acceleration_or_force_local": [0.0, 0.0, 0.0],
+            "yaw": 0.0,
+            "yaw_rate": 0.0,
+            "velocity_ignored": True,
+            "acceleration_ignored": True,
+            "force_enabled": True,
         })
     result.extend([
         {
             "kind": "registered_cloud_roi",
             "receive_monotonic": 12.0,
+            "receive_wall_time": 102.0,
+            "cloud_frame_id": "uav1_camera_init",
+            "expected_roi_frame_ids": ["uav1_camera_init"],
+            "roi_evaluation_valid": True,
             "regions": {
                 "static_box_a": {"point_count": 32, "centroid_local": [4.5, 1.2, 0.5]},
                 "moving_pendulum": {"point_count": 20, "centroid_local": [6.0, 0.2, 1.2]},
@@ -78,12 +115,30 @@ def recorder_events():
         {
             "kind": "registered_cloud_roi",
             "receive_monotonic": 13.0,
+            "receive_wall_time": 103.0,
+            "cloud_frame_id": "uav1_camera_init",
+            "expected_roi_frame_ids": ["uav1_camera_init"],
+            "roi_evaluation_valid": True,
             "regions": {
                 "static_box_a": {"point_count": 35, "centroid_local": [4.5, 1.2, 0.5]},
                 "moving_pendulum": {"point_count": 28, "centroid_local": [6.0, 0.55, 1.2]},
             },
         },
     ])
+    result.append({
+        "kind": "ego_bspline",
+        "receive_monotonic": 11.5,
+        "receive_wall_time": 101.5,
+        "traj_id": 1,
+        "pos_pts": [
+            [2.5, 0.7, 1.0],
+            [3.5, 0.5, 1.0],
+            [4.5, 0.5, 1.0],
+            [5.5, 0.5, 1.0],
+            [6.5, 0.6, 1.0],
+            [7.0, 0.7, 1.0],
+        ],
+    })
     return result
 
 
@@ -141,6 +196,18 @@ def main():
     assert accepted["progress"]["endpoint_reached"] is True
     assert accepted["perception"]["static_obstacle_observed"] is True
     assert accepted["perception"]["dynamic_temporal_change_observed"] is True
+    assert accepted["perception"]["roi_evaluation_valid"] is True
+    assert accepted["perception"]["cloud_frame_ids_observed"] == ["uav1_camera_init"]
+    assert accepted["perception"]["static_obstacle_observed_by_roi"] is True
+    assert accepted["perception"]["static_obstacle_observed_by_trajectory"] is True
+    assert accepted["planner_chain"]["sample_count"] == 12
+    assert accepted["planner_chain"]["max_desired_velocity_mps"] == 0.3
+    assert accepted["planner_chain"]["velocity_over_limit_count"] == 0
+    assert accepted["planner_chain"]["configured_max_velocity_mps"] == 0.45
+    assert accepted["control_chain"]["control_contract"] == "CONTROL_CONTRACT_POSITION_ONLY"
+    assert accepted["control_chain"]["velocity_ignored"] is True
+    assert accepted["control_chain"]["force_enabled"] is True
+    assert accepted["tracking"]["sample_count"] == 4
     assert accepted["planner_command_count"] == 12
     assert accepted["planner_goal_observed"] is True
     assert accepted["collision_count"] == {
@@ -205,6 +272,67 @@ def main():
     assert wrong["planner_goal_observed"] is False
     assert wrong["planner_command_count"] == 0
     assert "mission_contract" in wrong["failure_reasons"]
+
+    invalid_frame = copy.deepcopy(recorder_events())
+    for item in invalid_frame:
+        if item.get("kind") == "registered_cloud_roi":
+            item["cloud_frame_id"] = "uav1_map"
+            item["expected_roi_frame_ids"] = ["uav1_camera_init"]
+            item["roi_evaluation_valid"] = False
+            item["regions"] = {
+                "static_box_a": {"point_count": 0, "centroid_local": None},
+                "moving_pendulum": {"point_count": 0, "centroid_local": None},
+            }
+    invalid = report_module.build_report(
+        plan=plan,
+        spec=spec,
+        mission_events=mission_events(),
+        recorder_events=invalid_frame,
+        flight_events=[],
+        watchdog_events=[],
+        collision_monitor=monitor_status(),
+        executor_exit_code=0,
+    )
+    assert invalid["perception"]["roi_evaluation_valid"] is False
+    assert invalid["perception"]["roi_evaluation_invalid_frames"] == ["uav1_map"]
+    assert invalid["perception"]["static_obstacle_observed_by_roi"] is False
+    assert invalid["perception"]["static_obstacle_observed_by_trajectory"] is True
+    assert invalid["perception"]["static_obstacle_observed"] is True
+    # ROI frame invalid: dynamic ROI evidence is unavailable, so the overall
+    # obstacle-perception gate still fails closed even though static box is
+    # independently proven by the EGO trajectory.
+    assert "obstacle_perception" in invalid["failure_reasons"]
+
+    piercing = copy.deepcopy(recorder_events())
+    for item in piercing:
+        if item.get("kind") == "ego_bspline":
+            item["pos_pts"] = [
+                [2.5, 0.7, 1.0],
+                [4.5, 1.3, 1.0],
+                [6.5, 0.7, 1.0],
+            ]
+        if item.get("kind") == "registered_cloud_roi":
+            item["cloud_frame_id"] = "uav1_map"
+            item["expected_roi_frame_ids"] = ["uav1_camera_init"]
+            item["roi_evaluation_valid"] = False
+            item["regions"] = {
+                "static_box_a": {"point_count": 0, "centroid_local": None},
+                "moving_pendulum": {"point_count": 0, "centroid_local": None},
+            }
+    pierced = report_module.build_report(
+        plan=plan,
+        spec=spec,
+        mission_events=mission_events(),
+        recorder_events=piercing,
+        flight_events=[],
+        watchdog_events=[],
+        collision_monitor=monitor_status(),
+        executor_exit_code=0,
+    )
+    assert pierced["perception"]["static_obstacle_observed_by_trajectory"] is False
+    assert pierced["perception"]["static_trajectory_evidence"]["avoids_static_obstacle"] is False
+    assert pierced["perception"]["static_obstacle_observed"] is False
+    assert "obstacle_perception" in pierced["failure_reasons"]
 
     late_uav2 = recorder_events()
     late_uav2[:] = [

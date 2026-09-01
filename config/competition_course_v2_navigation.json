@@ -4,6 +4,10 @@
   "active_uav": "uav1",
   "flight_altitude_m": 1.0,
   "planner_goal_frame_id": "map",
+  "planner_limits": {
+    "max_velocity_mps": 0.45,
+    "max_acceleration_mps2": 0.55
+  },
   "warmup_count": 40,
   "setpoint_rate_hz": 20.0,
   "takeoff_timeout_s": 8.0,

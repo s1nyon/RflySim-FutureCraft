@@ -89,6 +89,10 @@ def main():
         assert plan["mission_name"].startswith("competition_course_v2_uav1_")
         assert plan["map_contract"]["spec_sha256"] == map_spec["spec_sha256"]
         assert plan["navigation_contract"]["section"] == "section_a"
+        assert plan["navigation_contract"]["planner_limits"] == {
+            "max_velocity_mps": 0.45,
+            "max_acceleration_mps2": 0.55,
+        }
         assert plan["evaluation_contract"] == {
             "runtime_decision_source": "lidar_driven",
             "evaluation_truth_used": False,

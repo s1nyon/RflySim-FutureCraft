@@ -151,6 +151,12 @@ def _validate_navigation_config(config: Dict[str, Any], spec: Dict[str, Any], pr
         raise ValueError("V2 landing must require disarm")
     if float(config["landing"]["disarm_timeout_s"]) > float(config["landing"]["timeout_s"]):
         raise ValueError("disarm timeout must not exceed landing timeout")
+    planner_limits = config.get("planner_limits")
+    if not isinstance(planner_limits, dict):
+        raise ValueError("navigation config missing planner_limits")
+    for label in ("max_velocity_mps", "max_acceleration_mps2"):
+        if _finite(planner_limits[label], label) <= 0.0:
+            raise ValueError("{} must be positive".format(label))
     return profiles[profile]
 
 
@@ -232,6 +238,10 @@ def build_plan(live_config: Dict[str, Any], map_spec: Dict[str, Any], nav_config
             "expected_obstacle_passage": passed,
             "progress_evidence_only": True,
             "terminal_acceptance": "3d_euclidean_point_goal",
+            "planner_limits": {
+                "max_velocity_mps": float(nav_config["planner_limits"]["max_velocity_mps"]),
+                "max_acceleration_mps2": float(nav_config["planner_limits"]["max_acceleration_mps2"]),
+            },
         },
         "evaluation_contract": {
             "runtime_decision_source": "lidar_driven",

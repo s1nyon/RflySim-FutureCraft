@@ -18,6 +18,14 @@ from competition_course_geometry import load_spec, validate_spec
 from competition_course_navigation_plan import world_to_local_xy
 
 
+ROI_FRAME_ID = "uav1_camera_init"
+
+
+def _stamp_seconds(message):
+    stamp = message.header.stamp
+    return float(stamp.secs) + float(stamp.nsecs) * 1e-9
+
+
 def _local_point(world, spawn, yaw_deg):
     xy = world_to_local_xy(world[:2], spawn, yaw_deg)
     return [xy[0], xy[1], float(world[2]) - float(spawn[2])]
@@ -126,16 +134,107 @@ def uav2_state_event(*, armed, mode, connected, receive_monotonic, receive_wall_
     }
 
 
+def odom_event(message, *, receive_monotonic, receive_wall_time):
+    position = message.pose.pose.position
+    velocity = message.twist.twist.linear
+    return {
+        "kind": "uav1_odom",
+        "receive_monotonic": float(receive_monotonic),
+        "receive_wall_time": float(receive_wall_time),
+        "header_stamp_sec": _stamp_seconds(message),
+        "frame_id": str(message.header.frame_id),
+        "position_local": [float(position.x), float(position.y), float(position.z)],
+        "velocity_local": [float(velocity.x), float(velocity.y), float(velocity.z)],
+        "speed_mps": math.sqrt(float(velocity.x) ** 2 + float(velocity.y) ** 2 + float(velocity.z) ** 2),
+    }
+
+
+def planner_command_event(message, *, receive_monotonic, receive_wall_time):
+    position, velocity, acceleration = message.position, message.velocity, message.acceleration
+    return {
+        "kind": "planner_command",
+        "receive_monotonic": float(receive_monotonic),
+        "receive_wall_time": float(receive_wall_time),
+        "header_stamp_sec": _stamp_seconds(message),
+        "frame_id": str(message.header.frame_id),
+        "position_local": [float(position.x), float(position.y), float(position.z)],
+        "velocity_local": [float(velocity.x), float(velocity.y), float(velocity.z)],
+        "velocity_norm_mps": math.sqrt(float(velocity.x) ** 2 + float(velocity.y) ** 2 + float(velocity.z) ** 2),
+        "acceleration_local": [float(acceleration.x), float(acceleration.y), float(acceleration.z)],
+        "acceleration_norm_mps2": math.sqrt(
+            float(acceleration.x) ** 2 + float(acceleration.y) ** 2 + float(acceleration.z) ** 2
+        ),
+        "yaw": float(message.yaw),
+        "yaw_dot": float(message.yaw_dot),
+        "trajectory_id": int(message.trajectory_id),
+        "trajectory_flag": int(message.trajectory_flag),
+    }
+
+
+def position_target_event(message, *, receive_monotonic, receive_wall_time):
+    position = message.position
+    velocity = message.velocity
+    acceleration = message.acceleration_or_force
+    return {
+        "kind": "mavros_position_target",
+        "receive_monotonic": float(receive_monotonic),
+        "receive_wall_time": float(receive_wall_time),
+        "header_stamp_sec": _stamp_seconds(message),
+        "frame_id": str(message.header.frame_id),
+        "coordinate_frame": int(message.coordinate_frame),
+        "type_mask": int(message.type_mask),
+        "position_local": [float(position.x), float(position.y), float(position.z)],
+        "velocity_local": [float(velocity.x), float(velocity.y), float(velocity.z)],
+        "acceleration_or_force_local": [
+            float(acceleration.x),
+            float(acceleration.y),
+            float(acceleration.z),
+        ],
+        "yaw": float(message.yaw),
+        "yaw_rate": float(message.yaw_rate),
+        "velocity_ignored": bool(message.type_mask & (8 | 16 | 32)),
+        "acceleration_ignored": bool(message.type_mask & (64 | 128 | 256)),
+        "force_enabled": bool(message.type_mask & 512),
+    }
+
+
+def bspline_event(message, *, receive_monotonic, receive_wall_time):
+    return {
+        "kind": "ego_bspline",
+        "receive_monotonic": float(receive_monotonic),
+        "receive_wall_time": float(receive_wall_time),
+        "drone_id": int(message.drone_id),
+        "order": int(message.order),
+        "traj_id": int(message.traj_id),
+        "start_time_sec": float(message.start_time.secs) + float(message.start_time.nsecs) * 1e-9,
+        "knot_count": len(message.knots),
+        "pos_pts": [
+            [float(point.x), float(point.y), float(point.z)]
+            for point in message.pos_pts
+        ],
+        "yaw_pt_count": len(message.yaw_pts),
+        "yaw_dt": float(message.yaw_dt),
+    }
+
+
+def validate_cloud_frame(frame_id, expected_frame_ids):
+    """Return True only when the cloud frame is one of the declared ROI frames."""
+    return str(frame_id) in set(expected_frame_ids)
+
+
 def run_ros(args, spec):
     import rospy
     from mavros_msgs.msg import State
+    from mavros_msgs.msg import PositionTarget
     from geometry_msgs.msg import PoseStamped
     from nav_msgs.msg import Odometry
     from quadrotor_msgs.msg import PositionCommand
+    from traj_utils.msg import Bspline
     from sensor_msgs import point_cloud2
     from sensor_msgs.msg import PointCloud2
 
     regions = build_roi_regions(spec, args.roi_margin_m)
+    expected_frames = tuple(args.roi_frame_ids)
     lock = threading.Lock()
     latest_uav2 = {"message": None}
     last_cloud = {"monotonic": -math.inf}
@@ -149,23 +248,32 @@ def run_ros(args, spec):
             output.flush()
 
     def on_odom(message):
-        position = message.pose.pose.position
-        velocity = message.twist.twist.linear
-        write_event({
-            "kind": "uav1_odom",
-            "receive_monotonic": time.monotonic(),
-            "receive_wall_time": time.time(),
-            "position_local": [float(position.x), float(position.y), float(position.z)],
-            "speed_mps": math.sqrt(float(velocity.x) ** 2 + float(velocity.y) ** 2 + float(velocity.z) ** 2),
-        })
+        write_event(odom_event(
+            message,
+            receive_monotonic=time.monotonic(),
+            receive_wall_time=time.time(),
+        ))
 
     def on_planner(message):
-        write_event({
-            "kind": "planner_command",
-            "receive_monotonic": time.monotonic(),
-            "receive_wall_time": time.time(),
-            "position_local": [float(message.position.x), float(message.position.y), float(message.position.z)],
-        })
+        write_event(planner_command_event(
+            message,
+            receive_monotonic=time.monotonic(),
+            receive_wall_time=time.time(),
+        ))
+
+    def on_position_target(message):
+        write_event(position_target_event(
+            message,
+            receive_monotonic=time.monotonic(),
+            receive_wall_time=time.time(),
+        ))
+
+    def on_bspline(message):
+        write_event(bspline_event(
+            message,
+            receive_monotonic=time.monotonic(),
+            receive_wall_time=time.time(),
+        ))
 
     def on_goal(message):
         position = message.pose.position
@@ -173,6 +281,7 @@ def run_ros(args, spec):
             "kind": "planner_goal",
             "receive_monotonic": time.monotonic(),
             "receive_wall_time": time.time(),
+            "header_stamp_sec": _stamp_seconds(message),
             "frame_id": str(message.header.frame_id),
             "position_local": [float(position.x), float(position.y), float(position.z)],
         })
@@ -205,14 +314,26 @@ def run_ros(args, spec):
         if now - last_cloud["monotonic"] < float(args.cloud_interval_s):
             return
         last_cloud["monotonic"] = now
-        points = point_cloud2.read_points(message, field_names=("x", "y", "z"), skip_nans=True)
-        write_event({
+        frame_id = str(message.header.frame_id)
+        frame_valid = validate_cloud_frame(frame_id, expected_frames)
+        event = {
             "kind": "registered_cloud_roi",
             "receive_monotonic": now,
             "receive_wall_time": time.time(),
-            "frame_id": str(message.header.frame_id),
-            "regions": summarize_roi_points(points, regions),
-        })
+            "cloud_frame_id": frame_id,
+            "expected_roi_frame_ids": list(expected_frames),
+            "roi_evaluation_valid": frame_valid,
+        }
+        if frame_valid:
+            points = point_cloud2.read_points(message, field_names=("x", "y", "z"), skip_nans=True)
+            event["regions"] = summarize_roi_points(points, regions)
+        else:
+            event["regions"] = {
+                name: {"point_count": 0, "centroid_local": None}
+                for name in regions
+            }
+            event["roi_evaluation_invalid_reason"] = "ROI_EVALUATION_INVALID_FRAME"
+        write_event(event)
 
     rospy.init_node("competition_course_v2_navigation_recorder", anonymous=True)
     write_event({
@@ -223,9 +344,15 @@ def run_ros(args, spec):
         "evaluation_truth_used": True,
         "truth_must_not_feed_control": True,
         "regions": regions,
+        "roi_frame_contract": {
+            "expected_cloud_frame_ids": list(expected_frames),
+            "note": "ROI coordinates are uav1_local (spawn-origin ENU); accepted cloud frames are the FAST-LIO world frames tied to uav1_odom by the launch static TF.",
+        },
     })
     rospy.Subscriber("/uav1/mavros/local_position/odom", Odometry, on_odom, queue_size=100)
     rospy.Subscriber("/uav1/planning/pos_cmd", PositionCommand, on_planner, queue_size=100)
+    rospy.Subscriber("/uav1/mavros/setpoint_raw/local", PositionTarget, on_position_target, queue_size=100)
+    rospy.Subscriber("/drone_0_planning/bspline", Bspline, on_bspline, queue_size=10)
     rospy.Subscriber("/uav1/planning/goal", PoseStamped, on_goal, queue_size=10)
     rospy.Subscriber("/uav1/slam/cloud_registered", PointCloud2, on_cloud, queue_size=1)
     rospy.Subscriber("/uav2/mavros/state", State, on_uav2, queue_size=10)
@@ -247,6 +374,7 @@ def main(argv=None):
     parser.add_argument("--uav2-sample-interval-s", type=float, default=0.5)
     parser.add_argument("--cloud-interval-s", type=float, default=0.5)
     parser.add_argument("--roi-margin-m", type=float, default=0.2)
+    parser.add_argument("--roi-frame-ids", nargs="+", default=[ROI_FRAME_ID])
     args = parser.parse_args(argv)
     if min(args.duration_s, args.uav2_sample_interval_s, args.cloud_interval_s) <= 0 or args.roi_margin_m < 0:
         parser.error("durations must be positive and ROI margin must be non-negative")

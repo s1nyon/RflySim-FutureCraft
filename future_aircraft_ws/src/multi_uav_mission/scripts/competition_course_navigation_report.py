@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
 from competition_course_geometry import build_wall_boxes, load_spec
-from competition_course_navigation_plan import local_to_world_xy
+from competition_course_navigation_plan import local_to_world_xy, world_to_local_xy
 
 
 REQUIRED_UAV1_EVENTS = (
@@ -24,6 +24,11 @@ REQUIRED_UAV1_EVENTS = (
     "disarm_confirmed",
 )
 MIN_OBSTACLE_ROI_POINTS = 5
+
+
+def _local_point(world, spawn, yaw_deg):
+    xy = world_to_local_xy(world[:2], spawn, yaw_deg)
+    return [xy[0], xy[1], float(world[2]) - float(spawn[2])]
 
 
 def _event_present(events: Iterable[Dict[str, Any]], name: str, uav: str = "uav1") -> bool:
@@ -145,12 +150,58 @@ def _uav2_monitor(recorder_events, active_interval):
     }
 
 
-def _perception(recorder_events):
+def _static_trajectory_evidence(recorder_events, spawn, yaw_deg, spec):
+    """Use EGO bspline geometry as independent evidence that static obstacles
+    entered the planner map.  The trajectory is evaluation-side evidence only.
+    """
+    matches = [item for item in spec["static_obstacles"] if item.get("segment") == "section_a"]
+    if len(matches) != 1:
+        return {"trajectory_evidence": False}
+    obstacle = matches[0]
+    center_local = _local_point(obstacle["center"], spawn, yaw_deg)
+    size = [float(value) for value in obstacle["size"]]
+    bsplines = [
+        item for item in recorder_events
+        if item.get("kind") == "ego_bspline" and isinstance(item.get("pos_pts"), list)
+    ]
+    if not bsplines:
+        return {"trajectory_evidence": False}
+    points = [point for item in bsplines for point in item["pos_pts"]]
+    x_values = [float(point[0]) for point in points]
+    zone_covered = max(x_values) >= float(center_local[0]) + size[0] / 2.0
+    signed = [
+        _signed_box_distance(
+            (float(point[0]), float(point[1])),
+            center_local[:2],
+            size[:2],
+            0.0,
+        )
+        for point in points
+    ]
+    minimum = min(signed)
+    return {
+        "trajectory_evidence": True,
+        "trajectory_covers_obstacle_zone": zone_covered,
+        "minimum_signed_distance_m": round(minimum, 4),
+        "avoids_static_obstacle": zone_covered and minimum > 0.0,
+    }
+
+
+def _perception(recorder_events, spawn, yaw_deg, spec):
     roi_events = [item for item in recorder_events if item.get("kind") == "registered_cloud_roi"]
+    invalid_frames = [
+        str(item.get("cloud_frame_id"))
+        for item in roi_events
+        if item.get("roi_evaluation_valid") is not True
+    ]
     static_counts = []
     dynamic_centroids = []
     dynamic_counts = []
+    expected_frames = []
     for item in roi_events:
+        expected = item.get("expected_roi_frame_ids")
+        if isinstance(expected, list):
+            expected_frames.extend(str(value) for value in expected)
         regions = item.get("regions", {})
         static = regions.get("static_box_a", {})
         dynamic = regions.get("moving_pendulum", {})
@@ -162,15 +213,136 @@ def _perception(recorder_events):
     for first in dynamic_centroids:
         for second in dynamic_centroids:
             maximum_shift = max(maximum_shift, math.sqrt(sum((a - b) ** 2 for a, b in zip(first, second))))
+    roi_valid = not invalid_frames and bool(roi_events)
+    trajectory_evidence = _static_trajectory_evidence(recorder_events, spawn, yaw_deg, spec)
+    static_observed = any(value >= MIN_OBSTACLE_ROI_POINTS for value in static_counts)
+    static_observed_by_trajectory = bool(
+        trajectory_evidence.get("trajectory_evidence")
+        and trajectory_evidence.get("avoids_static_obstacle")
+    )
     return {
         "source": "faster_lio_registered_cloud_evaluation_roi",
         "minimum_roi_points": MIN_OBSTACLE_ROI_POINTS,
-        "static_obstacle_observed": any(value >= MIN_OBSTACLE_ROI_POINTS for value in static_counts),
+        "roi_evaluation_valid": roi_valid,
+        "cloud_frame_ids_observed": sorted(set(str(item.get("cloud_frame_id")) for item in roi_events)),
+        "expected_roi_frame_ids": sorted(set(expected_frames)),
+        "roi_evaluation_invalid_frames": sorted(set(invalid_frames)),
+        "static_obstacle_observed": static_observed or static_observed_by_trajectory,
+        "static_obstacle_observed_by_roi": static_observed,
+        "static_obstacle_observed_by_trajectory": static_observed_by_trajectory,
+        "static_trajectory_evidence": trajectory_evidence,
         "static_point_count_max": max(static_counts) if static_counts else 0,
         "dynamic_obstacle_observed": any(value >= MIN_OBSTACLE_ROI_POINTS for value in dynamic_counts),
         "dynamic_centroid_shift_m": round(maximum_shift, 3),
         "dynamic_temporal_change_observed": maximum_shift >= 0.1,
         "frame_count": len(roi_events),
+    }
+
+
+def _percentile(values, fraction):
+    if not values:
+        return None
+    ordered = sorted(values)
+    index = (len(ordered) - 1) * float(fraction)
+    lower = int(math.floor(index))
+    upper = int(math.ceil(index))
+    if lower == upper:
+        return ordered[lower]
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * (index - lower)
+
+
+def _planner_chain_metrics(recorder_events, max_velocity_mps, max_acceleration_mps2):
+    commands = [
+        item for item in recorder_events
+        if item.get("kind") == "planner_command"
+        and item.get("velocity_norm_mps") is not None
+        and item.get("acceleration_norm_mps2") is not None
+    ]
+    velocities = [float(item["velocity_norm_mps"]) for item in commands]
+    accelerations = [float(item["acceleration_norm_mps2"]) for item in commands]
+    velocity_limit = float(max_velocity_mps)
+    acceleration_limit = float(max_acceleration_mps2)
+    return {
+        "sample_count": len(commands),
+        "configured_max_velocity_mps": round(velocity_limit, 4),
+        "configured_max_acceleration_mps2": round(acceleration_limit, 4),
+        "max_desired_velocity_mps": round(max(velocities), 4) if velocities else None,
+        "p95_desired_velocity_mps": round(_percentile(velocities, 0.95), 4) if velocities else None,
+        "velocity_over_limit_count": sum(value > velocity_limit + 1e-9 for value in velocities),
+        "max_desired_acceleration_mps2": round(max(accelerations), 4) if accelerations else None,
+        "acceleration_over_limit_count": sum(value > acceleration_limit + 1e-9 for value in accelerations),
+    }
+
+
+def _control_chain_metrics(recorder_events):
+    targets = [item for item in recorder_events if item.get("kind") == "mavros_position_target"]
+    if not targets:
+        return {
+            "sample_count": 0,
+            "type_mask_seen": [],
+            "coordinate_frames_seen": [],
+            "velocity_ignored_consistent": None,
+            "acceleration_ignored_consistent": None,
+            "force_enabled_consistent": None,
+            "control_contract": "NO_POSITION_TARGET_EVIDENCE",
+        }
+    masks = sorted({int(item["type_mask"]) for item in targets})
+    frames = sorted({int(item["coordinate_frame"]) for item in targets})
+    velocity_ignored = [bool(item.get("velocity_ignored")) for item in targets]
+    acceleration_ignored = [bool(item.get("acceleration_ignored")) for item in targets]
+    force_enabled = [bool(item.get("force_enabled")) for item in targets]
+    position_only = all(velocity_ignored) and all(acceleration_ignored)
+    return {
+        "sample_count": len(targets),
+        "type_mask_seen": masks,
+        "coordinate_frames_seen": frames,
+        "velocity_ignored_consistent": len(set(velocity_ignored)) == 1,
+        "velocity_ignored": bool(velocity_ignored[0]),
+        "acceleration_ignored_consistent": len(set(acceleration_ignored)) == 1,
+        "acceleration_ignored": bool(acceleration_ignored[0]),
+        "force_enabled_consistent": len(set(force_enabled)) == 1,
+        "force_enabled": bool(force_enabled[0]),
+        "control_contract": "CONTROL_CONTRACT_POSITION_ONLY" if position_only else "CONTROL_CONTRACT_WITH_FEEDFORWARD",
+    }
+
+
+def _tracking_metrics(recorder_events, max_match_delta_s=0.1):
+    odoms = sorted(
+        (
+            item for item in recorder_events
+            if item.get("kind") == "uav1_odom"
+            and item.get("position_local")
+            and item.get("receive_wall_time") is not None
+        ),
+        key=lambda item: float(item["receive_wall_time"]),
+    )
+    targets = sorted(
+        (
+            item for item in recorder_events
+            if item.get("kind") == "mavros_position_target"
+            and item.get("position_local")
+            and item.get("receive_wall_time") is not None
+        ),
+        key=lambda item: float(item["receive_wall_time"]),
+    )
+    if not odoms or not targets:
+        return {"sample_count": 0, "max_position_error_m": None, "p95_position_error_m": None}
+    position_errors = []
+    for odom in odoms:
+        nearest = min(targets, key=lambda item: abs(float(item["receive_wall_time"]) - float(odom["receive_wall_time"])))
+        delta = abs(float(nearest["receive_wall_time"]) - float(odom["receive_wall_time"]))
+        if delta > float(max_match_delta_s):
+            continue
+        error = math.dist(
+            [float(value) for value in odom["position_local"]],
+            [float(value) for value in nearest["position_local"]],
+        )
+        position_errors.append(error)
+    return {
+        "sample_count": len(position_errors),
+        "note": "numeric as-published comparison; frame semantics (ENU/NED) are resolved in the control-chain RCA",
+        "max_position_error_m": round(max(position_errors), 4) if position_errors else None,
+        "p95_position_error_m": round(_percentile(position_errors, 0.95), 4) if position_errors else None,
     }
 
 
@@ -239,7 +411,20 @@ def build_report(*, plan, spec, mission_events, recorder_events, flight_events,
     }
     active_interval = _active_interval(collision_monitor)
     uav2 = _uav2_monitor(recorder_events, active_interval)
-    perception = _perception(recorder_events)
+    perception = _perception(
+        recorder_events,
+        [float(value) for value in contract["spawn_world_enu"]],
+        float(contract["spawn_yaw_deg"]),
+        spec,
+    )
+    planner_limits = contract.get("planner_limits", {})
+    planner_chain = _planner_chain_metrics(
+        recorder_events,
+        float(planner_limits.get("max_velocity_mps", 0.0)),
+        float(planner_limits.get("max_acceleration_mps2", 0.0)),
+    )
+    control_chain = _control_chain_metrics(recorder_events)
+    tracking = _tracking_metrics(recorder_events)
     wall_clearance, static_clearance = _clearance_metrics(spec, section, trajectory)
     expected_terminal = [float(value) for value in contract["terminal_local"]]
     expected_frame = str(_terminal_action(plan)["goal"]["frame_id"])
@@ -351,7 +536,9 @@ def build_report(*, plan, spec, mission_events, recorder_events, flight_events,
     if static_clearance["value"] is None or static_clearance["value"] < 0.0:
         failures.append("static_obstacle_clearance")
     if contract["expected_obstacle_passage"]:
-        if not perception["static_obstacle_observed"] or not perception["dynamic_temporal_change_observed"]:
+        if perception["roi_evaluation_valid"] is not True:
+            failures.append("obstacle_perception")
+        elif not perception["static_obstacle_observed"] or not perception["dynamic_temporal_change_observed"]:
             failures.append("obstacle_perception")
     if collision_count["value"] is None:
         failures.append("collision_evidence")
@@ -391,6 +578,9 @@ def build_report(*, plan, spec, mission_events, recorder_events, flight_events,
         "planner_command_count": planner_count,
         "progress": progress,
         "perception": perception,
+        "planner_chain": planner_chain,
+        "control_chain": control_chain,
+        "tracking": tracking,
         "uav2_monitor": uav2,
         "watchdog_or_geofence_trip": watchdog_trip,
         "unexpected_offboard_loss": offboard_loss,
