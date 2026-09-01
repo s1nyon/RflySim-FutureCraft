@@ -8,6 +8,7 @@ import contextlib
 import datetime
 import hashlib
 import json
+import math
 import os
 import shutil
 import sys
@@ -105,9 +106,55 @@ def validated_runtime_entities(spec: Dict[str, Any], generated_manifest: Dict[st
         "owned_cleanup": "receipt_only",
         "entities": build_entity_manifest(spec),
     }
-    if generated_manifest != expected:
+    if not _manifest_matches(generated_manifest, expected):
         raise ValueError("generated entity manifest does not match spec-derived payload")
     return expected["entities"]
+
+
+def _manifest_matches(actual: Dict[str, Any], expected: Dict[str, Any]) -> bool:
+    """Full payload parity with float tolerance for cross-interpreter ULP noise.
+
+    Metadata (map_id, coordinate_frame, spec_sha256, owned_cleanup) is compared
+    strictly. Entity payloads are compared field-by-field; numbers use a tiny
+    relative tolerance so Windows Python 3.8 generated artifacts are accepted
+    by the WSL Python 3.10 runtime parity check while any real payload change
+    (center/scale/id/name/extra entity) still fails closed.
+    """
+    if actual.keys() != expected.keys():
+        return False
+    for key in ("map_id", "coordinate_frame", "spec_sha256", "owned_cleanup"):
+        if actual.get(key) != expected.get(key):
+            return False
+    actual_entities = actual.get("entities")
+    expected_entities = expected.get("entities")
+    if not isinstance(actual_entities, list) or not isinstance(expected_entities, list):
+        return False
+    if len(actual_entities) != len(expected_entities):
+        return False
+    return all(
+        _entity_matches(actual_entity, expected_entity)
+        for actual_entity, expected_entity in zip(actual_entities, expected_entities)
+    )
+
+
+def _entity_matches(actual: Any, expected: Any) -> bool:
+    if isinstance(expected, float):
+        return isinstance(actual, (int, float)) and math.isclose(
+            float(actual), expected, rel_tol=1e-9, abs_tol=1e-9
+        )
+    if isinstance(expected, list):
+        return (
+            isinstance(actual, list)
+            and len(actual) == len(expected)
+            and all(_entity_matches(left, right) for left, right in zip(actual, expected))
+        )
+    if isinstance(expected, dict):
+        return (
+            isinstance(actual, dict)
+            and actual.keys() == expected.keys()
+            and all(_entity_matches(actual[key], value) for key, value in expected.items())
+        )
+    return actual == expected
 
 
 def rflysim_box_request(item: Dict[str, Any], window_id: int) -> Dict[str, Any]:
