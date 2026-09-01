@@ -44,7 +44,7 @@ def main():
         (6.0, 0.7, 1.2),
         (100.0, 100.0, 100.0),
     ]
-    summary = module.summarize_roi_points(points, regions)
+    summary = module.summarize_roi_points(iter(points), regions)
     assert summary["static_box_a"]["point_count"] == 1
     assert summary["static_box_a"]["centroid_local"] == [4.5, 1.3, 0.45]
     assert summary["moving_pendulum"]["point_count"] == 1

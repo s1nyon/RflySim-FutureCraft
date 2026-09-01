@@ -23,6 +23,7 @@ REQUIRED_UAV1_EVENTS = (
     "landing_confirmed",
     "disarm_confirmed",
 )
+MIN_OBSTACLE_ROI_POINTS = 5
 
 
 def _event_present(events: Iterable[Dict[str, Any]], name: str, uav: str = "uav1") -> bool:
@@ -93,6 +94,7 @@ def _active_interval(collision_monitor):
 
 def _uav2_monitor(recorder_events, active_interval):
     samples = [item for item in recorder_events if item.get("kind") == "uav2_state_sample"]
+    observations = [item for item in recorder_events if item.get("kind") == "uav2_state_observation"]
     samples.sort(key=lambda item: float(item["receive_monotonic"]))
     intervals = [
         float(second["receive_monotonic"]) - float(first["receive_monotonic"])
@@ -105,7 +107,7 @@ def _uav2_monitor(recorder_events, active_interval):
             "mode": str(item.get("mode", "")),
             "connected": bool(item.get("connected", False)),
         }
-        for item in samples
+        for item in samples + observations
         if (bool(item.get("armed")) or str(item.get("mode", "")) == "OFFBOARD"
             or not bool(item.get("connected", False)))
     ]
@@ -134,6 +136,7 @@ def _uav2_monitor(recorder_events, active_interval):
         )
     return {
         "sample_count": len(samples),
+        "state_observation_count": len(observations),
         "monitoring_interval_s": round(statistics.median(intervals), 3) if intervals else None,
         "first_state": state(samples[0] if samples else None),
         "final_state": state(samples[-1] if samples else None),
@@ -153,7 +156,7 @@ def _perception(recorder_events):
         dynamic = regions.get("moving_pendulum", {})
         static_counts.append(int(static.get("point_count", 0)))
         dynamic_counts.append(int(dynamic.get("point_count", 0)))
-        if int(dynamic.get("point_count", 0)) > 0 and dynamic.get("centroid_local") is not None:
+        if int(dynamic.get("point_count", 0)) >= MIN_OBSTACLE_ROI_POINTS and dynamic.get("centroid_local") is not None:
             dynamic_centroids.append(tuple(float(value) for value in dynamic["centroid_local"]))
     maximum_shift = 0.0
     for first in dynamic_centroids:
@@ -161,9 +164,10 @@ def _perception(recorder_events):
             maximum_shift = max(maximum_shift, math.sqrt(sum((a - b) ** 2 for a, b in zip(first, second))))
     return {
         "source": "faster_lio_registered_cloud_evaluation_roi",
-        "static_obstacle_observed": any(value > 0 for value in static_counts),
+        "minimum_roi_points": MIN_OBSTACLE_ROI_POINTS,
+        "static_obstacle_observed": any(value >= MIN_OBSTACLE_ROI_POINTS for value in static_counts),
         "static_point_count_max": max(static_counts) if static_counts else 0,
-        "dynamic_obstacle_observed": any(value > 0 for value in dynamic_counts),
+        "dynamic_obstacle_observed": any(value >= MIN_OBSTACLE_ROI_POINTS for value in dynamic_counts),
         "dynamic_centroid_shift_m": round(maximum_shift, 3),
         "dynamic_temporal_change_observed": maximum_shift >= 0.1,
         "frame_count": len(roi_events),
@@ -248,11 +252,23 @@ def build_report(*, plan, spec, mission_events, recorder_events, flight_events,
         except (KeyError, TypeError, ValueError):
             collision_available = False
     if collision_available:
+        active_collisions = []
+        ignored_collisions = 0
+        for item in flight_events:
+            if item.get("event") != "collision":
+                continue
+            timestamp = item.get("timestamp")
+            if timestamp is None or active_interval[0] <= float(timestamp) <= active_interval[1]:
+                active_collisions.append(item)
+            else:
+                ignored_collisions += 1
         collision_count = {
-            "value": sum(item.get("event") == "collision" for item in flight_events),
+            "value": len(active_collisions),
             "source_class": "simulator_evaluation",
             "source": str(collision_monitor.get("source")),
         }
+        if ignored_collisions:
+            collision_count["ignored_outside_active_interval"] = ignored_collisions
     else:
         collision_count = {
             "value": None,
@@ -272,12 +288,20 @@ def build_report(*, plan, spec, mission_events, recorder_events, flight_events,
         for item in mission_events
     )
     watchdog_trip = any(
-        item.get("decision") in ("land", "no_autoland")
-        or item.get("event") in ("watchdog_trip", "geofence_trip")
+        (
+            item.get("decision") in ("land", "no_autoland")
+            and not (
+                item.get("decision") == "land"
+                and item.get("reason") == "mode_loss"
+                and item.get("mode") == "AUTO.LAND"
+            )
+        ) or item.get("event") in ("watchdog_trip", "geofence_trip")
         for item in watchdog_events
     )
     offboard_loss = any(
-        item.get("event") == "mode_loss" and item.get("uav") == "uav1"
+        item.get("event") == "mode_loss"
+        and item.get("uav") == "uav1"
+        and str(item.get("mode", "")) != "AUTO.LAND"
         for item in flight_events
     )
     failures = []

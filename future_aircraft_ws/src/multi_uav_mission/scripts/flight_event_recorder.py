@@ -76,40 +76,90 @@ def _write_event(path, event):
         handle.write(json.dumps(event, sort_keys=True) + "\n")
 
 
-def _ue4_crash_monitor(rflysim_root, output, interval_s=0.5):
-    api_dir = rflysim_root / "RflySimAPIs" / "RflySimSDK" / "ue"
-    if not api_dir.is_dir():
-        raise RuntimeError(f"RflySim UE API directory does not exist: {api_dir}")
-    sys.path.insert(0, str(api_dir))
-    import UE4CtrlAPI  # pylint: disable=import-error,import-outside-toplevel
+def write_crash_monitor_status(path, *, available, monitor_started_wall_time=None,
+                               last_heartbeat_wall_time=None, error=None):
+    """Atomically expose crash-listener availability to an acceptance runner."""
+    value = {
+        "available": bool(available),
+        "error": str(error) if error is not None else None,
+        "last_heartbeat_wall_time": (
+            float(last_heartbeat_wall_time) if last_heartbeat_wall_time is not None else None
+        ),
+        "monitor_started_wall_time": (
+            float(monitor_started_wall_time) if monitor_started_wall_time is not None else None
+        ),
+        "source": "rflysim_reqVeCrashData_udp_20006",
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.replace(path)
 
-    client = UE4CtrlAPI.UE4CtrlAPI()
-    seen = set()
-    while True:
-        try:
-            for item in client.inReqVect:
-                if item.crash_type != 0:
-                    key = (
-                        item.copter_id,
-                        item.crash_type,
-                        tuple(round(float(v), 3) for v in item.crash_pos),
-                    )
-                    if key not in seen:
-                        seen.add(key)
-                        _write_event(
-                            output,
-                            crash_event(
-                                copter_id=item.copter_id,
-                                crash_type=item.crash_type,
-                                position_ned=item.pos_e,
-                                crash_pos_ned=item.crash_pos,
-                                crashed_name=item.crashed_name,
-                                timestamp=time.time(),
-                            ),
+
+def _ue4_crash_monitor(rflysim_root, output, status_path=None, interval_s=0.5):
+    started = None
+    try:
+        api_dir = rflysim_root / "RflySimAPIs" / "RflySimSDK" / "ue"
+        if not api_dir.is_dir():
+            raise RuntimeError(f"RflySim UE API directory does not exist: {api_dir}")
+        sys.path.insert(0, str(api_dir))
+        import UE4CtrlAPI  # pylint: disable=import-error,import-outside-toplevel
+
+        client = UE4CtrlAPI.UE4CtrlAPI()
+        started = time.time()
+        seen = set()
+        while True:
+            try:
+                for item in client.inReqVect:
+                    if item.crash_type != 0:
+                        key = (
+                            item.copter_id,
+                            item.crash_type,
+                            tuple(round(float(v), 3) for v in item.crash_pos),
                         )
-        except Exception as exc:  # keep the monitor alive
-            print(f"[WARN] crash monitor iteration failed: {exc}", file=sys.stderr)
-        time.sleep(interval_s)
+                        if key not in seen:
+                            seen.add(key)
+                            _write_event(
+                                output,
+                                crash_event(
+                                    copter_id=item.copter_id,
+                                    crash_type=item.crash_type,
+                                    position_ned=item.pos_e,
+                                    crash_pos_ned=item.crash_pos,
+                                    crashed_name=item.crashed_name,
+                                    timestamp=time.time(),
+                                ),
+                            )
+            except Exception as exc:  # allow a later poll to recover
+                if status_path is not None:
+                    write_crash_monitor_status(
+                        status_path,
+                        available=False,
+                        monitor_started_wall_time=started,
+                        last_heartbeat_wall_time=time.time(),
+                        error=exc,
+                    )
+                print(f"[WARN] crash monitor iteration failed: {exc}", file=sys.stderr)
+                time.sleep(interval_s)
+                continue
+            if status_path is not None:
+                write_crash_monitor_status(
+                    status_path,
+                    available=True,
+                    monitor_started_wall_time=started,
+                    last_heartbeat_wall_time=time.time(),
+                )
+            time.sleep(interval_s)
+    except Exception as exc:
+        if status_path is not None:
+            write_crash_monitor_status(
+                status_path,
+                available=False,
+                monitor_started_wall_time=started,
+                last_heartbeat_wall_time=time.time(),
+                error=exc,
+            )
+        print(f"[ERROR] crash monitor stopped: {exc}", file=sys.stderr)
 
 
 def main(argv=None):
@@ -124,6 +174,7 @@ def main(argv=None):
     parser.add_argument("--max-z", type=float, default=2.0)
     parser.add_argument("--max-speed-mps", type=float, default=2.0)
     parser.add_argument("--crash-listen", action="store_true")
+    parser.add_argument("--crash-status", type=Path)
     parser.add_argument(
         "--rflysim-root",
         type=Path,
@@ -202,7 +253,7 @@ def main(argv=None):
 
         monitor = threading.Thread(
             target=_ue4_crash_monitor,
-            args=(args.rflysim_root, args.output),
+            args=(args.rflysim_root, args.output, args.crash_status),
             daemon=True,
         )
         monitor.start()

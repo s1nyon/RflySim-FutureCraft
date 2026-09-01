@@ -14,9 +14,11 @@
 | `scripts/run_live_ego_swarm_dual.bat` | 当前双机 EGO-Swarm runner。 |
 | `scripts/run_live_fastlio_dual.bat` | 当前双机 sensor/Faster-LIO readiness runner。 |
 | `scripts/run_live_slam_ego_swarm_flight.bat` | 显式 simulation-only arming 的 PBL-1 flight runner。 |
+| `scripts/run_competition_course_v2_navigation.bat` | Competition Course V2 的 UAV1 Section A opt-in runner；live 必须显式 stack/manifest 与 simulation arm flags。 |
 | `scripts/run_rflysim_rviz.bat` | 可选的 per-UAV/dual RViz 调试入口，不参与 READY 或控制链。 |
 | `scripts/validate_asset_calibration.ps1` | 官方模型标定场的纯离线契约与 DryRun 验证入口。 |
 | `scripts/validate_competition_course_v2.ps1` | Competition Course V2 的基底、精确 ID 切换、净空、确定性产物、评价参考、loader 与 DryRun 总入口。 |
+| `scripts/validate_competition_course_v2_navigation.ps1` | UAV1 Section A plan、executor opt-in、recorder/report、runner 与 map parity 的纯离线总入口。 |
 | `scripts/validate_lifecycle.ps1` | Lifecycle 离线回归入口。 |
 | `scripts/validate_repository.ps1` | Repository、文档和结构 contract 总入口。 |
 | `scripts/validate_stage6c.ps1` | 当前 Stage 6C 核心离线门。 |
@@ -72,6 +74,7 @@
 | `scripts/sim_cli.psm1` | 根 `sim.ps1` 的委托实现。 |
 | `scripts/wsl/build_future_aircraft_ws.sh` | `sim.ps1 build` 的 WSL Catkin helper。 |
 | `scripts/wsl/cleanup_stage7_flight_chain.sh` | 当前 stack-scoped Stage 7 flight-chain 收尾。 |
+| `scripts/wsl/competition_course_v2_navigation.sh` | UAV1 Section A 的 stack/instance fail-closed WSL runner；只创建 UAV1 控制进程与只读 evidence 进程。 |
 | `scripts/wsl/lifecycle_common.sh` | WSL 创建时 PID/PGID 登记公共函数。 |
 | `scripts/wsl/live_stack_wsl_ops.sh` | WSL stack inspect/stop 显式 PID 操作。 |
 | `scripts/wsl/rviz_live.sh` | Lifecycle-owned RViz WSL session wrapper。 |

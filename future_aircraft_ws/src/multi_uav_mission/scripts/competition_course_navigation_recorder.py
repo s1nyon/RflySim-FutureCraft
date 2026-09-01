@@ -53,10 +53,17 @@ def build_roi_regions(spec, margin_m=0.2):
                     ]
                     corners.append(_local_point(world, spawn, yaw_deg))
         region = _bounds(corners, float(margin_m))
+        # Reject the horizontal floor return at the obstacle base; the side and
+        # top surfaces remain inside this evaluation-only ROI.
+        center_local = _local_point(center, spawn, yaw_deg)
+        region["minimum_local"][2] = max(
+            region["minimum_local"][2],
+            center_local[2] - float(size[2]) / 2.0 + 0.05,
+        )
         region.update({
             "frame": "uav1_local",
             "source": "spec_static_geometry",
-            "center_local": _local_point(center, spawn, yaw_deg),
+            "center_local": center_local,
         })
         regions[obstacle["name"]] = region
 
@@ -88,20 +95,23 @@ def build_roi_regions(spec, margin_m=0.2):
 
 def summarize_roi_points(points, regions):
     """Count and centroid XYZ points in each axis-aligned evaluation ROI."""
-    result = {}
-    for name, region in regions.items():
-        selected = [
-            [float(value) for value in point[:3]]
-            for point in points
+    accumulators = {name: {"count": 0, "sum": [0.0, 0.0, 0.0]} for name in regions}
+    for raw_point in points:
+        point = [float(value) for value in raw_point[:3]]
+        for name, region in regions.items():
             if all(
-                float(region["minimum_local"][index]) <= float(point[index]) <= float(region["maximum_local"][index])
+                float(region["minimum_local"][index]) <= point[index] <= float(region["maximum_local"][index])
                 for index in range(3)
-            )
-        ]
-        centroid = None
-        if selected:
-            centroid = [round(sum(point[index] for point in selected) / len(selected), 6) for index in range(3)]
-        result[name] = {"point_count": len(selected), "centroid_local": centroid}
+            ):
+                accumulator = accumulators[name]
+                accumulator["count"] += 1
+                for index in range(3):
+                    accumulator["sum"][index] += point[index]
+    result = {}
+    for name, accumulator in accumulators.items():
+        count = accumulator["count"]
+        centroid = [round(value / count, 6) for value in accumulator["sum"]] if count else None
+        result[name] = {"point_count": count, "centroid_local": centroid}
     return result
 
 
@@ -158,6 +168,12 @@ def run_ros(args, spec):
 
     def on_uav2(message):
         latest_uav2["message"] = message
+        event = uav2_state_event(
+            armed=message.armed, mode=message.mode, connected=message.connected,
+            receive_monotonic=time.monotonic(), receive_wall_time=time.time(),
+        )
+        event["kind"] = "uav2_state_observation"
+        write_event(event)
 
     def sample_uav2(_timer_event):
         message = latest_uav2["message"]

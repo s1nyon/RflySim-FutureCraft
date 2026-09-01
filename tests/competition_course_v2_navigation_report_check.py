@@ -185,7 +185,7 @@ def main():
         spec=spec,
         mission_events=mission_events(),
         recorder_events=recorder_events(),
-        flight_events=[{"event": "collision", "copter_id": 1, "crash_type": 2}],
+        flight_events=[{"event": "collision", "copter_id": 1, "crash_type": 2, "timestamp": 102.0}],
         watchdog_events=[],
         collision_monitor=monitor_status(),
         executor_exit_code=0,
@@ -193,6 +193,56 @@ def main():
     assert collision["ready"] is False
     assert collision["collision_count"]["value"] == 1
     assert "collision" in collision["failure_reasons"]
+
+    preflight_collision = report_module.build_report(
+        plan=plan,
+        spec=spec,
+        mission_events=mission_events(),
+        recorder_events=recorder_events(),
+        flight_events=[{"event": "collision", "copter_id": 1, "timestamp": 99.5}],
+        watchdog_events=[],
+        collision_monitor=monitor_status(),
+        executor_exit_code=0,
+    )
+    assert preflight_collision["collision_count"]["value"] == 0
+    assert preflight_collision["collision_count"]["ignored_outside_active_interval"] == 1
+
+    expected_land_transition = report_module.build_report(
+        plan=plan,
+        spec=spec,
+        mission_events=mission_events(),
+        recorder_events=recorder_events(),
+        flight_events=[{"event": "mode_loss", "uav": "uav1", "mode": "AUTO.LAND"}],
+        watchdog_events=[],
+        collision_monitor=monitor_status(),
+        executor_exit_code=0,
+    )
+    assert expected_land_transition["unexpected_offboard_loss"] is False
+
+    expected_land_watchdog = report_module.build_report(
+        plan=plan,
+        spec=spec,
+        mission_events=mission_events(),
+        recorder_events=recorder_events(),
+        flight_events=[{"event": "mode_loss", "uav": "uav1", "mode": "AUTO.LAND"}],
+        watchdog_events=[{"decision": "land", "reason": "mode_loss", "mode": "AUTO.LAND"}],
+        collision_monitor=monitor_status(),
+        executor_exit_code=0,
+    )
+    assert expected_land_watchdog["watchdog_or_geofence_trip"] is False
+
+    unexpected_mode_loss = report_module.build_report(
+        plan=plan,
+        spec=spec,
+        mission_events=mission_events(),
+        recorder_events=recorder_events(),
+        flight_events=[{"event": "mode_loss", "uav": "uav1", "mode": "POSCTL"}],
+        watchdog_events=[],
+        collision_monitor=monitor_status(),
+        executor_exit_code=0,
+    )
+    assert unexpected_mode_loss["unexpected_offboard_loss"] is True
+    assert "offboard_loss" in unexpected_mode_loss["failure_reasons"]
 
     uav2_violation_events = recorder_events()
     state = next(item for item in uav2_violation_events if item["kind"] == "uav2_state_sample")
@@ -211,6 +261,27 @@ def main():
     assert isolated["ready"] is False
     assert len(isolated["uav2_monitor"]["violations"]) == 1
     assert "uav2_isolation" in isolated["failure_reasons"]
+
+    transient_events = recorder_events()
+    transient_events.append({
+        "kind": "uav2_state_observation",
+        "receive_monotonic": 11.25,
+        "receive_wall_time": 101.25,
+        "armed": False,
+        "mode": "OFFBOARD",
+        "connected": True,
+    })
+    transient = report_module.build_report(
+        plan=plan,
+        spec=spec,
+        mission_events=mission_events(),
+        recorder_events=transient_events,
+        flight_events=[],
+        watchdog_events=[],
+        collision_monitor=monitor_status(),
+        executor_exit_code=0,
+    )
+    assert "uav2_isolation" in transient["failure_reasons"]
 
     disconnected_events = recorder_events()
     next(item for item in disconnected_events if item["kind"] == "uav2_state_sample")["connected"] = False

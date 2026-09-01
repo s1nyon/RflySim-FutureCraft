@@ -7,6 +7,8 @@ import argparse
 import importlib.util
 import math
 import sys
+import tempfile
+import json
 from pathlib import Path
 
 
@@ -89,6 +91,23 @@ def main() -> int:
     assert crash["event"] == "collision"
     assert crash["crash_type"] == -1
     assert crash["crashed_name"] == "boundary_wall"
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        status_path = Path(temp_dir) / "crash_monitor_status.json"
+        recorder.write_crash_monitor_status(
+            status_path,
+            available=True,
+            monitor_started_wall_time=4.0,
+            last_heartbeat_wall_time=5.0,
+        )
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+        assert status == {
+            "available": True,
+            "error": None,
+            "last_heartbeat_wall_time": 5.0,
+            "monitor_started_wall_time": 4.0,
+            "source": "rflysim_reqVeCrashData_udp_20006",
+        }
 
     return 0
 
