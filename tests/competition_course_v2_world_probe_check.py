@@ -26,7 +26,8 @@ def main():
         evaluate_dynamic,
         verify_receipt_scope,
     )
-    from competition_course_geometry import load_spec
+    from competition_course_geometry import build_entity_manifest, load_spec, pendulum_pose
+    from narrow_course_geometry import Vec3, enu_to_ned
 
     spec = load_spec(root / "config/maps/competition_course_v2.json")
     wall = {
@@ -53,27 +54,55 @@ def main():
     wrong_yaw["attitude_vendor_rad"] = [0.0, 0.0, 0.0]
     assert entity_errors(wall, wrong_yaw)[0]["kind"] == "yaw"
 
-    dynamic_item = {
-        "id": 15120, "name": "moving_pendulum", "category": "dynamic_obstacle",
-        "center": list(spec["dynamic_obstacle"]["pivot"]), "size": [0.25, 0.2, 0.7],
+    dynamic_spec = spec["dynamic_obstacle"]
+    dynamic_item = next(item for item in build_entity_manifest(spec) if item["id"] == 15120)
+    assert dynamic_item["center"] == list(pendulum_pose(dynamic_spec, 0.0))
+    assert dynamic_item["pivot"] == list(dynamic_spec["pivot"])
+
+    # Regression: the generic retention check must NOT pin the moving pendulum to
+    # its manifest t=0 centre while the motion controller is already running.
+    period = float(dynamic_spec["period_sec"])
+    moving_pose_enu = pendulum_pose(dynamic_spec, period / 4.0)
+    moving_observation = {
+        "position_ned_m": [float(value) for value in enu_to_ned(Vec3(*moving_pose_enu))],
+        "attitude_vendor_rad": [0.0, 0.0, 0.0],
+        "asset_local_dimensions_m": dynamic_item["size"],
     }
+    assert entity_errors(dynamic_item, moving_observation) == []
+
     moving = [
+        {"position_enu_m": [22.0, -0.6, 1.36], "asset_local_dimensions_m": [0.25, 0.2, 0.7]},
+        {"position_enu_m": [22.0, -0.3, 1.24], "asset_local_dimensions_m": [0.25, 0.2, 0.7]},
         {"position_enu_m": [22.0, 0.0, 1.2], "asset_local_dimensions_m": [0.25, 0.2, 0.7]},
         {"position_enu_m": [22.0, 0.3, 1.24], "asset_local_dimensions_m": [0.25, 0.2, 0.7]},
         {"position_enu_m": [22.0, 0.6, 1.36], "asset_local_dimensions_m": [0.25, 0.2, 0.7]},
     ]
-    dynamic_pass = evaluate_dynamic(dynamic_item, moving)
+    dynamic_pass = evaluate_dynamic(dynamic_item, moving, dynamic_spec)
     assert dynamic_pass["motion_errors"] == []
+    assert math.isclose(dynamic_pass["sweep_envelope_enu_m"]["y_min_m"], -0.6, abs_tol=1e-9)
+    assert math.isclose(dynamic_pass["sweep_envelope_enu_m"]["z_min_m"], 1.2, abs_tol=1e-9)
 
     native_size = [dict(sample) for sample in moving]
     native_size[-1]["asset_local_dimensions_m"] = [0.25, 0.2, 2.1]
-    assert evaluate_dynamic(dynamic_item, native_size)["motion_errors"][0]["kind"] == "dimension"
+    assert evaluate_dynamic(dynamic_item, native_size, dynamic_spec)["motion_errors"][0]["kind"] == "dimension"
 
     frozen = [
         {"position_enu_m": [22.0, 0.0, 1.2], "asset_local_dimensions_m": [0.25, 0.2, 0.7]},
         {"position_enu_m": [22.0, 0.01, 1.2], "asset_local_dimensions_m": [0.25, 0.2, 0.7]},
+        {"position_enu_m": [22.0, 0.0, 1.2], "asset_local_dimensions_m": [0.25, 0.2, 0.7]},
+        {"position_enu_m": [22.0, 0.0, 1.2], "asset_local_dimensions_m": [0.25, 0.2, 0.7]},
+        {"position_enu_m": [22.0, 0.01, 1.2], "asset_local_dimensions_m": [0.25, 0.2, 0.7]},
     ]
-    assert evaluate_dynamic(dynamic_item, frozen)["motion_errors"][0]["kind"] == "motion"
+    assert evaluate_dynamic(dynamic_item, frozen, dynamic_spec)["motion_errors"][0]["kind"] == "motion"
+
+    sparse = [dict(sample) for sample in moving[:2]]
+    sparse_result = evaluate_dynamic(dynamic_item, sparse, dynamic_spec)
+    assert any(error["kind"] == "insufficient_samples" for error in sparse_result["motion_errors"])
+
+    outside_envelope = [dict(sample) for sample in moving]
+    outside_envelope[-1]["position_enu_m"] = [22.0, 2.0, 1.36]
+    envelope_result = evaluate_dynamic(dynamic_item, outside_envelope, dynamic_spec)
+    assert any(error["kind"] == "sweep_envelope" for error in envelope_result["motion_errors"])
 
     entities = [wall, dynamic_item]
     observations = {

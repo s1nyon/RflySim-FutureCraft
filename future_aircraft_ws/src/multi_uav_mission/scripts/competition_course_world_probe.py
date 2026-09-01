@@ -23,6 +23,7 @@ POSITION_TOLERANCE_M = 0.03
 DIMENSION_TOLERANCE_M = 0.03
 YAW_TOLERANCE_RAD = 0.05
 PER_ENTITY_TIMEOUT_S = 1.5
+DYNAMIC_MIN_SAMPLE_COUNT = 5
 DYNAMIC_MIN_Y_RANGE_M = 0.15
 DYNAMIC_MIN_Z_RANGE_M = 0.02
 
@@ -63,6 +64,12 @@ def normalize_observation(raw: Any) -> Dict[str, Any]:
 
 def entity_errors(item: Dict[str, Any], observation: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Deterministic static-contract errors for one entity observation."""
+    if item["category"] == "dynamic_obstacle":
+        # The dynamic acceptance contract is owned exclusively by
+        # evaluate_dynamic(). While the motion controller is running the current
+        # pose must NOT be pinned to the manifest t=0 centre, and dimension/scale
+        # is re-verified from live motion samples.
+        return []
     errors: List[Dict[str, Any]] = []
     wanted_ned = [float(value) for value in enu_to_ned(Vec3(*(float(value) for value in item["center"])))]
     position = observation["position_ned_m"]
@@ -81,7 +88,7 @@ def entity_errors(item: Dict[str, Any], observation: Dict[str, Any]) -> List[Dic
     return errors
 
 
-def evaluate_dynamic(dynamic_item: Dict[str, Any], samples: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+def evaluate_dynamic(dynamic_item: Dict[str, Any], samples: Iterable[Dict[str, Any]], dynamic_spec: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Prove the pendulum exists at the right Scale and keeps moving."""
     samples = list(samples)
     result = {
@@ -89,11 +96,18 @@ def evaluate_dynamic(dynamic_item: Dict[str, Any], samples: Iterable[Dict[str, A
         "sample_count": len(samples),
         "dimensions_m": None,
         "motion_range_enu_m": None,
+        "sweep_envelope_enu_m": None,
         "motion_errors": [],
     }
     if not samples:
         result["motion_errors"].append({"id": dynamic_item["id"], "kind": "no_samples", "detail": "pendulum produced no SDK updates"})
         return result
+    if len(samples) < DYNAMIC_MIN_SAMPLE_COUNT:
+        result["motion_errors"].append({
+            "id": dynamic_item["id"], "kind": "insufficient_samples",
+            "sample_count": len(samples), "required_sample_count": DYNAMIC_MIN_SAMPLE_COUNT,
+            "detail": "pendulum observation window produced too few SDK updates",
+        })
     result["dimensions_m"] = samples[-1]["asset_local_dimensions_m"]
     expected_size = [float(value) for value in dynamic_item["size"]]
     if max(abs(actual - target) for actual, target in zip(result["dimensions_m"], expected_size)) > DIMENSION_TOLERANCE_M:
@@ -115,6 +129,30 @@ def evaluate_dynamic(dynamic_item: Dict[str, Any], samples: Iterable[Dict[str, A
             "required_y_range_m": DYNAMIC_MIN_Y_RANGE_M, "required_z_range_m": DYNAMIC_MIN_Z_RANGE_M,
             "detail": "pendulum position did not change enough over the observation window",
         })
+    if dynamic_spec is not None:
+        pivot = [float(value) for value in dynamic_spec["pivot"]]
+        length = float(dynamic_spec["length_m"])
+        amplitude = math.radians(float(dynamic_spec["amplitude_deg"]))
+        envelope = {
+            "x_m": pivot[0],
+            "y_min_m": pivot[1] - length * math.sin(amplitude),
+            "y_max_m": pivot[1] + length * math.sin(amplitude),
+            "z_min_m": pivot[2] - length,
+            "z_max_m": pivot[2] - length * math.cos(amplitude),
+        }
+        result["sweep_envelope_enu_m"] = envelope
+        outside = []
+        for index, sample in enumerate(samples):
+            x, y, z = (float(sample["position_enu_m"][axis]) for axis in (0, 1, 2))
+            if (abs(x - envelope["x_m"]) > POSITION_TOLERANCE_M or
+                    y < envelope["y_min_m"] - POSITION_TOLERANCE_M or y > envelope["y_max_m"] + POSITION_TOLERANCE_M or
+                    z < envelope["z_min_m"] - POSITION_TOLERANCE_M or z > envelope["z_max_m"] + POSITION_TOLERANCE_M):
+                outside.append({"sample_index": index, "position_enu_m": [x, y, z], "envelope_enu_m": envelope})
+        if outside:
+            result["motion_errors"].append({
+                "id": dynamic_item["id"], "kind": "sweep_envelope", "outside_samples": outside,
+                "detail": "observed dynamic position left the authoritative pendulum sweep envelope",
+            })
     return result
 
 
@@ -168,7 +206,7 @@ def query_entity(api, object_id: int, window_id: int, timeout_s: float = PER_ENT
     return None
 
 
-def collect_dynamic_samples(api, dynamic_item: Dict[str, Any], window_id: int, duration_s: float) -> Dict[str, Any]:
+def collect_dynamic_samples(api, dynamic_item: Dict[str, Any], window_id: int, duration_s: float, dynamic_spec: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     samples: List[Dict[str, Any]] = []
     deadline = time.monotonic() + max(float(duration_s), 0.5)
     while time.monotonic() < deadline:
@@ -179,7 +217,7 @@ def collect_dynamic_samples(api, dynamic_item: Dict[str, Any], window_id: int, d
             record["position_enu_m"] = [ned[1], ned[0], -ned[2]]
             samples.append(record)
         time.sleep(0.02)
-    return evaluate_dynamic(dynamic_item, samples)
+    return evaluate_dynamic(dynamic_item, samples, dynamic_spec)
 
 
 def probe_world(
@@ -219,7 +257,7 @@ def probe_world(
         dynamic_item = next(item for item in entities if item["category"] == "dynamic_obstacle")
         dynamic: Dict[str, Any] = {"object_id": dynamic_item["id"], "sample_count": 0, "motion_errors": []}
         if int(dynamic_item["id"]) not in missing:
-            dynamic = collect_dynamic_samples(api, dynamic_item, window_id, dynamic_sample_seconds)
+            dynamic = collect_dynamic_samples(api, dynamic_item, window_id, dynamic_sample_seconds, spec["dynamic_obstacle"])
     finally:
         end_receiver = getattr(api, "endUE4MsgRec", None)
         if callable(end_receiver):
