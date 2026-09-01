@@ -124,6 +124,18 @@ def recorder_events():
                 "moving_pendulum": {"point_count": 28, "centroid_local": [6.0, 0.55, 1.2]},
             },
         },
+        {
+            "kind": "registered_cloud_roi",
+            "receive_monotonic": 13.5,
+            "receive_wall_time": 103.5,
+            "cloud_frame_id": "uav1_camera_init",
+            "expected_roi_frame_ids": ["uav1_camera_init"],
+            "roi_evaluation_valid": True,
+            "regions": {
+                "static_box_a": {"point_count": 1, "centroid_local": [4.5, 1.3, 0.45]},
+                "moving_pendulum": {"point_count": 6, "centroid_local": [6.0, 0.8, 1.2]},
+            },
+        },
     ])
     result.append({
         "kind": "ego_bspline",
@@ -194,12 +206,16 @@ def main():
     assert accepted["uav2_monitor"]["covered_active_interval"] is True
     assert accepted["progress"]["regions_passed"] == ["static_box_a", "moving_pendulum"]
     assert accepted["progress"]["endpoint_reached"] is True
-    assert accepted["perception"]["static_obstacle_observed"] is True
+    assert accepted["perception"]["static_registered_cloud_observed"] is True
     assert accepted["perception"]["dynamic_temporal_change_observed"] is True
     assert accepted["perception"]["roi_evaluation_valid"] is True
     assert accepted["perception"]["cloud_frame_ids_observed"] == ["uav1_camera_init"]
-    assert accepted["perception"]["static_obstacle_observed_by_roi"] is True
-    assert accepted["perception"]["static_obstacle_observed_by_trajectory"] is True
+    assert accepted["perception"]["static_registered_cloud_observed"] is True
+    assert accepted["perception"]["static_obstacle_frames_observed"] >= 3
+    assert accepted["perception"]["planner_avoidance_consistent"] is True
+    assert accepted["collision_free"] is True
+    assert accepted["navigation_clearance_pass"] is True
+    assert accepted["wall_clearance_threshold_m"] == 0.25
     assert accepted["planner_chain"]["sample_count"] == 12
     assert accepted["planner_chain"]["max_desired_velocity_mps"] == 0.3
     assert accepted["planner_chain"]["velocity_over_limit_count"] == 0
@@ -295,12 +311,13 @@ def main():
     )
     assert invalid["perception"]["roi_evaluation_valid"] is False
     assert invalid["perception"]["roi_evaluation_invalid_frames"] == ["uav1_map"]
-    assert invalid["perception"]["static_obstacle_observed_by_roi"] is False
-    assert invalid["perception"]["static_obstacle_observed_by_trajectory"] is True
-    assert invalid["perception"]["static_obstacle_observed"] is True
-    # ROI frame invalid: dynamic ROI evidence is unavailable, so the overall
-    # obstacle-perception gate still fails closed even though static box is
-    # independently proven by the EGO trajectory.
+    assert invalid["perception"]["static_roi_frame_valid"] is False
+    assert invalid["perception"]["static_registered_cloud_observed"] is False
+    assert invalid["perception"]["planner_avoidance_consistent"] is True
+    # ROI frame invalid: static registered-cloud evidence is invalid and
+    # dynamic ROI evidence is unavailable, so the overall obstacle-perception
+    # gate fails closed. Planner avoidance is reported independently and does
+    # not override the perception verdict.
     assert "obstacle_perception" in invalid["failure_reasons"]
 
     piercing = copy.deepcopy(recorder_events())
@@ -329,10 +346,111 @@ def main():
         collision_monitor=monitor_status(),
         executor_exit_code=0,
     )
-    assert pierced["perception"]["static_obstacle_observed_by_trajectory"] is False
+    assert pierced["perception"]["planner_avoidance_consistent"] is False
     assert pierced["perception"]["static_trajectory_evidence"]["avoids_static_obstacle"] is False
-    assert pierced["perception"]["static_obstacle_observed"] is False
+    assert pierced["perception"]["static_registered_cloud_observed"] is False
     assert "obstacle_perception" in pierced["failure_reasons"]
+
+    sparse_cloud_absent = copy.deepcopy(recorder_events())
+    for item in sparse_cloud_absent:
+        if item.get("kind") == "registered_cloud_roi":
+            item["regions"] = {
+                "static_box_a": {"point_count": 0, "centroid_local": None},
+                "moving_pendulum": {"point_count": 6, "centroid_local": [6.0, 0.5, 1.2]},
+            }
+    sparse_absent = report_module.build_report(
+        plan=plan,
+        spec=spec,
+        mission_events=mission_events(),
+        recorder_events=sparse_cloud_absent,
+        flight_events=[],
+        watchdog_events=[],
+        collision_monitor=monitor_status(),
+        executor_exit_code=0,
+    )
+    assert sparse_absent["perception"]["static_registered_cloud_observed"] is False
+    assert sparse_absent["perception"]["static_obstacle_frames_observed"] == 0
+    assert sparse_absent["perception"]["planner_avoidance_consistent"] is True
+    assert "obstacle_perception" in sparse_absent["failure_reasons"]
+
+    single_frame = copy.deepcopy(recorder_events())
+    roi_seen = False
+    for item in single_frame:
+        if item.get("kind") == "registered_cloud_roi":
+            if roi_seen:
+                item["regions"] = {
+                    "static_box_a": {"point_count": 0, "centroid_local": None},
+                    "moving_pendulum": {"point_count": 6, "centroid_local": [6.0, 0.5, 1.2]},
+                }
+            roi_seen = True
+    single = report_module.build_report(
+        plan=plan,
+        spec=spec,
+        mission_events=mission_events(),
+        recorder_events=single_frame,
+        flight_events=[],
+        watchdog_events=[],
+        collision_monitor=monitor_status(),
+        executor_exit_code=0,
+    )
+    assert single["perception"]["static_registered_cloud_observed"] is False
+    assert single["perception"]["static_obstacle_frames_observed"] == 1
+
+    wrong_centroid = copy.deepcopy(recorder_events())
+    for item in wrong_centroid:
+        if item.get("kind") == "registered_cloud_roi":
+            item["regions"]["static_box_a"]["centroid_local"] = [9.0, 9.0, 0.5]
+    wrong_cent = report_module.build_report(
+        plan=plan,
+        spec=spec,
+        mission_events=mission_events(),
+        recorder_events=wrong_centroid,
+        flight_events=[],
+        watchdog_events=[],
+        collision_monitor=monitor_status(),
+        executor_exit_code=0,
+    )
+    assert wrong_cent["perception"]["static_registered_cloud_observed"] is False
+    assert wrong_cent["perception"]["static_obstacle_centroid_error"] > 0.5
+
+    # Wall clearance contract: near-wall trajectory is collision-free but not
+    # stable-baseline compliant; through-wall trajectory is not collision-free.
+    near_wall = copy.deepcopy(recorder_events())
+    for item in near_wall:
+        if item.get("kind") == "uav1_odom":
+            item["position_local"] = [item["position_local"][0], 0.275, 1.0]
+    near = report_module.build_report(
+        plan=plan,
+        spec=spec,
+        mission_events=mission_events(),
+        recorder_events=near_wall,
+        flight_events=[],
+        watchdog_events=[],
+        collision_monitor=monitor_status(),
+        executor_exit_code=0,
+    )
+    assert near["collision_free"] is True
+    assert near["navigation_clearance_pass"] is False
+    assert near["minimum_wall_clearance_m"]["value"] < 0.25
+    assert "navigation_clearance" in near["failure_reasons"]
+
+    through_wall = copy.deepcopy(recorder_events())
+    for item in through_wall:
+        if item.get("kind") == "uav1_odom":
+            item["position_local"] = [item["position_local"][0], -0.12, 1.0]
+    through = report_module.build_report(
+        plan=plan,
+        spec=spec,
+        mission_events=mission_events(),
+        recorder_events=through_wall,
+        flight_events=[],
+        watchdog_events=[],
+        collision_monitor=monitor_status(),
+        executor_exit_code=0,
+    )
+    assert through["collision_free"] is False
+    assert through["navigation_clearance_pass"] is False
+    assert "wall_clearance" in through["failure_reasons"]
 
     late_uav2 = recorder_events()
     late_uav2[:] = [

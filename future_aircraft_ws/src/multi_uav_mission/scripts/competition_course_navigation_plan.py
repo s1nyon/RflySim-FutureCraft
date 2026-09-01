@@ -157,6 +157,11 @@ def _validate_navigation_config(config: Dict[str, Any], spec: Dict[str, Any], pr
     for label in ("max_velocity_mps", "max_acceleration_mps2"):
         if _finite(planner_limits[label], label) <= 0.0:
             raise ValueError("{} must be positive".format(label))
+    clearance = config.get("navigation_clearance")
+    if not isinstance(clearance, dict):
+        raise ValueError("navigation config missing navigation_clearance")
+    if _finite(clearance["min_wall_clearance_m"], "min_wall_clearance_m") <= 0.0:
+        raise ValueError("min_wall_clearance_m must be positive")
     return profiles[profile]
 
 
@@ -242,6 +247,12 @@ def build_plan(live_config: Dict[str, Any], map_spec: Dict[str, Any], nav_config
                 "max_velocity_mps": float(nav_config["planner_limits"]["max_velocity_mps"]),
                 "max_acceleration_mps2": float(nav_config["planner_limits"]["max_acceleration_mps2"]),
             },
+            "navigation_clearance_threshold_m": float(
+                nav_config["navigation_clearance"]["min_wall_clearance_m"]
+            ),
+            "navigation_clearance_source": str(
+                nav_config["navigation_clearance"].get("source", "")
+            ),
         },
         "evaluation_contract": {
             "runtime_decision_source": "lidar_driven",

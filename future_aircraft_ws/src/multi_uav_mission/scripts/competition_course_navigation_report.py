@@ -24,6 +24,8 @@ REQUIRED_UAV1_EVENTS = (
     "disarm_confirmed",
 )
 MIN_OBSTACLE_ROI_POINTS = 5
+STATIC_SPARSE_MIN_FRAMES = 3
+STATIC_CENTROID_ERROR_TOLERANCE_M = 0.5
 
 
 def _local_point(world, spawn, yaw_deg):
@@ -195,9 +197,14 @@ def _perception(recorder_events, spawn, yaw_deg, spec):
         if item.get("roi_evaluation_valid") is not True
     ]
     static_counts = []
+    static_centroids = []
     dynamic_centroids = []
     dynamic_counts = []
     expected_frames = []
+    static_center_local = None
+    static_matches = [item for item in spec["static_obstacles"] if item.get("segment") == "section_a"]
+    if len(static_matches) == 1:
+        static_center_local = _local_point(static_matches[0]["center"], spawn, yaw_deg)
     for item in roi_events:
         expected = item.get("expected_roi_frame_ids")
         if isinstance(expected, list):
@@ -205,7 +212,10 @@ def _perception(recorder_events, spawn, yaw_deg, spec):
         regions = item.get("regions", {})
         static = regions.get("static_box_a", {})
         dynamic = regions.get("moving_pendulum", {})
-        static_counts.append(int(static.get("point_count", 0)))
+        static_count = int(static.get("point_count", 0))
+        static_counts.append(static_count)
+        if static_count > 0 and static.get("centroid_local") is not None:
+            static_centroids.append(tuple(float(value) for value in static["centroid_local"]))
         dynamic_counts.append(int(dynamic.get("point_count", 0)))
         if int(dynamic.get("point_count", 0)) >= MIN_OBSTACLE_ROI_POINTS and dynamic.get("centroid_local") is not None:
             dynamic_centroids.append(tuple(float(value) for value in dynamic["centroid_local"]))
@@ -215,23 +225,58 @@ def _perception(recorder_events, spawn, yaw_deg, spec):
             maximum_shift = max(maximum_shift, math.sqrt(sum((a - b) ** 2 for a, b in zip(first, second))))
     roi_valid = not invalid_frames and bool(roi_events)
     trajectory_evidence = _static_trajectory_evidence(recorder_events, spawn, yaw_deg, spec)
-    static_observed = any(value >= MIN_OBSTACLE_ROI_POINTS for value in static_counts)
-    static_observed_by_trajectory = bool(
+    frames_with_points = sum(1 for value in static_counts if value >= 1)
+    total_points = sum(static_counts)
+    centroid_error = None
+    if static_center_local is not None and static_centroids:
+        centroid_error = min(
+            math.dist(
+                static_center_local[:2],
+                [float(value) for value in centroid[:2]],
+            )
+            for centroid in static_centroids
+        )
+    static_registered_cloud_observed = bool(
+        roi_valid
+        and frames_with_points >= STATIC_SPARSE_MIN_FRAMES
+        and (
+            centroid_error is None
+            or centroid_error <= STATIC_CENTROID_ERROR_TOLERANCE_M
+        )
+    )
+    planner_avoidance_consistent = bool(
         trajectory_evidence.get("trajectory_evidence")
         and trajectory_evidence.get("avoids_static_obstacle")
     )
     return {
         "source": "faster_lio_registered_cloud_evaluation_roi",
         "minimum_roi_points": MIN_OBSTACLE_ROI_POINTS,
+        "static_sparse_min_frames": STATIC_SPARSE_MIN_FRAMES,
+        "static_centroid_error_tolerance_m": STATIC_CENTROID_ERROR_TOLERANCE_M,
         "roi_evaluation_valid": roi_valid,
         "cloud_frame_ids_observed": sorted(set(str(item.get("cloud_frame_id")) for item in roi_events)),
         "expected_roi_frame_ids": sorted(set(expected_frames)),
         "roi_evaluation_invalid_frames": sorted(set(invalid_frames)),
-        "static_obstacle_observed": static_observed or static_observed_by_trajectory,
-        "static_obstacle_observed_by_roi": static_observed,
-        "static_obstacle_observed_by_trajectory": static_observed_by_trajectory,
+        "static_roi_frame_valid": roi_valid,
+        "static_registered_cloud_observed": static_registered_cloud_observed,
+        "static_obstacle_frames_observed": frames_with_points,
+        "static_obstacle_max_points": max(static_counts) if static_counts else 0,
+        "static_obstacle_total_points": total_points,
+        "static_obstacle_centroid_error": (
+            round(centroid_error, 4) if centroid_error is not None else None
+        ),
+        "planner_avoidance_consistent": planner_avoidance_consistent,
+        "planner_min_signed_distance_to_static_obstacle": (
+            trajectory_evidence.get("minimum_signed_distance_m")
+            if trajectory_evidence.get("trajectory_evidence")
+            else None
+        ),
+        "planner_obstacle_region_coverage": (
+            trajectory_evidence.get("trajectory_covers_obstacle_zone")
+            if trajectory_evidence.get("trajectory_evidence")
+            else False
+        ),
         "static_trajectory_evidence": trajectory_evidence,
-        "static_point_count_max": max(static_counts) if static_counts else 0,
         "dynamic_obstacle_observed": any(value >= MIN_OBSTACLE_ROI_POINTS for value in dynamic_counts),
         "dynamic_centroid_shift_m": round(maximum_shift, 3),
         "dynamic_temporal_change_observed": maximum_shift >= 0.1,
@@ -531,14 +576,29 @@ def build_report(*, plan, spec, mission_events, recorder_events, flight_events,
         failures.append("watchdog_or_geofence")
     if offboard_loss:
         failures.append("offboard_loss")
-    if wall_clearance["value"] is None or wall_clearance["value"] < 0.0:
+    collision_free = wall_clearance["value"] is not None and wall_clearance["value"] >= 0.0
+    clearance_threshold = contract.get("navigation_clearance_threshold_m")
+    if clearance_threshold is not None:
+        clearance_threshold = float(clearance_threshold)
+        navigation_clearance_pass = (
+            wall_clearance["value"] is not None
+            and wall_clearance["value"] >= clearance_threshold
+        )
+    else:
+        navigation_clearance_pass = None
+    if not collision_free:
         failures.append("wall_clearance")
+    if navigation_clearance_pass is False:
+        failures.append("navigation_clearance")
     if static_clearance["value"] is None or static_clearance["value"] < 0.0:
         failures.append("static_obstacle_clearance")
     if contract["expected_obstacle_passage"]:
         if perception["roi_evaluation_valid"] is not True:
             failures.append("obstacle_perception")
-        elif not perception["static_obstacle_observed"] or not perception["dynamic_temporal_change_observed"]:
+        elif (
+            not perception["static_registered_cloud_observed"]
+            or not perception["dynamic_temporal_change_observed"]
+        ):
             failures.append("obstacle_perception")
     if collision_count["value"] is None:
         failures.append("collision_evidence")
@@ -550,6 +610,7 @@ def build_report(*, plan, spec, mission_events, recorder_events, flight_events,
         for reason in (
             "executor_error", "mission_contract", "planner_commands", "section_a_progress",
             "uav2_isolation", "watchdog_or_geofence", "offboard_loss", "wall_clearance",
+            "navigation_clearance",
             "static_obstacle_clearance", "obstacle_perception", "collision",
         )
     )
@@ -586,6 +647,11 @@ def build_report(*, plan, spec, mission_events, recorder_events, flight_events,
         "unexpected_offboard_loss": offboard_loss,
         "collision_count": collision_count,
         "minimum_wall_clearance_m": wall_clearance,
+        "collision_free": collision_free,
+        "navigation_clearance_pass": navigation_clearance_pass,
+        "wall_clearance_threshold_m": (
+            round(clearance_threshold, 4) if clearance_threshold is not None else None
+        ),
         "minimum_static_obstacle_clearance_m": static_clearance,
         "dynamic_clearance_m": dynamic_clearance,
     }

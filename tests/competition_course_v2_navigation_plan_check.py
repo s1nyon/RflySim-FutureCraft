@@ -93,6 +93,10 @@ def main():
             "max_velocity_mps": 0.45,
             "max_acceleration_mps2": 0.55,
         }
+        assert plan["navigation_contract"]["navigation_clearance_threshold_m"] == 0.25
+        assert plan["navigation_contract"]["navigation_clearance_source"] == (
+            "map_spec.clearance_policy.lateral_margin_each_side_m"
+        )
         assert plan["evaluation_contract"] == {
             "runtime_decision_source": "lidar_driven",
             "evaluation_truth_used": False,

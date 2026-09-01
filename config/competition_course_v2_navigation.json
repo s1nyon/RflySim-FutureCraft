@@ -8,6 +8,10 @@
     "max_velocity_mps": 0.45,
     "max_acceleration_mps2": 0.55
   },
+  "navigation_clearance": {
+    "min_wall_clearance_m": 0.25,
+    "source": "map_spec.clearance_policy.lateral_margin_each_side_m"
+  },
   "warmup_count": 40,
   "setpoint_rate_hz": 20.0,
   "takeoff_timeout_s": 8.0,
