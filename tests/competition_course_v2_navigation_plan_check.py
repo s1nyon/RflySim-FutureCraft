@@ -77,6 +77,13 @@ def main():
     full_plan = navigation.build_plan(live_config, map_spec, nav_config, "full_section_a")
     executor.validate_plan(short_plan)
     executor.validate_plan(full_plan)
+    dry_events, dry_trace = executor.execute_plan(
+        full_plan, executor.DryRunBackend(), simulation_only=True
+    )
+    assert dry_events[-1]["event"] == "mission_end"
+    assert len(dry_trace) == len(full_plan["actions"])
+    takeoff_events = [event for event in dry_events if event["event"] == "takeoff_setpoint_published"]
+    assert len(takeoff_events) == 1 and takeoff_events[0]["stage"] == "takeoff"
 
     for plan in (short_plan, full_plan):
         assert plan["mission_name"].startswith("competition_course_v2_uav1_")

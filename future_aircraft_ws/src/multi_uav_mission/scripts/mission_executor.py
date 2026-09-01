@@ -238,8 +238,22 @@ class RosBackend:
         deadline = time.monotonic() + timeout_s
         planner_commands = 0
         last_distance = float("inf")
+        last_speed = 0.0
         goal = action["goal"]
         tolerance_m = float(action["tolerance_m"])
+        settle_duration_s = (
+            float(action["settle_duration_s"])
+            if "settle_duration_s" in action
+            else None
+        )
+        maximum_speed_mps = (
+            float(action["maximum_speed_mps"])
+            if "maximum_speed_mps" in action
+            else None
+        )
+        settle_started_at = None
+        settle_reset_count = 0
+        settled_for_s = 0.0
         odom_topic = action["mavros_odom_topic"]
         planner_topic = action["planner_cmd_topic"]
         odom_cache = self._ensure_topic_cache(odom_topic, self.Odometry)
@@ -287,21 +301,49 @@ class RosBackend:
                     + (float(position.y) - float(goal["y"])) ** 2
                     + (float(position.z) - float(goal["z"])) ** 2
                 ) ** 0.5
+            last_speed = self._odom_speed(odom)
             confirmed = (
                 last_distance <= progress["tolerance_m"]
                 if progress is not None
                 else last_distance <= tolerance_m
             )
-            if confirmed:
+            if confirmed and settle_duration_s is None:
                 return {
                     "status": "ros_navigation_success",
                     "detail": f"planned navigation reached goal within {last_distance:.3f}m",
                     "navigation": {
                         "distance_m": round(last_distance, 3),
                         "planner_commands": planner_commands,
-                        "speed_mps": round(self._odom_speed(odom), 3),
+                        "speed_mps": round(last_speed, 3),
                     },
                 }
+            if settle_duration_s is not None:
+                stable = confirmed and last_speed <= maximum_speed_mps
+                now = time.monotonic()
+                if stable:
+                    if settle_started_at is None:
+                        settle_started_at = now
+                    settled_for_s = now - settle_started_at
+                    if settled_for_s >= settle_duration_s:
+                        return {
+                            "status": "ros_navigation_success",
+                            "detail": (
+                                "planned navigation reached goal and settled "
+                                f"for {settled_for_s:.3f}s"
+                            ),
+                            "navigation": {
+                                "distance_m": round(last_distance, 3),
+                                "planner_commands": planner_commands,
+                                "speed_mps": round(last_speed, 3),
+                                "settle_duration_s": round(settled_for_s, 3),
+                                "settle_reset_count": settle_reset_count,
+                            },
+                        }
+                else:
+                    if settle_started_at is not None:
+                        settle_reset_count += 1
+                    settle_started_at = None
+                    settled_for_s = 0.0
             previous_planner_sequence = last_planner_sequence
             _planner, last_planner_sequence = planner_cache.wait_for_sequence(
                 last_planner_sequence,
@@ -319,12 +361,13 @@ class RosBackend:
                 "navigation": {
                     "distance_m": round(last_distance, 3),
                     "planner_commands": planner_commands,
-                    "speed_mps": round(self._odom_speed(odom), 3),
+                    "speed_mps": round(last_speed, 3),
                 },
             }
         raise RuntimeError(
             f"planned navigation not confirmed for {action['uav']} within {timeout_s:.1f}s; "
-            f"last_distance={last_distance:.3f}m planner_commands={planner_commands}"
+            f"last_distance={last_distance:.3f}m speed={last_speed:.3f}m/s "
+            f"settled_for={settled_for_s:.3f}s planner_commands={planner_commands}"
         )
 
     @staticmethod
@@ -405,12 +448,23 @@ class RosBackend:
                 }
             if mode == "AUTO.LAND":
                 odom = self._wait_for_landing(uav, action)
-                return {
+                landing = {
                     "event": "landing_confirmed",
                     "stage": action["stage"],
                     "uav": action["uav"],
                     "altitude_m": round(float(odom.pose.pose.position.z), 3),
                 }
+                if action.get("require_disarmed"):
+                    return [
+                        landing,
+                        {
+                            "event": "disarm_confirmed",
+                            "stage": action["stage"],
+                            "uav": action["uav"],
+                            "armed": False,
+                        },
+                    ]
+                return landing
 
         if _is_arming_action(action):
             state = self._wait_for_state(
@@ -426,7 +480,7 @@ class RosBackend:
                 "armed": bool(state.armed),
             }
 
-        if action["stage"] == "multi_takeoff" and action["action"] == "publish_position_setpoint":
+        if action["stage"] in ("multi_takeoff", "takeoff") and action["action"] == "publish_position_setpoint":
             odom = self._wait_for_takeoff_altitude(uav, action)
             return {
                 "event": "takeoff_altitude_confirmed",
@@ -469,12 +523,19 @@ class RosBackend:
         goal_z = float(action.get("fallback_goal", {}).get("z", 0.0))
         threshold_z = max(0.25, goal_z + 0.25)
         timeout_s = float(action.get("timeout_s", 30))
-        deadline = time.monotonic() + timeout_s
+        require_disarmed = bool(action.get("require_disarmed", False))
+        disarm_timeout_s = float(action.get("disarm_timeout_s", timeout_s))
+        touchdown_deadline = time.monotonic() + timeout_s
+        disarm_deadline = None
         last_z = "none"
         latest_odom = None
+        latest_state = None
         state_topic = uav["state_topic"]
         odom_topic = uav["odom_topic"]
-        while time.monotonic() < deadline and not self.rospy.is_shutdown():
+        while not self.rospy.is_shutdown():
+            deadline = disarm_deadline if disarm_deadline is not None else touchdown_deadline
+            if time.monotonic() >= deadline:
+                break
             remaining = max(0.01, deadline - time.monotonic())
             try:
                 state = self.rospy.wait_for_message(
@@ -482,7 +543,8 @@ class RosBackend:
                     self.State,
                     timeout=min(0.5, remaining),
                 )
-                if latest_odom is not None and not bool(state.armed):
+                latest_state = state
+                if latest_odom is not None and not bool(latest_state.armed):
                     z = float(latest_odom.pose.pose.position.z)
                     if z <= max(threshold_z + 0.5, 1.0):
                         return latest_odom
@@ -497,11 +559,23 @@ class RosBackend:
             except Exception:
                 continue
             latest_odom = message
-            last_z = f"{float(message.pose.pose.position.z):.3f}"
-            if float(message.pose.pose.position.z) <= threshold_z:
+            z = float(message.pose.pose.position.z)
+            last_z = f"{z:.3f}"
+            disarmed_low = (
+                latest_state is not None
+                and not bool(latest_state.armed)
+                and z <= max(threshold_z + 0.5, 1.0)
+            )
+            touchdown = z <= threshold_z
+            if not require_disarmed and (touchdown or disarmed_low):
                 return message
+            if require_disarmed and (touchdown or disarmed_low):
+                if latest_state is not None and not bool(latest_state.armed):
+                    return message
+                if disarm_deadline is None:
+                    disarm_deadline = time.monotonic() + disarm_timeout_s
         raise RuntimeError(
-            f"landing altitude <= {threshold_z:.2f}m or disarm not confirmed "
+            f"landing altitude <= {threshold_z:.2f}m or required disarm not confirmed "
             f"for {uav['uav_id']} within {timeout_s:.1f}s; last_altitude_m={last_z}"
         )
 
@@ -709,10 +783,23 @@ def validate_action(action):
         _validate_goal(action["goal"], action["sequence"])
         if float(action["tolerance_m"]) <= 0:
             raise ValueError(f"sequence {action['sequence']} tolerance_m must be positive")
+        settle_fields = ("settle_duration_s", "maximum_speed_mps")
+        if any(field in action for field in settle_fields):
+            _require(action, *settle_fields)
+            if action.get("progress_mode") == "course_s":
+                raise ValueError(f"sequence {action['sequence']} terminal settle requires point-goal distance")
+            if float(action["settle_duration_s"]) <= 0:
+                raise ValueError(f"sequence {action['sequence']} settle_duration_s must be positive")
+            if float(action["maximum_speed_mps"]) <= 0:
+                raise ValueError(f"sequence {action['sequence']} maximum_speed_mps must be positive")
     elif name == "call_service":
         _require(action, "service", "request")
         if not isinstance(action["request"], dict):
             raise ValueError(f"sequence {action['sequence']} request must be an object")
+        if action["request"].get("custom_mode") == "AUTO.LAND" and action.get("require_disarmed"):
+            _require(action, "disarm_timeout_s")
+            if float(action["disarm_timeout_s"]) <= 0:
+                raise ValueError(f"sequence {action['sequence']} disarm_timeout_s must be positive")
     elif name == "write_score_report":
         _require(action, "score_output", "timeout_s")
         _validate_timeout(action)
@@ -788,7 +875,8 @@ def execute_plan(plan, backend, allow_arm=False, simulation_only=False, live_con
             stage = action["stage"]
             if stage != current_stage:
                 if current_stage is not None:
-                    events.append({"time": clock.tick(), "event": STAGE_SUCCESS_EVENTS[current_stage], "stage": current_stage})
+                    success_event = STAGE_SUCCESS_EVENTS.get(current_stage, f"{current_stage}_success")
+                    events.append({"time": clock.tick(), "event": success_event, "stage": current_stage})
                 current_stage = stage
                 start_event = STAGE_START_EVENTS.get(stage, f"{stage}_start")
                 events.append({"time": clock.tick(), "event": start_event, "stage": stage})
@@ -852,12 +940,12 @@ def execute_plan(plan, backend, allow_arm=False, simulation_only=False, live_con
 
             trace.append(_trace_entry(action, backend.name, result))
 
-            if simulation_only and action["stage"] == "multi_takeoff" and action["action"] == "publish_position_setpoint":
+            if simulation_only and action["stage"] in ("multi_takeoff", "takeoff") and action["action"] == "publish_position_setpoint":
                 events.append(
                     {
                         "time": clock.tick(),
                         "event": "takeoff_setpoint_published",
-                        "stage": "multi_takeoff",
+                        "stage": action["stage"],
                         "uav": action.get("uav"),
                     }
                 )
@@ -875,7 +963,8 @@ def execute_plan(plan, backend, allow_arm=False, simulation_only=False, live_con
         ) from exc
 
     if current_stage is not None:
-        events.append({"time": clock.tick(), "event": STAGE_SUCCESS_EVENTS[current_stage], "stage": current_stage})
+        success_event = STAGE_SUCCESS_EVENTS.get(current_stage, f"{current_stage}_success")
+        events.append({"time": clock.tick(), "event": success_event, "stage": current_stage})
     events.append({"time": clock.tick(), "event": "mission_end", "mission": plan["mission_name"]})
     return events, trace
 
@@ -985,6 +1074,19 @@ def _events_for_action(action, result, clock):
                 "speed_mps": result["navigation"].get("speed_mps"),
             }
         )
+        if action.get("settle_duration_s") is not None and event_name == "navigation_confirmed":
+            events.append(
+                {
+                    "time": clock.tick(),
+                    "event": "terminal_settle_confirmed",
+                    "stage": action["stage"],
+                    "uav": action["uav"],
+                    "distance_m": result["navigation"]["distance_m"],
+                    "speed_mps": result["navigation"].get("speed_mps"),
+                    "settle_duration_s": result["navigation"].get("settle_duration_s"),
+                    "settle_reset_count": result["navigation"].get("settle_reset_count", 0),
+                }
+            )
     if _is_target_provider_action(action):
         target_results = result.get("target_results")
         if target_results:
