@@ -1,6 +1,20 @@
 # Competition Course V2
 
-Status: **MAP READY — OFFLINE + MAP-ONLY LIVE + NO-ARM SENSOR ACCEPTANCE PASS (2026-09-01)**
+Status: **MAP REGRESSION — OFFLINE FIX PASS; FRESH LIVE REVALIDATION REQUIRED (2026-09-01)**
+
+Fresh stack `stack-20260901T091442Z-ff2e5d81` invalidated the prior startup
+acceptance: the tunnel was absent and the moving obstacle reverted to its native
+asset dimensions. The loader receipt alone was not authoritative proof of retained
+entities. Root cause was a same-ID asynchronous destroy/recreate race plus motion
+updates that omitted SDK Scale. The offline fix inserts a 2 s destroy-drain barrier
+and sends the spec-derived pendulum Scale on every update. Navigation remains frozen
+until a fresh map-only inspection proves the fix in RflySim.
+
+The first regression stack cannot currently be restarted for that inspection:
+its final owned WSL PGID contains `tail -f /dev/null` where the manifest records
+the build-session command. Stop correctly refuses to signal that identity-mismatched
+member. This is a lifecycle cleanup blocker, not map evidence and not a reason to
+weaken PID/PGID ownership checks.
 
 `competition_course_v2` is one reproducible RflySim development environment for the official narrow-corridor task family. It is not the final official competition map, and selecting it does not establish a shared `competition_world` TF. The protected default remains `predicted_narrow_course`.
 
@@ -123,7 +137,7 @@ Omitting `-Course` continues to select `predicted_narrow_course`. Real execution
 
 ## Validation levels
 
-Current map-baseline acceptance:
+Current map-baseline state (historical live results below are not current acceptance):
 
 ```text
 Competition Course V2 offline geometry: PASS
@@ -131,17 +145,17 @@ Course-layer exclusivity contract: PASS
 Minimum required static gap: 1.00 m
 Observed static passable gaps: 1.225 m / 1.150 m
 Pendulum predicted safe window: 1.858 s (required >=1.50 s)
-Map-only live entity inspection: PASS (42/42; zero position/dimension errors)
-LiDAR/RGB/IMU visibility and transport: PASS, no-arm
-Faster-LIO output: PASS; EGO intentionally NOT STARTED
+Map-only live entity inspection: REVALIDATION REQUIRED
+LiDAR/RGB/IMU visibility and transport: HISTORICAL PASS; rerun after map gate
+Faster-LIO output: HISTORICAL PASS; EGO remains intentionally NOT STARTED
 Competition evaluator: NOT IMPLEMENTED; map-side reference only
 ```
 
 | Level | Status | Meaning |
 | --- | --- | --- |
 | STRUCTURAL VALIDATION | PASS | Strict schema, IDs, geometry, spawn, obstacle, pendulum, ArUco, target, determinism, fake-SDK loader and dry-run contracts |
-| LIVE SENSOR VALIDATION | PASS | Both LiDARs/RGB/IMUs are live; walls, static box and moving pendulum have quantitative point evidence |
-| LOCALIZATION SMOKE | PASS | Both Faster-LIO odometry and registered-cloud streams remain near 10 Hz while stationary |
+| LIVE SENSOR VALIDATION | REVALIDATION REQUIRED | Prior evidence was collected after an extra exact-ID reload and did not prove reliable fresh startup |
+| LOCALIZATION SMOKE | HISTORICAL PASS | Rerun only after fresh map-only entity inspection passes |
 | PLANNER SMOKE | NOT RUN | Deliberately deferred to Competition Course V2 Navigation Baseline |
 | FULL MISSION | NOT REQUIRED | Map correctness is separate from future mission/planner development |
 

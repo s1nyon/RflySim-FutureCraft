@@ -2,7 +2,18 @@
 
 Date: 2026-09-01 (Asia/Shanghai)
 
-Result: **MAP READY**
+Historical result: **MAP READY — SUPERSEDED BY FRESH STARTUP REGRESSION**
+
+> Superseding evidence (2026-09-01): fresh stack
+> `stack-20260901T091442Z-ff2e5d81` reported `COURSE_READY`, but visual inspection
+> found the static tunnel absent and the moving obstacle at its native, incorrect
+> dimensions. The transition receipt shows that all V2 IDs were destroyed immediately
+> before same-ID creation. The asynchronous destroy queue could therefore remove the
+> newly created static entities; the continuously updated pendulum survived, while its
+> `sendUE4PosNew` updates discarded the configured scale. Offline fixes now add a
+> destroy-drain barrier and preserve spec-derived scale on every motion update. This
+> historical acceptance is retained, but **MAP READY is withdrawn until a fresh live
+> map-only revalidation passes**.
 
 Scope was deliberately limited to map geometry, RflySim scene loading and
 no-arm sensor/localization observation. EGO, mission, OFFBOARD, takeoff and

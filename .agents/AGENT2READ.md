@@ -55,13 +55,16 @@
 - 2026-08-25 单次 Windows `0x1E` 蓝屏在上述 5 个 fresh run 中未再现，当前不再是
   infrastructure blocker；未获得符号化 dump 根因，仍保留为宿主机历史风险，见
   `../docs/incidents/2026-08-25-live-startup-bsod-0x1e.md`。
-- **2026-09-01 Competition Course V2 MAP READY**：single-source spec、validator、
-  dimensioned preview、真实 loader 共用同一几何；Class `1000813` 原生 `1×1×3m`
-  scale 已校准。run `stack-20260831T173615Z-6d6e09b6` no-arm 验收中 42/42 实体
-  metadata 与 spec 对齐（position/dimension error 均 0），双机 RGB/LiDAR/IMU 与
-  Faster-LIO 正常；首段墙、静态箱和动态摆障有量化点云证据，摆障实测完整
-  `y=-0.600..+0.600m`。EGO/mission/OFFBOARD/arming 均未启动；下一阶段仅为
-  Competition Course V2 Navigation Baseline。证据见
+- **2026-09-01 Competition Course V2 MAP GATE REOPENED**：fresh run
+  `stack-20260901T091442Z-ff2e5d81` 中 tunnel 完全未保留且动态摆障尺寸异常，fresh
+  live evidence 推翻此前 MAP READY。根因定位为 course transition 异步 destroy 后立即
+  same-ID recreate 的竞态，以及 motion controller 的 `sendUE4PosNew` 丢失 Scale；此前
+  acceptance 的额外 exact-ID reload 掩盖了 startup 缺陷。最小修复已增加 2 s destroy
+  drain barrier，并在每次 pendulum update 携带 spec-derived Scale，focused/V2 offline
+  tests PASS；在 fresh map-only revalidation 前禁止进入 Navigation live ladder。当前
+  `stack-20260901T091442Z-ff2e5d81` stop 留下 PGID 12：其唯一成员 `tail -f /dev/null`
+  与 manifest build-session command identity 不符，Execute 因此不发 signal 并 fail closed；
+  不得以地图验证名义放宽 lifecycle ownership。历史证据保留见
   `../docs/evidence/2026-09-01-competition-course-v2-map-acceptance.md`。
 - **2026-09-01 UAV1 / Section A Navigation offline implementation READY，live 尚未开始**：
   V2 runtime manifest 改为从 spec derive 并对 generated artifact 做 full-payload parity；新增

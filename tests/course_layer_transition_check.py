@@ -9,11 +9,14 @@ from pathlib import Path
 
 
 class FakeApi:
-    def __init__(self):
+    def __init__(self, events=None):
         self.destroyed = []
+        self.events = events
 
     def sendUE4Destroy(self, object_id, window_id):
         self.destroyed.append((object_id, window_id))
+        if self.events is not None:
+            self.events.append(("destroy", object_id))
 
 
 def expect_error(function, needle):
@@ -61,9 +64,24 @@ def main():
     }
     with tempfile.TemporaryDirectory() as temp:
         receipt_path = Path(temp) / "transition_receipt.json"
-        api = FakeApi()
-        receipt = execute_transition(api, plan, receipt_path, window_id=-1)
+        events = []
+        api = FakeApi(events)
+        receipt = execute_transition(
+            api,
+            plan,
+            receipt_path,
+            window_id=-1,
+            settle_seconds=2.0,
+            sleep_fn=lambda seconds: events.append(("settle", seconds)),
+        )
         assert api.destroyed == [(12001, -1), (12002, -1), (15001, -1), (15002, -1)]
+        assert events == [
+            ("destroy", 12001),
+            ("destroy", 12002),
+            ("destroy", 15001),
+            ("destroy", 15002),
+            ("settle", 2.0),
+        ]
         assert receipt["cleanup_policy"] == "exact_declared_ids"
         assert receipt["destroy_requested_ids"] == plan["destroy_ids"]
         assert receipt["command_status"] == "COMMANDS_SENT"
@@ -71,6 +89,7 @@ def main():
         assert receipt["source_hashes"] == plan["source_hashes"]
         assert receipt["window_id"] == -1
         assert receipt["timestamp_utc"].endswith("Z")
+        assert receipt["destroy_settle_seconds"] == 2.0
         assert json.loads(receipt_path.read_text(encoding="utf-8")) == receipt
 
     print("course_layer_transition_check: PASS")

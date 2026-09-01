@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
@@ -18,6 +19,7 @@ from narrow_course_geometry import load_course
 
 
 COURSE_NAMES = ("predicted_narrow_course", "competition_course_v2")
+DESTROY_SETTLE_SECONDS = 2.0
 
 
 def _atomic_json(path: Path, value: Dict[str, Any]) -> None:
@@ -55,16 +57,25 @@ def build_transition_plan(selected: str, declared_ids: Mapping[str, Iterable[int
         "declared_ids": normalized,
         "destroy_ids": sorted(owner_by_id),
         "cleanup_policy": "exact_declared_ids",
+        "destroy_settle_seconds": DESTROY_SETTLE_SECONDS,
     }
 
 
-def execute_transition(api, plan: Dict[str, Any], receipt_path: Path, window_id: int) -> Dict[str, Any]:
+def execute_transition(
+    api,
+    plan: Dict[str, Any],
+    receipt_path: Path,
+    window_id: int,
+    settle_seconds: float = DESTROY_SETTLE_SECONDS,
+    sleep_fn=time.sleep,
+) -> Dict[str, Any]:
     sent: List[int] = []
     timestamp = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
     try:
         for object_id in plan["destroy_ids"]:
             api.sendUE4Destroy(object_id, window_id)
             sent.append(object_id)
+        sleep_fn(settle_seconds)
     except Exception:
         failure = {
             "cleanup_policy": "exact_declared_ids",
@@ -82,6 +93,7 @@ def execute_transition(api, plan: Dict[str, Any], receipt_path: Path, window_id:
         "cleanup_policy": "exact_declared_ids",
         "command_status": "COMMANDS_SENT",
         "destroy_requested_ids": list(plan["destroy_ids"]),
+        "destroy_settle_seconds": float(settle_seconds),
         "selected_course": plan["selected_course"],
         "source_hashes": dict(plan.get("source_hashes", {})),
         "timestamp_utc": timestamp,
