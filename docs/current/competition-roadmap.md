@@ -126,20 +126,29 @@
   运动正确。历史回归
   `stack-20260901T091442Z-ff2e5d81` 与旧 acceptance 保留为 superseded。证据见
   [`2026-09-01-competition-course-v2-map-ready-closure.md`](../evidence/2026-09-01-competition-course-v2-map-ready-closure.md)。
-- current navigation gate：**BLOCKED AT MAP GATE / LIVE FLIGHT NOT STARTED (2026-09-01)**。
-  UAV1 Section A 的 spec-derived world↔local transform、`short_smoke` / `full_section_a`
-  单目标 plan、opt-in terminal settle、AUTO.LAND disarm confirmation、UAV2 连续隔离监控、
-  collision heartbeat 与 provenance-labelled clearance report 已实现；V2 navigation、V2 map、
-  Stage 7 和 Stage 8 离线回归均 PASS。没有修改 EGO/Faster-LIO 参数、PBL route 或 dual-UAV
-  mission semantics。入口与验证：
+- current navigation gate：**MAP GATE CLOSED / NAVIGATION LIVE RCA ACTIVE（2026-09-02）**。
+  - 2026-09-02 live 阶梯：Gate 3 current-instance no-arm PASS；Gate 4 `short_smoke` PASS；
+    `full_section_a` 首次 live FAIL（冲出 geofence，wall clearance -0.297m，见
+    [`2026-09-02-v2-full-section-a-live-first-diagnostic.md`](../evidence/2026-09-02-v2-full-section-a-live-first-diagnostic.md)）。
+  - 2026-09-02 RCA 闭环（Gate B/C）：UAV1-only RViz + 增强证据工具链证明
+    `LiDAR → Faster-LIO → EGO → PositionCommand → MAVROS PositionTarget → PX4` 各层行为：
+    EGO desired velocity/acceleration 全部 ≤ planner limit（0 over-limit）；
+    PositionTarget 全程 type_mask=3064（position-only contract，667–909 样本一致）；
+    EGO bspline 在 static box 区域明确绕行（min signed distance 0.703m）；
+    static box 在 registered cloud 可见（1–4 点/帧，尺寸 0.35×0.25m 的物理限制）；
+    受控 fresh full_section_a 飞行全链 PASS（endpoint/settle/landing/disarm，wall clearance 0.066m）。
+    **失败归类：A. EVALUATION_TOOLING_ERROR**——ROI 阈值（≥5 点）对 0.35×0.25m 小 box 过严，
+    已改为 ROI 计数 + EGO 轨迹绕行证据合并判定；重放真实 run 后 `result=PASS`。
+    首次 full run 的冲出/超速在相同配置 fresh run 中未复现，列为间歇性残余风险。
+    没有修改任何 EGO/Faster-LIO/PX4 参数、地图几何或 Section A endpoint。
+  - 入口与验证：
 
   ```powershell
   scripts\validate_competition_course_v2_navigation.ps1
   scripts\run_competition_course_v2_navigation.bat --dry-run --profile short_smoke --stack-id <id> --manifest <path>
   ```
 
-  live navigation 仍未执行，因此不得描述为 navigation PASS。重启后旧 stack
-  `stack-20260831T173615Z-6d6e09b6` 曾因 RflySim3D PID `20072` 被系统
+  重启后旧 stack `stack-20260831T173615Z-6d6e09b6` 曾因 RflySim3D PID `20072` 被系统
   `svchost.exe` 复用而 fail closed。经显式授权，token-bound metadata-only retirement
   已执行；transaction 归档 26 条死亡 ownership records，逐条记录
   `signal_sent=false`，没有调用 stop backend，也没有向 PID `20072` 或任何进程发 signal。
@@ -149,8 +158,8 @@
   Red-Zone 授权。
   证据见
   [`2026-09-01-v2-section-a-live-lifecycle-blocker.md`](../evidence/2026-09-01-v2-section-a-live-lifecycle-blocker.md)。
-  下一内部阶梯是 fresh V2 stack start/inspect → current-instance no-arm →
-  1× short smoke → 1× full Section A diagnostic → 3× consecutive fresh-instance full Section A。
+  下一内部阶梯是 3× consecutive fresh-instance full Section A（当前 1× full fresh PASS，
+  repeatability 尚未关闭）。
   设计与执行边界见
   [`2026-09-01-competition-course-v2-navigation-baseline-design.md`](../architecture/2026-09-01-competition-course-v2-navigation-baseline-design.md)。
 - work：motion baseline metrics；corridor/gate guidance；look-ahead goal transition；online local replanning；

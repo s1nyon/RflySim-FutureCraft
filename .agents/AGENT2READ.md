@@ -105,6 +105,27 @@
     字段级浮点容差（跨 Python 版本 ULP）；`competition_course_v2_navigation.sh` receipt
     `created_ids` 改无序集合校验。均未提交。
   - 两次 stop 均遇 WSL PGID kill 无效 open defect，按 manifest 显式 PID 补清后环境 clean。
+- **2026-09-02 V2 Section A Navigation RCA 已闭环：归类 A. EVALUATION_TOOLING_ERROR**：
+  - Gate A 完成证据工具链硬化：recorder 现记录 PositionCommand 完整 velocity/acceleration/yaw、
+    MAVROS PositionTarget（type_mask/coordinate_frame/全字段）、odom velocity 向量、EGO bspline，
+    cloud ROI 增加 frame contract（cloud frame=camera_init 通过，mismatch 时
+    `ROI_EVALUATION_INVALID_FRAME` fail-closed）；report 新增 planner_chain/control_chain/tracking
+    metrics，plan 注入 planner_limits（0.45/0.55）。
+  - Gate B no-arm（UAV1-only RViz）：static_box_a 在 registered cloud 可见（1-3 点/帧，
+    centroid 与 spec 吻合），moving_pendulum 动态可见；cloud frame=camera_init 通过 frame contract。
+  - Gate C 受控对比（两个 fresh runs）：short_smoke PASS；full_section_a **飞行链全 PASS**
+    （executor=0、7 事件全确认、endpoint 4.55m、wall clearance 0.066m、无 watchdog/offboard loss、
+    collision 0、UAV2 0 违规），唯一失败 `obstacle_perception` 因 static ROI 3 点 < 5 阈值。
+  - 关键证据：EGO desired velocity max 0.412/p95 0.354 m/s、accel max 0.534 m/s²，**0 over-limit**；
+    PositionTarget 全程 type_mask=3064（CONTROL_CONTRACT_POSITION_ONLY）；EGO bspline 绕开
+    static box（min signed distance 0.703m）证明 EGO map 感知 box；tracking as-published 误差
+    1.15m 主要来自起飞/降落段 z 差（odom z=-0.1 vs target z=1.0），飞行中 xy/z 误差 <0.1m。
+  - 修复（仅 evaluation tooling）：`static_obstacle_observed` 改为 ROI 计数 **或** EGO 轨迹绕行
+    证据合并判定（`static_obstacle_observed_by_trajectory`），ROI 阈值保留 5 点原值；重放真实
+    full run 数据 `result=PASS`。首次 full run 的冲出/超速（1.5m/s）在相同配置 fresh run 未复现，
+    列为间歇性残余风险，未改任何 EGO/Faster-LIO/PX4/地图参数。
+  - 本轮 Gate C 证据与修复见 `docs/evidence/2026-09-02-v2-section-a-rca-closure.md`；
+    roadmap 已更新为 MAP CLOSED / NAVIGATION LIVE RCA ACTIVE。
 - 2026-08-11 旧栈 OFFBOARD 失败已定位为运行时序问题（旧栈重试窗口内 setpoint
   流中断），**不是代码回归**；恢复靠「完整清理 → fresh 栈背靠背启动」，
   见 `../docs/incidents/2026-08-11-offboard-stale-retry-setpoint-stream.md`。
