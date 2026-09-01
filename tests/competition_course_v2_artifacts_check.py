@@ -34,13 +34,16 @@ def main():
         assert manifest1 == manifest2
         assert "stale-run-evidence.json" not in manifest1["artifacts"]
         assert stale.exists()
+        stale.unlink()
         expected = {
             "SLAMScene.png", "SLAMScene.txt", "course_preview.svg", "entity_manifest.json",
             "planning_points.json", "evaluation_reference.json", "validation_report.json",
             "aruco/marker_31.png", "aruco/marker_47.png",
         }
         assert set(manifest1["artifacts"]) == expected
-        assert expected <= set(tree_hashes(first))
+        assert set(tree_hashes(first)) == expected
+        for forbidden in ("load_receipt.json", "course_transition_receipt.json", "motion.stop", "load_failure_receipt.json", "unload_receipt.json"):
+            assert not (first / forbidden).exists(), forbidden
         entities = json.loads((first / "entity_manifest.json").read_text(encoding="utf-8"))
         ids = [item["id"] for item in entities["entities"]]
         assert len(ids) == len(set(ids))

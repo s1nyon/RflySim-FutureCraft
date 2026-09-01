@@ -562,7 +562,13 @@ def build_entity_manifest(spec: Dict[str, Any]) -> List[Dict[str, Any]]:
     entities = walls + [_entity(item, item["category"], spec) for item in spec["arena_objects"]]
     entities += [_entity(item, "zone_surface", spec) for item in spec["zone_surfaces"]]
     entities += [_entity(item, "static_obstacle", spec) for item in spec["static_obstacles"]]
-    entities += [_entity(spec["dynamic_obstacle"], "dynamic_obstacle", spec), _entity(spec["mission_target_slot"], "mission_target_slot", spec)]
+    dynamic_entity = _entity(spec["dynamic_obstacle"], "dynamic_obstacle", spec)
+    # The suspension pivot is a reference point, not the moving object centre.
+    # Spawning at the pivot would make the first motion update jump the bob into
+    # its phase-zero position; the entity must be created at pendulum_pose(t=0).
+    dynamic_entity["center"] = list(pendulum_pose(spec["dynamic_obstacle"], 0.0))
+    dynamic_entity["pivot"] = list(spec["dynamic_obstacle"]["pivot"])
+    entities += [dynamic_entity, _entity(spec["mission_target_slot"], "mission_target_slot", spec)]
     entities += [_entity(item, "landing_platform", spec) for item in spec["landing"]["platforms"]]
     entities += [_entity(item, "aruco", spec) for item in spec["landing"]["markers"]]
     ids = [item["id"] for item in entities]

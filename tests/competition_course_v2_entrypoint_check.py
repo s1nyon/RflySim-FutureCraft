@@ -17,11 +17,13 @@ def main():
     assert "start_competition_course_v2_two_uav.bat" in lifecycle
     assert "$Course" in lifecycle and '"COURSE=$Course"' in lifecycle
     v2 = (root / "scripts/start_competition_course_v2_two_uav.bat").read_text(encoding="utf-8")
-    for expected in ("generate_competition_course_v2.bat", "deploy_competition_course_v2_terrain.bat", "load_competition_course_v2.bat", "register_launcher.py", "windows:competition_course_v2_motion", "COURSE_READY"):
+    for expected in ("generate_competition_course_v2.bat", "deploy_competition_course_v2_terrain.bat", "load_competition_course_v2.bat", "register_launcher.py", "windows:competition_course_v2_motion", "COURSE_READY", "competition_course_world_probe.py", "--probe-id A", "--probe-id B", "world-state retention", "run-scoped receipt"):
         assert expected in v2
     for expected in ("!MOTION!", "!SPEC!", "!MOTION_EVIDENCE!", "!MOTION_STOP!", "--pid-file", "Get-Process -Id"):
         assert expected in v2, "motion controller startup must preserve delayed values and prove child alive: {}".format(expected)
     assert "predicted_narrow_course" not in v2.lower()
+    assert "--simulation-instance-id" in v2
+    assert "logs\\live_stack\\%STACK_ID%\\competition_course_v2" in v2
     env_template = (root / "config/env_template.bat").read_text(encoding="utf-8")
     assert "COMPETITION_COURSE_V2_POS_X_STR" not in env_template
     assert "COMPETITION_COURSE_V2_POS_Y_STR" not in env_template
@@ -33,11 +35,16 @@ def main():
     transition_text = transition_entry.read_text(encoding="utf-8")
     assert "course_layer_transition.py" in transition_text
     assert "--selected" in transition_text and "--receipt" in transition_text
+    assert "--stack-id" in transition_text and "--simulation-instance-id" in transition_text
     assert 'transition_project_course_layer.bat" competition_course_v2' in v2
     assert 'transition_project_course_layer.bat" predicted_narrow_course' in predicted_entry
     assert 'load_predicted_narrow_course.bat" --dry-run --no-clear' in predicted_entry
     assert 'load_predicted_narrow_course.bat" --no-clear' in predicted_entry
     assert "range(" not in transition_text
+    load_entry = (root / "scripts/load_competition_course_v2.bat").read_text(encoding="utf-8")
+    assert "load_receipt.json" in load_entry
+    assert "--stack-id" in load_entry and "--simulation-instance-id" in load_entry
+    assert "motion.stop" in load_entry
     spec = json.loads((root / "config/maps/competition_course_v2.json").read_text(encoding="utf-8"))
     sys.path.insert(0, str(root / "future_aircraft_ws/src/multi_uav_mission/scripts"))
     from competition_course_spawn_args import spawn_environment

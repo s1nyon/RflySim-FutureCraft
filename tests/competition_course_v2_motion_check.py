@@ -29,6 +29,8 @@ def main():
     spec = load_spec(root / "config/maps/competition_course_v2.json")
     dynamic = spec["dynamic_obstacle"]
     dynamic_entity = next(entity for entity in build_entity_manifest(spec) if entity["id"] == dynamic["id"])
+    assert dynamic_entity["center"] == list(pendulum_pose(dynamic, 0.0))
+    assert dynamic_entity["pivot"] == list(dynamic["pivot"])
     samples = [pendulum_pose(dynamic, value) for value in (0, 1.5, 3, 4.5, 6)]
     assert math.isclose(samples[0][1], samples[2][1], abs_tol=1e-9)
     assert samples[1][1] > samples[0][1] > samples[3][1]

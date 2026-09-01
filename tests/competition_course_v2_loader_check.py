@@ -46,6 +46,8 @@ def expect_manifest_rejected(load_scene, spec, manifest, receipt, marker_dir):
             -1,
             sleep=lambda _: None,
             asset_path=None,
+            stack_id="stack-1",
+            simulation_instance_id="sim-1",
         )
     except ValueError as exc:
         assert "manifest" in str(exc).lower()
@@ -115,25 +117,62 @@ def main():
         assert dry_run.returncode != 0, dry_run.stdout
 
         receipt = temp / "receipt.json"
-        receipt.write_text(json.dumps({"spec_sha256": spec["spec_sha256"], "cleanup_policy": "receipt_only", "created_ids": [15100, 15120]}), encoding="utf-8")
+        receipt.write_text(json.dumps({
+            "spec_sha256": spec["spec_sha256"], "cleanup_policy": "receipt_only",
+            "stack_id": "stack-old", "simulation_instance_id": "sim-old",
+            "created_ids": [15100, 15120],
+        }), encoding="utf-8")
         api = FakeApi()
-        result = load_scene(api, spec, manifest, receipt, generated / "aruco", -1, sleep=lambda _: None, asset_path=None)
-        assert api.destroyed == [(15100, -1), (15120, -1)]
+        result = load_scene(
+            api, spec, manifest, receipt, generated / "aruco", -1,
+            sleep=lambda _: None, asset_path=None,
+            stack_id="stack-1", simulation_instance_id="sim-1",
+            static_passes=2, static_settle_seconds=0.2,
+        )
+        assert api.destroyed == []
         assert len(result["created_ids"]) == len(manifest["entities"])
         assert set(result["created_ids"]) == {item["id"] for item in manifest["entities"]}
         assert len([call for call in api.created if call[0] == "new"]) == 2
-        wall_call = next(call[1] for call in api.created if call[0] == "scale" and call[1]["copterID"] == 15000)
+        scale_calls = [call[1] for call in api.created if call[0] == "scale"]
+        static_count = len([item for item in manifest["entities"] if item["category"] != "aruco"])
+        assert len(scale_calls) == 2 * static_count
+        wall_call = next(call for call in scale_calls if call["copterID"] == 15000)
         assert wall_call["Scale"] == [4.5, 0.15, 2.5 / 3.0]
-        static_call = next(call[1] for call in api.created if call[0] == "scale" and call[1]["copterID"] == 15100)
+        static_call = next(call for call in scale_calls if call["copterID"] == 15100)
         assert static_call["Scale"] == [0.35, 0.25, 0.3]
         assert len(api.ext) == 2
         assert [call["ActExt"][:2] for call in api.ext] == [[0.6, 0.8], [0.6, 0.8]]
         assert ("RflyChangeViewKeyCmd P", -1) in api.commands
+        from competition_course_geometry import pendulum_pose
+        dynamic_entity = next(item for item in manifest["entities"] if item["id"] == 15120)
+        assert dynamic_entity["center"] == list(pendulum_pose(spec["dynamic_obstacle"], 0.0))
+        assert dynamic_entity["pivot"] == [22.0, 0.0, 2.4]
         saved = json.loads(receipt.read_text(encoding="utf-8"))
         assert saved["cleanup_policy"] == "receipt_only"
+        assert saved["stack_id"] == "stack-1"
+        assert saved["simulation_instance_id"] == "sim-1"
+        assert saved["created_at"].endswith("Z")
+        assert saved["delivery_policy"] == {
+            "selected_course_destroy": False,
+            "static_passes": 2,
+            "static_settle_seconds": 0.2,
+        }
         stop_file = temp / "motion.stop"
+        try:
+            unload_scene(
+                FakeApi(), spec, receipt, -1,
+                stack_id="stack-other", simulation_instance_id="sim-1",
+            )
+        except ValueError as exc:
+            assert "cross-instance" in str(exc)
+        else:
+            raise AssertionError("cross-instance receipt must never drive destroy")
+        assert receipt.exists()
         unload_api = FakeApi()
-        unloaded = unload_scene(unload_api, spec, receipt, -1, stop_file, sleep=lambda _: None)
+        unloaded = unload_scene(
+            unload_api, spec, receipt, -1, stop_file, sleep=lambda _: None,
+            stack_id="stack-1", simulation_instance_id="sim-1",
+        )
         assert unload_api.destroyed == [(value, -1) for value in saved["created_ids"]]
         assert unloaded["destroyed_ids"] == saved["created_ids"]
         assert stop_file.exists() and not receipt.exists()
@@ -149,15 +188,22 @@ def main():
         failing_receipt = temp / "failed_receipt.json"
         failing_api = FailingApi()
         try:
-            load_scene(failing_api, spec, manifest, failing_receipt, generated / "aruco", -1, sleep=lambda _: None, asset_path=None)
+            load_scene(
+                failing_api, spec, manifest, failing_receipt, generated / "aruco", -1,
+                sleep=lambda _: None, asset_path=None,
+                stack_id="stack-1", simulation_instance_id="sim-1",
+            )
         except RuntimeError as exc:
             assert "injected SDK failure" in str(exc)
         else:
             raise AssertionError("injected SDK failure must propagate")
-        assert failing_api.destroyed == [(item[1]["copterID"], -1) for item in failing_api.created]
+        assert failing_api.destroyed == []
         assert not failing_receipt.exists()
         failure = json.loads((temp / "load_failure_receipt.json").read_text(encoding="utf-8"))
         assert failure["load_result"] == "ROLLED_BACK"
+        assert failure["rollback_policy"] == "no_destroy_upsert"
+        assert failure["rolled_back_ids"] == []
+        assert failure["stack_id"] == "stack-1"
         assert not list(temp.glob("Aruco.png.*.tmp"))
         try:
             with installed_asset_transaction(source, installed, "0" * 64): pass

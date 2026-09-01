@@ -23,28 +23,35 @@ set DRY_RUN=0
 set STACK_ID=
 set STACK_HEALTH_DIR=
 set STACK_MANIFEST=
+set SIMULATION_INSTANCE_ID=
 :parse_args
 if "%~1"=="" goto args_done
 if /I "%~1"=="--dry-run" set DRY_RUN=1
 if /I "%~1"=="--stack-id" set "STACK_ID=%~2"
 if /I "%~1"=="--health-dir" set "STACK_HEALTH_DIR=%~2"
 if /I "%~1"=="--manifest" set "STACK_MANIFEST=%~2"
+if /I "%~1"=="--simulation-instance-id" set "SIMULATION_INSTANCE_ID=%~2"
 shift & goto parse_args
 :args_done
 if defined STACK_ID (
   if not defined STACK_HEALTH_DIR set "STACK_HEALTH_DIR=%FUTURE_AIRCRAFT_SIM_DIR%\logs\live_stack\%STACK_ID%\health"
   if not defined STACK_MANIFEST set "STACK_MANIFEST=%FUTURE_AIRCRAFT_SIM_DIR%\logs\live_stack\%STACK_ID%\stack_manifest.json"
+  set "COURSE_RUNTIME_DIR=%FUTURE_AIRCRAFT_SIM_DIR%\logs\live_stack\%STACK_ID%\competition_course_v2"
 )
 if "%DRY_RUN%"=="1" (
   echo [DRY-RUN] Competition Course V2 two-UAV orchestration
   echo [DRY-RUN] base map: %RFLYSIM_UE4_MAP%
   echo [DRY-RUN] NED PosX: %STAGE2_POS_X_STR%
   echo [DRY-RUN] NED PosY: %STAGE2_POS_Y_STR%
+  if defined COURSE_RUNTIME_DIR echo [DRY-RUN] run-scoped receipt dir: %COURSE_RUNTIME_DIR%
   call "%SCRIPT_DIR%generate_competition_course_v2.bat" --dry-run || exit /b 1
   call "%SCRIPT_DIR%deploy_competition_course_v2_terrain.bat" --dry-run || exit /b 1
   call "%SCRIPT_DIR%start_two_uav.bat" --dry-run || exit /b 1
+  echo [DRY-RUN] 5. transition destroys only inactive predicted IDs; selected V2 IDs are preserved
   call "%SCRIPT_DIR%transition_project_course_layer.bat" competition_course_v2 --dry-run || exit /b 1
+  echo [DRY-RUN] 6. load selected V2 by idempotent upsert (2 static passes, no selected destroy)
   call "%SCRIPT_DIR%load_competition_course_v2.bat" --dry-run || exit /b 1
+  echo [DRY-RUN] 7. world-state retention probe A (wait 3s) then B (wait 2s); COURSE_READY only after both PASS
   echo [DRY-RUN] register Competition Course V2 motion controller at creation
   exit /b 0
 )
@@ -53,14 +60,19 @@ call "%SCRIPT_DIR%generate_competition_course_v2.bat" || exit /b 1
 call "%SCRIPT_DIR%deploy_competition_course_v2_terrain.bat" || exit /b 1
 call "%SCRIPT_DIR%start_two_uav.bat" || exit /b 1
 powershell -NoLogo -NoProfile -Command "Start-Sleep -Seconds ([int]$env:PREDICTED_COURSE_SCENE_WAIT_SECONDS)" || exit /b 1
-call "%SCRIPT_DIR%transition_project_course_layer.bat" competition_course_v2 || exit /b 1
-call "%SCRIPT_DIR%load_competition_course_v2.bat"
+if not defined SIMULATION_INSTANCE_ID (
+  for /f "usebackq delims=" %%i in (`wsl -d %RFLYSIM_WSL_DISTRO% -e bash -lic "bash '%FUTURE_AIRCRAFT_SIM_WSL_DIR%/scripts/wsl/live_stack_wsl_ops.sh' sim-id" 2^>nul`) do set "SIMULATION_INSTANCE_ID=%%i"
+)
+if not defined SIMULATION_INSTANCE_ID echo [ERROR] Failed to compute simulation_instance_id for run-scoped V2 receipt. & exit /b 2
+call "%SCRIPT_DIR%transition_project_course_layer.bat" competition_course_v2 --stack-id "%STACK_ID%" --simulation-instance-id "%SIMULATION_INSTANCE_ID%"
+if errorlevel 1 exit /b %ERRORLEVEL%
+call "%SCRIPT_DIR%load_competition_course_v2.bat" --stack-id "%STACK_ID%" --simulation-instance-id "%SIMULATION_INSTANCE_ID%"
 set COURSE_LOAD_RESULT=%ERRORLEVEL%
 if "%COURSE_LOAD_RESULT%"=="0" (
   set MOTION=%FUTURE_AIRCRAFT_SIM_DIR%\future_aircraft_ws\src\multi_uav_mission\scripts\competition_course_motion.py
   set SPEC=%FUTURE_AIRCRAFT_SIM_DIR%\config\maps\competition_course_v2.json
   set MOTION_EVIDENCE=%FUTURE_AIRCRAFT_SIM_DIR%\logs\live_stack\%STACK_ID%\competition_course_motion.json
-  set MOTION_STOP=%COMPETITION_COURSE_V2_OUTPUT%\motion.stop
+  set MOTION_STOP=%COURSE_RUNTIME_DIR%\motion.stop
   set MOTION_PID_FILE=%FUTURE_AIRCRAFT_SIM_DIR%\logs\live_stack\%STACK_ID%\competition_course_motion.pid
   "%PYTHON_EXE%" "%SCRIPT_DIR%lifecycle\register_launcher.py" launch --manifest "%STACK_MANIFEST%" --role "windows:competition_course_v2_motion" --command-line "%PYTHON_EXE% !MOTION! --spec !SPEC! --evidence !MOTION_EVIDENCE! --stop-file !MOTION_STOP!" --file-path "%PYTHON_EXE%" --arguments "!MOTION! --spec !SPEC! --evidence !MOTION_EVIDENCE! --stop-file !MOTION_STOP!" --pid-file "!MOTION_PID_FILE!"
   if errorlevel 1 set COURSE_LOAD_RESULT=1
@@ -69,12 +81,26 @@ if "%COURSE_LOAD_RESULT%"=="0" (
     if errorlevel 1 set COURSE_LOAD_RESULT=1
   )
 )
+set PROBE_SCRIPT=%FUTURE_AIRCRAFT_SIM_DIR%\future_aircraft_ws\src\multi_uav_mission\scripts\competition_course_world_probe.py
+set PROBE_SPEC=%FUTURE_AIRCRAFT_SIM_DIR%\config\maps\competition_course_v2.json
+set PROBE_GENERATED=%COMPETITION_COURSE_V2_OUTPUT%
+if not defined COURSE_RUNTIME_DIR set "COURSE_RUNTIME_DIR=%FUTURE_AIRCRAFT_SIM_DIR%\logs\live_stack\%STACK_ID%\competition_course_v2"
+if not exist "%COURSE_RUNTIME_DIR%" mkdir "%COURSE_RUNTIME_DIR%"
+if "!COURSE_LOAD_RESULT!"=="0" (
+  "%PYTHON_EXE%" "%PROBE_SCRIPT%" --spec "%PROBE_SPEC%" --generated "%PROBE_GENERATED%" --receipt "%COURSE_RUNTIME_DIR%\load_receipt.json" --stack-id "%STACK_ID%" --simulation-instance-id "%SIMULATION_INSTANCE_ID%" --probe-id A --output "%COURSE_RUNTIME_DIR%\probe_A.json" --wait-before 3
+  if errorlevel 1 set COURSE_LOAD_RESULT=1
+)
+if "!COURSE_LOAD_RESULT!"=="0" (
+  powershell -NoLogo -NoProfile -Command "Start-Sleep -Seconds 2"
+  "%PYTHON_EXE%" "%PROBE_SCRIPT%" --spec "%PROBE_SPEC%" --generated "%PROBE_GENERATED%" --receipt "%COURSE_RUNTIME_DIR%\load_receipt.json" --stack-id "%STACK_ID%" --simulation-instance-id "%SIMULATION_INSTANCE_ID%" --probe-id B --output "%COURSE_RUNTIME_DIR%\probe_B.json" --wait-before 0
+  if errorlevel 1 set COURSE_LOAD_RESULT=1
+)
 if defined STACK_HEALTH_DIR (
   if not exist "%STACK_HEALTH_DIR%" mkdir "%STACK_HEALTH_DIR%"
-  if "%COURSE_LOAD_RESULT%"=="0" (
-    "%PYTHON_EXE%" "%SCRIPT_DIR%lifecycle\health_probe.py" write --health-dir "%STACK_HEALTH_DIR%" --stack-id "%STACK_ID%" --status COURSE_READY --ready true --detail "competition course v2 loaded; motion controller owned"
+  if "!COURSE_LOAD_RESULT!"=="0" (
+    "%PYTHON_EXE%" "%SCRIPT_DIR%lifecycle\health_probe.py" write --health-dir "%STACK_HEALTH_DIR%" --stack-id "%STACK_ID%" --status COURSE_READY --ready true --detail "competition course v2 retained; world-state probe A/B PASS; run-scoped receipt"
   ) else (
-    "%PYTHON_EXE%" "%SCRIPT_DIR%lifecycle\health_probe.py" write --health-dir "%STACK_HEALTH_DIR%" --stack-id "%STACK_ID%" --status COURSE_READY --ready false --detail "competition course v2 load failed"
+    "%PYTHON_EXE%" "%SCRIPT_DIR%lifecycle\health_probe.py" write --health-dir "%STACK_HEALTH_DIR%" --stack-id "%STACK_ID%" --status COURSE_READY --ready false --detail "competition course v2 world-state retention failed; see %COURSE_RUNTIME_DIR%"
   )
   powershell -NoLogo -NoProfile -Command "if((Get-Process RflySim3D,CopterSim -ErrorAction SilentlyContinue).Count -ge 2){exit 0}else{exit 1}"
   if errorlevel 1 (
