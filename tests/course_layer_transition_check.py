@@ -42,10 +42,14 @@ def main():
     }
     plan = build_transition_plan("competition_course_v2", declared)
     assert plan["selected_course"] == "competition_course_v2"
-    assert plan["destroy_ids"] == [12001, 12002, 15001, 15002]
+    assert plan["destroy_ids"] == [12001, 12002]
+    assert plan["destroyed_course_ids"] == {"predicted_narrow_course": [12001, 12002]}
+    assert plan["preserved_course_ids"] == {"competition_course_v2": [15001, 15002]}
     assert 9999 not in plan["destroy_ids"]
     reverse = build_transition_plan("predicted_narrow_course", declared)
-    assert reverse["destroy_ids"] == plan["destroy_ids"]
+    assert reverse["destroy_ids"] == [15001, 15002]
+    assert reverse["destroyed_course_ids"] == {"competition_course_v2": [15001, 15002]}
+    assert reverse["preserved_course_ids"] == {"predicted_narrow_course": [12001, 12002]}
 
     expect_error(lambda: build_transition_plan("unknown", declared), "unknown selected course")
     expect_error(lambda: build_transition_plan("competition_course_v2", {
@@ -73,24 +77,36 @@ def main():
             window_id=-1,
             settle_seconds=2.0,
             sleep_fn=lambda seconds: events.append(("settle", seconds)),
+            stack_id="stack-1",
+            simulation_instance_id="sim-1",
         )
-        assert api.destroyed == [(12001, -1), (12002, -1), (15001, -1), (15002, -1)]
+        assert api.destroyed == [(12001, -1), (12002, -1)]
         assert events == [
             ("destroy", 12001),
             ("destroy", 12002),
-            ("destroy", 15001),
-            ("destroy", 15002),
             ("settle", 2.0),
         ]
         assert receipt["cleanup_policy"] == "exact_declared_ids"
         assert receipt["destroy_requested_ids"] == plan["destroy_ids"]
+        assert receipt["destroyed_course_ids"] == {"predicted_narrow_course": [12001, 12002]}
+        assert receipt["preserved_course_ids"] == {"competition_course_v2": [15001, 15002]}
         assert receipt["command_status"] == "COMMANDS_SENT"
         assert receipt["selected_course"] == "competition_course_v2"
         assert receipt["source_hashes"] == plan["source_hashes"]
+        assert receipt["stack_id"] == "stack-1"
+        assert receipt["simulation_instance_id"] == "sim-1"
         assert receipt["window_id"] == -1
         assert receipt["timestamp_utc"].endswith("Z")
         assert receipt["destroy_settle_seconds"] == 2.0
         assert json.loads(receipt_path.read_text(encoding="utf-8")) == receipt
+
+        expect_error(lambda: execute_transition(
+            FakeApi(),
+            plan,
+            Path(temp) / "unscoped_transition_receipt.json",
+            -1,
+            sleep_fn=lambda _: None,
+        ), "scope")
 
     print("course_layer_transition_check: PASS")
 

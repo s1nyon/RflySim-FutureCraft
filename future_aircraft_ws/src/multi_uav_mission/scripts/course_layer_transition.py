@@ -52,10 +52,13 @@ def build_transition_plan(selected: str, declared_ids: Mapping[str, Iterable[int
             if object_id in owner_by_id:
                 raise ValueError("entity ID {} is declared by multiple courses".format(object_id))
             owner_by_id[object_id] = course
+    inactive = [course for course in COURSE_NAMES if course != selected]
     return {
         "selected_course": selected,
         "declared_ids": normalized,
-        "destroy_ids": sorted(owner_by_id),
+        "destroyed_course_ids": {course: normalized[course] for course in inactive},
+        "preserved_course_ids": {selected: normalized[selected]},
+        "destroy_ids": sorted(object_id for object_id, course in owner_by_id.items() if course in inactive),
         "cleanup_policy": "exact_declared_ids",
         "destroy_settle_seconds": DESTROY_SETTLE_SECONDS,
     }
@@ -68,7 +71,11 @@ def execute_transition(
     window_id: int,
     settle_seconds: float = DESTROY_SETTLE_SECONDS,
     sleep_fn=time.sleep,
+    stack_id: Optional[str] = None,
+    simulation_instance_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    if (not stack_id or not simulation_instance_id) and plan["selected_course"] == "competition_course_v2":
+        raise ValueError("live transition requires stack_id and simulation_instance_id scope")
     sent: List[int] = []
     timestamp = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
     try:
@@ -82,8 +89,12 @@ def execute_transition(
             "command_status": "FAILED",
             "destroy_requested_ids": list(plan["destroy_ids"]),
             "destroy_commands_sent_ids": sent,
+            "destroyed_course_ids": dict(plan.get("destroyed_course_ids", {})),
+            "preserved_course_ids": dict(plan.get("preserved_course_ids", {})),
             "selected_course": plan["selected_course"],
             "source_hashes": dict(plan.get("source_hashes", {})),
+            "stack_id": stack_id,
+            "simulation_instance_id": simulation_instance_id,
             "timestamp_utc": timestamp,
             "window_id": window_id,
         }
@@ -93,9 +104,13 @@ def execute_transition(
         "cleanup_policy": "exact_declared_ids",
         "command_status": "COMMANDS_SENT",
         "destroy_requested_ids": list(plan["destroy_ids"]),
+        "destroyed_course_ids": dict(plan.get("destroyed_course_ids", {})),
+        "preserved_course_ids": dict(plan.get("preserved_course_ids", {})),
         "destroy_settle_seconds": float(settle_seconds),
         "selected_course": plan["selected_course"],
         "source_hashes": dict(plan.get("source_hashes", {})),
+        "stack_id": stack_id,
+        "simulation_instance_id": simulation_instance_id,
         "timestamp_utc": timestamp,
         "window_id": window_id,
     }
@@ -148,6 +163,7 @@ def main() -> int:
     parser.add_argument("--window-id", type=int, default=-1)
     parser.add_argument("--rflysim-root", type=Path, default=Path(os.environ.get("RFLYSIM_ROOT", r"D:\PX4PSP")))
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--stack-id"); parser.add_argument("--simulation-instance-id")
     args = parser.parse_args()
     declared, hashes = declared_course_sources(args.project_root)
     plan = build_transition_plan(args.selected, declared)
@@ -155,8 +171,10 @@ def main() -> int:
     if args.dry_run:
         output = dict(plan)
         output["mode"] = "dry-run"
+        output["stack_id"] = args.stack_id
+        output["simulation_instance_id"] = args.simulation_instance_id
     else:
-        output = execute_transition(_client(args.rflysim_root), plan, args.receipt, args.window_id)
+        output = execute_transition(_client(args.rflysim_root), plan, args.receipt, args.window_id, stack_id=args.stack_id, simulation_instance_id=args.simulation_instance_id)
     print(json.dumps(output, indent=2, sort_keys=True))
     return 0
 

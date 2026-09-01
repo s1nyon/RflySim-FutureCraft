@@ -13,12 +13,14 @@ set DRY_RUN=0
 set STACK_ID=
 set STACK_HEALTH_DIR=
 set STACK_MANIFEST=
+set SIMULATION_INSTANCE_ID=
 :parse_args
 if "%~1"=="" goto args_done
 if /I "%~1"=="--dry-run" set DRY_RUN=1
 if /I "%~1"=="--stack-id" set "STACK_ID=%~2"
 if /I "%~1"=="--health-dir" set "STACK_HEALTH_DIR=%~2"
 if /I "%~1"=="--manifest" set "STACK_MANIFEST=%~2"
+if /I "%~1"=="--simulation-instance-id" set "SIMULATION_INSTANCE_ID=%~2"
 shift & goto parse_args
 :args_done
 
@@ -62,7 +64,10 @@ call "%SCRIPT_DIR%start_two_uav.bat"
 if errorlevel 1 exit /b %ERRORLEVEL%
 powershell -NoLogo -NoProfile -Command "Start-Sleep -Seconds ([int]$env:PREDICTED_COURSE_SCENE_WAIT_SECONDS)"
 if errorlevel 1 exit /b %ERRORLEVEL%
-call "%SCRIPT_DIR%transition_project_course_layer.bat" predicted_narrow_course
+if not defined SIMULATION_INSTANCE_ID (
+  for /f "usebackq delims=" %%i in (`wsl -d %RFLYSIM_WSL_DISTRO% -e bash -lic "bash '%FUTURE_AIRCRAFT_SIM_WSL_DIR%/scripts/wsl/live_stack_wsl_ops.sh' sim-id" 2^>nul`) do set "SIMULATION_INSTANCE_ID=%%i"
+)
+call "%SCRIPT_DIR%transition_project_course_layer.bat" predicted_narrow_course --stack-id "%STACK_ID%" --simulation-instance-id "%SIMULATION_INSTANCE_ID%"
 if errorlevel 1 exit /b %ERRORLEVEL%
 call "%SCRIPT_DIR%load_predicted_narrow_course.bat" --no-clear
 set COURSE_LOAD_RESULT=%ERRORLEVEL%
