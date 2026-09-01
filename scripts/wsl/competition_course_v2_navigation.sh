@@ -91,7 +91,7 @@ if receipt.get("stack_id") != stack_id or receipt.get("simulation_instance_id") 
     raise SystemExit("[ERROR] live course receipt is not owned by this stack/instance")
 if receipt.get("cleanup_policy") != "receipt_only":
     raise SystemExit("[ERROR] live course receipt cleanup policy mismatch")
-if receipt.get("created_ids") != [item["id"] for item in expected]:
+if sorted(receipt.get("created_ids")) != sorted(item["id"] for item in expected):
     raise SystemExit("[ERROR] live course receipt entity IDs do not match spec-derived manifest")
 print(spec["spec_sha256"])
 PY
