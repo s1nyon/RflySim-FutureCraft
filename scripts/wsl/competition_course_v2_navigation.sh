@@ -59,7 +59,7 @@ export ROS_IP="${ROS_IP:-127.0.0.1}"
 source "$PROJECT_DIR/scripts/wsl/stage7_run_context.sh"
 stage7_load_run_context "$PROJECT_DIR"
 
-SPEC_SHA256="$(python3 - "$STACK_MANIFEST" "$STACK_ID" "$STAGE7_CURRENT_SIMULATION_INSTANCE_ID" "$MAP_SPEC" "$PROJECT_DIR/generated/competition_course_v2/entity_manifest.json" "$PROJECT_DIR/generated/competition_course_v2/load_receipt.json" <<'PY'
+SPEC_SHA256="$(python3 - "$STACK_MANIFEST" "$STACK_ID" "$STAGE7_CURRENT_SIMULATION_INSTANCE_ID" "$MAP_SPEC" "$PROJECT_DIR/generated/competition_course_v2/entity_manifest.json" "$PROJECT_DIR/logs/live_stack/$STACK_ID/competition_course_v2/load_receipt.json" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -87,6 +87,8 @@ expected = validated_runtime_entities(spec, entity_manifest)
 receipt = json.loads(Path(receipt_path).read_text(encoding="utf-8"))
 if receipt.get("map_id") != spec["map_id"] or receipt.get("spec_sha256") != spec["spec_sha256"]:
     raise SystemExit("[ERROR] live course receipt does not match authoritative spec")
+if receipt.get("stack_id") != stack_id or receipt.get("simulation_instance_id") != simulation_id:
+    raise SystemExit("[ERROR] live course receipt is not owned by this stack/instance")
 if receipt.get("cleanup_policy") != "receipt_only":
     raise SystemExit("[ERROR] live course receipt cleanup policy mismatch")
 if receipt.get("created_ids") != [item["id"] for item in expected]:

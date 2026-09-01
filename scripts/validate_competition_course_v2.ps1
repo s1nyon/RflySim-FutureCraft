@@ -14,8 +14,13 @@ $tests = @(
     'competition_course_v2_loader_check.py',
     'competition_course_v2_motion_check.py',
     'competition_course_v2_entrypoint_check.py',
-    'competition_course_v2_live_probe_check.py'
+    'competition_course_v2_live_probe_check.py',
+    'competition_course_v2_world_probe_check.py'
 )
+
+& (Join-Path $PSScriptRoot 'generate_competition_course_v2.bat')
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 foreach ($test in $tests) {
     & $Python (Join-Path $ProjectRoot "tests\$test") --project-root $ProjectRoot
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -37,7 +42,8 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     (Join-Path $ProjectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\competition_course_artifacts.py') `
     (Join-Path $ProjectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\competition_course_ue_loader.py') `
     (Join-Path $ProjectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\competition_course_motion.py') `
-    (Join-Path $ProjectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\competition_course_live_probe.py')
+    (Join-Path $ProjectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\competition_course_live_probe.py') `
+    (Join-Path $ProjectRoot 'future_aircraft_ws\src\multi_uav_mission\scripts\competition_course_world_probe.py')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host '[PASS] Competition Course V2 structural validation PASS'
