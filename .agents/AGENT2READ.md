@@ -126,6 +126,19 @@
     列为间歇性残余风险，未改任何 EGO/Faster-LIO/PX4/地图参数。
   - 本轮 Gate C 证据与修复见 `docs/evidence/2026-09-02-v2-section-a-rca-closure.md`；
     roadmap 已更新为 MAP CLOSED / NAVIGATION LIVE RCA ACTIVE。
+- **2026-09-02 Section A 3× fresh repeatability：FLIGHT PASS / CLEARANCE NOT STABLE**：
+  - Gate 0 acceptance cleanup 已实施并 push（`f47a048`）：static perception 改为 sparse
+    temporal evidence（≥3 帧、centroid ≤0.5m、planner avoidance 独立字段）；wall contract
+    拆分为 `collision_free`（≥0）与 `navigation_clearance_pass`（≥0.25m，来源
+    `clearance_policy.lateral_margin_each_side_m`）。
+  - 3× consecutive fresh full_section_a：**飞行链 3/3 PASS**（endpoint 4.51–4.58m、
+    collision 0、watchdog 0、UAV2 0 违规、perception 全 PASS、planner velocity 0 over-limit），
+    但 **0/3 stable**（min wall clearance 0.072/0.085/0.073m，均 <0.25m）。
+  - 系统性 RCA：所有贴墙集中在起飞/进入段（s∈[−0.42,1.9]，section_a_right），
+    EGO 从 spawn 直飞 goal 的初始轨迹在入口贴右墙；corridor 后段正常。
+    首次冲出/超速事件未复现。本轮未调 EGO/Faster-LIO/bridge/PX4/地图。
+  - 状态：**SECTION A FLIGHT PASS / CLEARANCE NOT STABLE**；3× stable baseline 未关闭。
+    证据见 `docs/evidence/2026-09-02-v2-section-a-repeatability-clearance-not-stable.md`。
 - 2026-08-11 旧栈 OFFBOARD 失败已定位为运行时序问题（旧栈重试窗口内 setpoint
   流中断），**不是代码回归**；恢复靠「完整清理 → fresh 栈背靠背启动」，
   见 `../docs/incidents/2026-08-11-offboard-stale-retry-setpoint-stream.md`。

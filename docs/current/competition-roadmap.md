@@ -160,6 +160,15 @@
   [`2026-09-01-v2-section-a-live-lifecycle-blocker.md`](../evidence/2026-09-01-v2-section-a-live-lifecycle-blocker.md)。
   下一内部阶梯是 3× consecutive fresh-instance full Section A（当前 1× full fresh PASS，
   repeatability 尚未关闭）。
+  2026-09-02 3× repeatability 结果：**FLIGHT PASS / CLEARANCE NOT STABLE**。
+  3/3 fresh full_section_a 飞行链 PASS（endpoint/collision/watchdog/perception/UAV2 全通过），
+  但 min wall clearance 0.072/0.085/0.073m 均 <0.25m 稳定阈值（来源
+  `clearance_policy.lateral_margin_each_side_m`），0/3 stable baseline。
+  系统性贴墙位于起飞/进入段（s∈[−0.42,1.9]，section_a_right），EGO 初始轨迹在入口
+  贴右墙；corridor 后段正常。首次冲出/超速未复现。本轮未调任何 planner 参数；
+  下一动作需 Yellow Zone 评审 EGO 起飞段轨迹或起飞路径设计，不接受调阈值"通过"。
+  证据见
+  [`2026-09-02-v2-section-a-repeatability-clearance-not-stable.md`](../evidence/2026-09-02-v2-section-a-repeatability-clearance-not-stable.md)。
   设计与执行边界见
   [`2026-09-01-competition-course-v2-navigation-baseline-design.md`](../architecture/2026-09-01-competition-course-v2-navigation-baseline-design.md)。
 - work：motion baseline metrics；corridor/gate guidance；look-ahead goal transition；online local replanning；
