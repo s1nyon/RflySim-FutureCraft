@@ -12,3 +12,5 @@
 - [`superpowers/`](superpowers/)：设计和实施计划记录；保留原位置，不作为 Current Truth。
 
 当前主路线入口：[Competition Capability Roadmap](current/competition-roadmap.md)。
+Simulation/Competition Course V2 freeze 与 C++ Mission handoff：
+[`current/2026-09-02-simulation-baseline-freeze-handoff.md`](current/2026-09-02-simulation-baseline-freeze-handoff.md)。
