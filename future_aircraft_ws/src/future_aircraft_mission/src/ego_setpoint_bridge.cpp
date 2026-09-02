@@ -70,8 +70,15 @@ void EgoSetpointBridge::plannerCallback(
 void EgoSetpointBridge::goalCallback(
     const geometry_msgs::PoseStamped::ConstPtr& msg)
 {
-    ROS_INFO("Received new planner goal");
+    ROS_INFO(
+    "Received new planner goal: frame=%s, position=(%.2f, %.2f, %.2f)",
+    msg->header.frame_id.c_str(),
+    msg->pose.position.x,
+    msg->pose.position.y,
+    msg->pose.position.z
+    );
     _has_planner_command = false;
+
 }
 
 mavros_msgs::PositionTarget 
