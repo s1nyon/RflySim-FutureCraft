@@ -64,6 +64,9 @@ void EgoSetpointBridge::plannerCallback(
     ROS_INFO_ONCE("Received planner command");
 
     _latest_target = convertCommand(*msg);
+
+    _last_planner_command_time = ros::Time::now();
+    
     _has_planner_command = true;
 }
 
@@ -71,14 +74,14 @@ void EgoSetpointBridge::goalCallback(
     const geometry_msgs::PoseStamped::ConstPtr& msg)
 {
     ROS_INFO(
-    "Received new planner goal: frame=%s, position=(%.2f, %.2f, %.2f)",
-    msg->header.frame_id.c_str(),
-    msg->pose.position.x,
-    msg->pose.position.y,
-    msg->pose.position.z
+        "Received new planner goal: frame=%s, position=(%.2f, %.2f, %.2f)",
+        msg->header.frame_id.c_str(),
+        msg->pose.position.x,
+        msg->pose.position.y,
+        msg->pose.position.z
     );
-    _has_planner_command = false;
 
+    _has_planner_command = false;
 }
 
 mavros_msgs::PositionTarget 

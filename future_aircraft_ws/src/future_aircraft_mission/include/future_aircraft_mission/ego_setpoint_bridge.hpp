@@ -32,6 +32,7 @@ private:
     ros::Subscriber _goal_sub;
     ros::Publisher _setpoint_pub;
     ros::Timer _publish_timer;
+    ros::Time _last_planner_command_time;
 
     mavros_msgs::PositionTarget _latest_target;
 
