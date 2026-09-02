@@ -3,8 +3,9 @@
 EgoSetpointBridge::EgoSetpointBridge(
     ros::NodeHandle& nh, // 这里传引用&是不重新造一份nh,直接操作这个已有对象的引用
     ros::NodeHandle& pnh)
-    : _nh(nh), // 这里 : 是什么意思?
-    _pnh(pnh)
+    : _nh(nh),
+    _pnh(pnh),
+    _has_planner_command(false)
 {
     // Get parameter
     _pnh.param<std::string>(
@@ -56,6 +57,7 @@ void EgoSetpointBridge::plannerCallback(
     ROS_INFO("Received planner command");
 
     _latest_target = convertCommand(*msg);
+    _has_planner_command = true;
 }
 
 mavros_msgs::PositionTarget 
@@ -79,7 +81,10 @@ EgoSetpointBridge::convertCommand(const quadrotor_msgs::PositionCommand& command
 void EgoSetpointBridge::publishTimerCallback(
     const ros::TimerEvent& event)
 {
-    _latest_target.header.stamp = ros::Time::now();
-
-    _setpoint_pub.publish(_latest_target);
+    if (!_has_planner_command) {
+        return;
+    } else {
+        _latest_target.header.stamp = ros::Time::now();
+        _setpoint_pub.publish(_latest_target);
+    }
 }

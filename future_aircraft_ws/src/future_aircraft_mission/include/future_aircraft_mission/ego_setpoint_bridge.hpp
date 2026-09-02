@@ -40,4 +40,6 @@ private:
     double _initial_y;
     double _initial_z;
     double _initial_yaw;    
+
+    bool _has_planner_command;
 };
