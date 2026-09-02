@@ -1,6 +1,14 @@
 # Infrastructure Baseline
 
-Updated: 2026-09-01
+Updated: 2026-09-02
+
+Simulation infrastructure is **FROZEN** as of 2026-09-02: lifecycle, startup/stop
+chain, PX4/MAVROS, sensor/Faster-LIO/EGO integration, RViz diagnostic integration,
+Competition Course V2 deployment, and validation tooling are the stable base for
+C++ Competition Mission development. Frozen does not mean immutable: reopen only
+for a confirmed regression, a real runtime bug, or an interface defect exposed by
+the C++ mission. Authoritative handoff:
+[`2026-09-02-simulation-baseline-freeze-handoff.md`](2026-09-02-simulation-baseline-freeze-handoff.md).
 
 Competition Course V2 reached its independent no-arm map baseline on 2026-09-01.
 That acceptance did not modify or reopen lifecycle, RViz, PX4/MAVROS ownership,

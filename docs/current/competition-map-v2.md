@@ -1,6 +1,6 @@
 # Competition Course V2
 
-Status: **MAP READY — CLOSED (2026-09-01)**
+Status: **MAP READY — CLOSED (2026-09-01) → FROZEN (2026-09-02)**
 
 Two independent fresh RflySim startup runs passed the acceptance contract from
 [`2026-09-01-competition-course-v2-fresh-startup-closure-plan.md`](2026-09-01-competition-course-v2-fresh-startup-closure-plan.md):
@@ -24,8 +24,26 @@ confirmed by the user for both runs. Full evidence:
 The earlier fresh-startup regression
 (`stack-20260901T091442Z-ff2e5d81`) and its lifecycle cleanup note are
 historical; the old acceptance is marked
-`SUPERSEDED BY FRESH-START FAILURE`. Navigation remains frozen and has not
-started on either fresh run.
+`SUPERSEDED BY FRESH-START FAILURE`.
+
+## Navigation status (superseded map-gate wording)
+
+The earlier sentence "Navigation remains frozen and has not started on either
+fresh run" applied only to the 2026-09-01 map-gate closure. It is now
+**superseded**: UAV1 Section A navigation has since completed live RCA and
+3× fresh flight-chain PASS (see
+[`2026-09-02-v2-section-a-repeatability-clearance-not-stable.md`](../evidence/2026-09-02-v2-section-a-repeatability-clearance-not-stable.md)).
+Section A clearance remains a known planner/corridor-entry performance
+limitation, not a map blocker.
+
+## Frozen contract
+
+`competition_course_v2` is **FROZEN** (2026-09-02) as the navigation development
+map baseline:
+
+- **Do not modify V2 geometry to compensate for navigation/planner deficiencies.**
+- If the official competition map revision is published, a separate revision is
+  allowed based on official requirements only.
 
 `competition_course_v2` is one reproducible RflySim development environment for the official narrow-corridor task family. It is not the final official competition map, and selecting it does not establish a shared `competition_world` TF. The protected default remains `predicted_narrow_course`.
 

@@ -2,6 +2,20 @@
 
 ## Current Truth
 
+> **Freeze summary（2026-09-02，权威 handoff 见
+> [`docs/current/2026-09-02-simulation-baseline-freeze-handoff.md`](../docs/current/2026-09-02-simulation-baseline-freeze-handoff.md)）**
+>
+> - CURRENT PHASE：Simulation baseline frozen；Competition Course V2 frozen；
+>   **C++ Competition Mission development is next**。
+> - FROZEN：lifecycle、simulation startup、PX4/MAVROS、RViz、
+>   sensor/Faster-LIO/EGO integration baseline、Competition Course V2 map。
+> - VALIDATED：Section A full flight chain **3/3 fresh PASS**。
+> - KNOWN LIMITATION：Section A entrance wall clearance ≈0.072/0.085/0.073 m
+>   （target stable margin 0.25 m），classified as planner/corridor-entry
+>   performance backlog，**不是 infra/map/lifecycle/perception/control blocker**。
+> - DO NOT REOPEN INFRA unless：confirmed regression / confirmed runtime bug /
+>   C++ mission exposes a real interface defect。
+
 - Lifecycle 是 **FROZEN / CLOSED**：5 次 fresh start→READY→stop-clean closure 与 3 次 PBL-1 full regression 已通过。
 - 2026-08-11 仓库结构迁移后，`dev` live 链的 armed 验证已恢复并通过
   （fresh-instance：双机 OFFBOARD/arm/起飞/14 段导航/降落，`success=true` 41.5s，
@@ -125,7 +139,7 @@
     full run 数据 `result=PASS`。首次 full run 的冲出/超速（1.5m/s）在相同配置 fresh run 未复现，
     列为间歇性残余风险，未改任何 EGO/Faster-LIO/PX4/地图参数。
   - 本轮 Gate C 证据与修复见 `docs/evidence/2026-09-02-v2-section-a-rca-closure.md`；
-    roadmap 已更新为 MAP CLOSED / NAVIGATION LIVE RCA ACTIVE。
+    roadmap 已更新为 simulation frozen / C++ mission next。
 - **2026-09-02 Section A 3× fresh repeatability：FLIGHT PASS / CLEARANCE NOT STABLE**：
   - Gate 0 acceptance cleanup 已实施并 push（`f47a048`）：static perception 改为 sparse
     temporal evidence（≥3 帧、centroid ≤0.5m、planner avoidance 独立字段）；wall contract

@@ -115,7 +115,7 @@
 - status：**CLOSED**（3× fresh-instance full flight success）。
 - 定位：这是 **regression baseline**，不是比赛 mission strategy（当前 UAV1 全程→UAV2 全程在 P3 前必须替换）。
 
-### Phase 2 — Competition-Grade Narrow-Corridor Navigation（ACTIVE）
+### Phase 2 — Competition-Grade Narrow-Corridor Navigation（BASELINE FROZEN）
 
 - goal：两架无人机在比赛规定的窄通道中连续、安全、高效导航，对未知静态/动态障碍在线响应，满足进入时限与碰撞约束。
 - current map gate：**CLOSED — MAP READY (2026-09-01)**。两次独立 fresh RflySim
@@ -126,21 +126,18 @@
   运动正确。历史回归
   `stack-20260901T091442Z-ff2e5d81` 与旧 acceptance 保留为 superseded。证据见
   [`2026-09-01-competition-course-v2-map-ready-closure.md`](../evidence/2026-09-01-competition-course-v2-map-ready-closure.md)。
-- current navigation gate：**MAP GATE CLOSED / NAVIGATION LIVE RCA ACTIVE（2026-09-02）**。
+- current navigation gate：**SIMULATION FROZEN / C++ COMPETITION MISSION NEXT（2026-09-02）**。
+  本节以下为已完成的 Section A 导航基线历史（保留为 superseded 状态，不再作为当前
+  active blocker）；正式 freeze/handoff 见
+  [`2026-09-02-simulation-baseline-freeze-handoff.md`](2026-09-02-simulation-baseline-freeze-handoff.md)。
   - 2026-09-02 live 阶梯：Gate 3 current-instance no-arm PASS；Gate 4 `short_smoke` PASS；
     `full_section_a` 首次 live FAIL（冲出 geofence，wall clearance -0.297m，见
     [`2026-09-02-v2-full-section-a-live-first-diagnostic.md`](../evidence/2026-09-02-v2-full-section-a-live-first-diagnostic.md)）。
-  - 2026-09-02 RCA 闭环（Gate B/C）：UAV1-only RViz + 增强证据工具链证明
-    `LiDAR → Faster-LIO → EGO → PositionCommand → MAVROS PositionTarget → PX4` 各层行为：
-    EGO desired velocity/acceleration 全部 ≤ planner limit（0 over-limit）；
-    PositionTarget 全程 type_mask=3064（position-only contract，667–909 样本一致）；
-    EGO bspline 在 static box 区域明确绕行（min signed distance 0.703m）；
-    static box 在 registered cloud 可见（1–4 点/帧，尺寸 0.35×0.25m 的物理限制）；
-    受控 fresh full_section_a 飞行全链 PASS（endpoint/settle/landing/disarm，wall clearance 0.066m）。
-    **失败归类：A. EVALUATION_TOOLING_ERROR**——ROI 阈值（≥5 点）对 0.35×0.25m 小 box 过严，
-    已改为 ROI 计数 + EGO 轨迹绕行证据合并判定；重放真实 run 后 `result=PASS`。
-    首次 full run 的冲出/超速在相同配置 fresh run 中未复现，列为间歇性残余风险。
-    没有修改任何 EGO/Faster-LIO/PX4 参数、地图几何或 Section A endpoint。
+  - 2026-09-02 RCA 闭环（Gate B/C）证明各层行为（EGO ≤ planner limit、
+    PositionTarget position-only、EGO bspline 绕行 static box、registered cloud
+    可见 static box），失败归类 **A. EVALUATION_TOOLING_ERROR** 并修复；
+    首次 full run 的冲出/超速在相同配置 fresh run 中未复现（间歇性残余风险）。
+    详见 [`2026-09-02-v2-section-a-rca-closure.md`](../evidence/2026-09-02-v2-section-a-rca-closure.md)。
   - 入口与验证：
 
   ```powershell
@@ -158,19 +155,45 @@
   Red-Zone 授权。
   证据见
   [`2026-09-01-v2-section-a-live-lifecycle-blocker.md`](../evidence/2026-09-01-v2-section-a-live-lifecycle-blocker.md)。
-  下一内部阶梯是 3× consecutive fresh-instance full Section A（当前 1× full fresh PASS，
-  repeatability 尚未关闭）。
-  2026-09-02 3× repeatability 结果：**FLIGHT PASS / CLEARANCE NOT STABLE**。
+  2026-09-02 3× repeatability 结果：**FLIGHT PASS / CLEARANCE NOT STABLE**（已完成，历史）。
   3/3 fresh full_section_a 飞行链 PASS（endpoint/collision/watchdog/perception/UAV2 全通过），
   但 min wall clearance 0.072/0.085/0.073m 均 <0.25m 稳定阈值（来源
   `clearance_policy.lateral_margin_each_side_m`），0/3 stable baseline。
   系统性贴墙位于起飞/进入段（s∈[−0.42,1.9]，section_a_right），EGO 初始轨迹在入口
   贴右墙；corridor 后段正常。首次冲出/超速未复现。本轮未调任何 planner 参数；
-  下一动作需 Yellow Zone 评审 EGO 起飞段轨迹或起飞路径设计，不接受调阈值"通过"。
+  Section A clearance 列为 known planner/corridor-entry performance limitation
+  （非 infra blocker）；后续如需处理，走 Yellow Zone 评审，不接受调阈值"通过"。
   证据见
   [`2026-09-02-v2-section-a-repeatability-clearance-not-stable.md`](../evidence/2026-09-02-v2-section-a-repeatability-clearance-not-stable.md)。
   设计与执行边界见
   [`2026-09-01-competition-course-v2-navigation-baseline-design.md`](../architecture/2026-09-01-competition-course-v2-navigation-baseline-design.md)。
+  正式 freeze/handoff：`2026-09-02-simulation-baseline-freeze-handoff.md`。
+
+### Phase 2.5 — C++ Competition Mission Development（NEXT ACTIVE）
+
+- 工作区：`future_aircraft_ws/src/future_aircraft_mission/`（人类拥有比赛行为/控制意图；
+  AI 默认承担架构建议/API 提醒/code review/bug 诊断/测试设计/小块代码协助）。
+- 初始 milestone 形状：
+
+  ```text
+  VehicleInterface → EgoInterface → UavAgent → MissionManager → UAV1 C++ short-smoke baseline
+  ```
+
+- 第一个完整 C++ capability：
+
+  ```text
+  WAIT_READY → TAKEOFF → SEND_EGO_GOAL → WAIT_REACHED → AUTO.LAND → DISARM → FINISHED
+  ```
+
+- 架构边界（预期，非当前实现）：
+  `MissionManager ─ UavAgent(UAV1/UAV2) ─ Vehicle/Ego/Perception/SafetyInterface`；
+  `CorridorCoordinator` 管高层许可/顺序；`TaskAllocator` 管未来任务分配。
+- 原则：**C++ Mission 决定 WHAT to do；EGO 决定 HOW to locally navigate**；
+  mission 层不得重实现 local trajectory planner。
+- 不在当前 milestone：CorridorCoordinator、TaskAllocator、dual-UAV 完整任务、vision mission。
+- 分支建议：main merge 后 `feature/cpp-competition-mission`（单分支 + 逻辑 commits）。
+- 完整 handoff 见
+  [`2026-09-02-simulation-baseline-freeze-handoff.md`](2026-09-02-simulation-baseline-freeze-handoff.md)。
 - work：motion baseline metrics；corridor/gate guidance；look-ahead goal transition；online local replanning；
   静态障碍回归；动态障碍回归；velocity/acceleration tuning；clearance monitoring。
 - KPI：collision=0；min wall clearance；navigation success rate；time to enter corridor；

@@ -70,6 +70,7 @@
 | `scripts/lifecycle/stack_stop.py` | Manifest-only graceful stop 核心。 |
 | `scripts/lifecycle/stack_topology.py` | 双机 stack topology contract。 |
 | `scripts/lifecycle/to_wsl_path.ps1` | Windows 到 WSL 路径转换 helper。 |
+| `scripts/run_live_stack_start_bg.ps1` | 后台启动 `live_stack_start.ps1` 并捕获输出，供受控 Gate 轮询使用。 |
 | `scripts/maintenance/clean_logs.ps1` | `sim.ps1 clean-logs` 的有界内部实现。 |
 | `scripts/maintenance/curate_pbl1_evidence.py` | PBL-1 三次批准 run 的确定性证据整理与脱敏实现。 |
 | `scripts/python_contract_runner.ps1` | PowerShell validator 的 Python contract helper。 |
@@ -95,6 +96,8 @@
 | `scripts/run_stage2_1_mavlink_check.bat` | 单机 MAVLink 回程诊断。 |
 | `scripts/run_stage7_topic_probe.bat` | Stage 7 只读 topic/readiness probe。 |
 | `scripts/run_stage8_control_chain_recorder.bat` | Stage 8 只读控制链记录器。 |
+| `scripts/capture_rflysim_window.ps1` | 只读 RflySim3D 主窗口截图 helper（map acceptance evidence）。 |
+| `scripts/rflysim_view_cmd.py` | 只读 RflySim3D view/capture 命令 helper（map acceptance evidence）。 |
 | `scripts/start_mavros_uav1.bat` | UAV1 MAVROS focused helper。 |
 | `scripts/start_mavros_uav2.bat` | UAV2 MAVROS focused helper。 |
 | `scripts/start_rflysim_sitl_single.bat` | 单机 SITL focused helper。 |
