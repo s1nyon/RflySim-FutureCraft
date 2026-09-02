@@ -34,7 +34,7 @@ the verified V2 runner (spawn-origin, `uav1_camera_init` numeric frame). Do not
 mix MAVROS odometry-in/out/local-position semantics (see
 [`tf-frame-contract.md`](tf-frame-contract.md)).
 
-## Proposed class skeleton
+## Proposed class skeleton (reference only)
 
 ```text
 MissionManager
@@ -69,5 +69,5 @@ verified settle duration.
   guidance, API reminders, code review, bug diagnosis, test design, and small
   local assistance.
 - AI does not default to rewriting the whole package.
-- Vehicle/Ego interface headers below are a starting skeleton for review, not a
-  complete implementation.
+- Interface code is written by the user; this document only records the
+  vocabulary/contract so both sides agree on topics, frames, and states.

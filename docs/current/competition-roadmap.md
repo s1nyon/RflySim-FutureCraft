@@ -192,8 +192,8 @@
   mission 层不得重实现 local trajectory planner。
 - 不在当前 milestone：CorridorCoordinator、TaskAllocator、dual-UAV 完整任务、vision mission。
 - 分支建议：main merge 后 `feature/cpp-competition-mission`（单分支 + 逻辑 commits）。
-- 接口起点（topic/service/frame/state 契约）：`2026-09-02-cpp-mission-interface-contract.md`；
-  `VehicleInterface` / `EgoInterface` 头文件骨架已放入 workspace 供评审。
+- 接口起点（topic/service/frame/state 契约）：`2026-09-02-cpp-mission-interface-contract.md`
+  （契约文档；实现由用户编写）。
 - 完整 handoff 见
   [`2026-09-02-simulation-baseline-freeze-handoff.md`](2026-09-02-simulation-baseline-freeze-handoff.md)。
 - work：motion baseline metrics；corridor/gate guidance；look-ahead goal transition；online local replanning；
