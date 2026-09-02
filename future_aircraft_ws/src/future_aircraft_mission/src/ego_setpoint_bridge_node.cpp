@@ -8,6 +8,8 @@ int main(int argc, char** argv)
     ros::NodeHandle nh;
     ros::NodeHandle pnh("~");
 
+    EgoSetpointBridge bridge(nh, pnh);
+
     ros::spin();
 
     return 0;

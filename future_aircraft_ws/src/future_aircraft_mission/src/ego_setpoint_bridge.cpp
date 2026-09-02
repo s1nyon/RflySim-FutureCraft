@@ -1,9 +1,9 @@
 #include "future_aircraft_mission/ego_setpoint_bridge.hpp"
 
 EgoSetpointBridge::EgoSetpointBridge(
-    ros::NodeHandle& nh,
+    ros::NodeHandle& nh, // 这里传引用&是不重新造一份nh,直接操作这个已有对象的引用
     ros::NodeHandle& pnh)
-    : _nh(nh),
+    : _nh(nh), // 这里 : 是什么意思?
     _pnh(pnh)
 {
     // Get parameter

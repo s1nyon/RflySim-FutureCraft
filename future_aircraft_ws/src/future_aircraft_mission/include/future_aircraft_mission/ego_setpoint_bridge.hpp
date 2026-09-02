@@ -20,7 +20,7 @@ private:
 
     // PublishCommand -> PositionTarget
     mavros_msgs::PositionTarget convertCommand(const quadrotor_msgs::PositionCommand& command);
-
+                                                
 private:
     ros::NodeHandle _nh;
     ros::NodeHandle _pnh;
