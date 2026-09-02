@@ -21,18 +21,20 @@
   证据见 `docs/evidence/2026-08-11-live-import-and-pwsh-compat-armed-verified.md`。
   已知待修缺陷：WSL 进程组 stop 在 `stack_stop.py` 中失效（stop 报 NOT clean，
   需显式 PID 补清），见 `docs/incidents/2026-08-11-wsl-pgid-stop-ineffective.md`。
-- 当前开发阶段：**Phase 2.5 C++ Competition Mission Development（next / NOT STARTED）**；
-  仿真/infrastructure/map 已冻结为稳定底座；PBL-1 是回归基线，不等于比赛完整能力。
+- 当前开发阶段：**Phase 2.5 C++ Competition Mission Development（NEXT ACTIVE；
+  现有 package 基础 PRESENT，广义 mission 架构尚未实现）**；仿真/infrastructure/map
+  已冻结为稳定底座；PBL-1 是回归基线，不等于比赛完整能力。
 - D435i RGB/Depth 接口已保留，但 `full` 多传感器模式的 live 飞行稳定性尚未闭环；默认飞行配置仍为 `lidar_only`。
-- `future_aircraft_mission` 是 C++ 比赛任务工作区，其中现有的 `EgoSetpointBridge`
-  属**历史原型**，不是新 mission 架构 scaffold（新架构尚未开始，将从零设计）；
+- `future_aircraft_mission` 是**现有且计划继续使用**的 C++ competition mission
+  package；现有 `EgoSetpointBridge` 为 PRESENT / KEEP 的 baseline 模块；更广义的
+  mission 架构尚未实现，后续模块在该 package 内由用户增量设计。
   `multi_uav_mission` Python 与 lifecycle 是受保护基线。
 
 ## Repository Layout
 
 | Path | Purpose |
 | --- | --- |
-| `future_aircraft_ws/src/future_aircraft_mission/` | C++ 比赛任务工作区（现有代码为历史原型；新 mission 尚未开始） |
+| `future_aircraft_ws/src/future_aircraft_mission/` | 现有且继续使用的 C++ competition mission package（广义 mission 架构待增量实现） |
 | `future_aircraft_ws/src/multi_uav_mission/` | 受保护的 live-validated Python/launch 基线 |
 | `third_party/ego-planner-swarm/` | 固定 team-fork commit 的独立 Catkin overlay |
 | `config/` | 环境模板、阶段契约、传感器与赛道定义 |

@@ -126,7 +126,8 @@
   运动正确。历史回归
   `stack-20260901T091442Z-ff2e5d81` 与旧 acceptance 保留为 superseded。证据见
   [`2026-09-01-competition-course-v2-map-ready-closure.md`](../evidence/2026-09-01-competition-course-v2-map-ready-closure.md)。
-- current navigation gate：**SIMULATION FROZEN / C++ COMPETITION MISSION NEXT / NOT STARTED（2026-09-02）**。
+- current navigation gate：**SIMULATION FROZEN / C++ COMPETITION MISSION NEXT ACTIVE
+  （现有 package 基础 PRESENT；广义 mission 架构 NOT YET IMPLEMENTED）（2026-09-02）**。
   本节以下为已完成的 Section A 导航基线历史（保留为 superseded 状态，不再作为当前
   active blocker）；正式 freeze/handoff 见
   [`2026-09-02-simulation-baseline-freeze-handoff.md`](2026-09-02-simulation-baseline-freeze-handoff.md)。
@@ -169,14 +170,15 @@
   [`2026-09-01-competition-course-v2-navigation-baseline-design.md`](../architecture/2026-09-01-competition-course-v2-navigation-baseline-design.md)。
   正式 freeze/handoff：`2026-09-02-simulation-baseline-freeze-handoff.md`。
 
-### Phase 2.5 — C++ Competition Mission Development（NEXT ACTIVE — ARCHITECTURE NOT STARTED）
+### Phase 2.5 — C++ Competition Mission Development（NEXT ACTIVE — BROADER ARCHITECTURE NOT YET IMPLEMENTED）
 
-- **架构状态：NOT STARTED**。本阶段尚未开始设计/实现；以下 milestone 与状态机仅为
-  conceptual roadmap，**未批准/未创建任何实现 scaffold**。不要据此直接生成代码。
-- **历史 prototype 说明**：`future_aircraft_mission` 中的 `EgoSetpointBridge`
-  （含 `.hpp/.cpp/node/CMake/package`）是早期历史原型/实验，**不是**新 C++ mission
-  架构的起点或骨架；新架构的 package boundary / first node / interface 设计将从零
-  与用户重新讨论。
+- **C++ 状态**：`future_aircraft_mission` 是**现有且计划继续使用**的 C++ competition
+  mission package；现有 `EgoSetpointBridge` 是 **PRESENT / KEEP** 的 baseline 模块
+  （EGO PositionCommand → MAVROS/PX4 setpoint handoff），不是被废弃的原型。
+  **更广义的 Competition Mission 架构（VehicleInterface/EgoInterface/UavAgent/
+  MissionManager）尚未实现**；后续模块由用户在**该已有 package 内**增量亲手设计与
+  编码（不删除/重建 package，不另建 mission package）。以下 milestone 与状态机仅为
+  conceptual roadmap，**未批准/未创建任何实现 scaffold**，不要据此直接生成代码。
 - 工作区：`future_aircraft_ws/src/future_aircraft_mission/`（人类拥有比赛行为/控制意图；
   AI 默认承担架构建议/API 提醒/code review/bug 诊断/测试设计/小块代码协助）。
 - 初始 milestone 形状：
@@ -258,7 +260,8 @@ PBL Baseline (P1, DONE)
         ↓
 Narrow-Corridor Navigation (P2, BASELINE FROZEN — Section A capability validated)
         ↓
-C++ Competition Mission Development (P2.5, NEXT ACTIVE / NOT STARTED)
+C++ Competition Mission Development (P2.5, NEXT ACTIVE — broader architecture
+  NOT YET IMPLEMENTED; existing future_aircraft_mission package retained)
       ↙            ↘
 Coordination (P3)    Perception (P4)
       ↘            ↙
