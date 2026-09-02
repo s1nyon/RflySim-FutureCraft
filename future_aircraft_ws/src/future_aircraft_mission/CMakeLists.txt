@@ -5,12 +5,13 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   quadrotor_msgs
   mavros_msgs
+  geometry_msgs
 )
 
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES future_aircraft_mission
-  CATKIN_DEPENDS roscpp quadrotor_msgs mavros_msgs
+  CATKIN_DEPENDS roscpp quadrotor_msgs mavros_msgs geometry_msgs
 )
 
 include_directories(include ${catkin_INCLUDE_DIRS})

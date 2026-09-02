@@ -10,4 +10,5 @@
   <depend>roscpp</depend>
   <depend>quadrotor_msgs</depend>
   <depend>mavros_msgs</depend>
+  <depend>geometry_msgs</depend>
 </package>

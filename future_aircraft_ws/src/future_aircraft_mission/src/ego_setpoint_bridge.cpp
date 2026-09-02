@@ -68,7 +68,7 @@ void EgoSetpointBridge::plannerCallback(
 }
 
 void EgoSetpointBridge::goalCallback(
-    const geometry_msgs::PoseStamped::ConstPtr& stamp)
+    const geometry_msgs::PoseStamped::ConstPtr& msg)
 {
     ROS_INFO("Received new planner goal");
     _has_planner_command = false;

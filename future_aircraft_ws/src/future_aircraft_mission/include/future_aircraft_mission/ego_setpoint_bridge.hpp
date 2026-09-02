@@ -23,7 +23,7 @@ private:
     mavros_msgs::PositionTarget convertCommand(const quadrotor_msgs::PositionCommand& command);
                                                
     // bridge -> goal
-    void goalCallback(const geometry_msgs::PoseStamped::ConstPtr& stamp);
+    void goalCallback(const geometry_msgs::PoseStamped::ConstPtr& msg);
 private:
     ros::NodeHandle _nh;
     ros::NodeHandle _pnh;
