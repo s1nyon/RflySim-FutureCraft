@@ -67,8 +67,17 @@ EgoSetpointBridge::convertCommand(const quadrotor_msgs::PositionCommand& command
     target.coordinate_frame = 
         mavros_msgs::PositionTarget::FRAME_LOCAL_NED;
 
-    // TODO: type mask
-
+    // type mask
+    target.type_mask = 
+        mavros_msgs::PositionTarget::IGNORE_VX |
+        mavros_msgs::PositionTarget::IGNORE_VY |
+        mavros_msgs::PositionTarget::IGNORE_VZ |
+        mavros_msgs::PositionTarget::IGNORE_AFX |
+        mavros_msgs::PositionTarget::IGNORE_AFY |
+        mavros_msgs::PositionTarget::IGNORE_AFZ |
+        mavros_msgs::PositionTarget::FORCE |
+        mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
+    
     target.position.x = command.position.x;
     target.position.y = command.position.y;
     target.position.z = command.position.z;
@@ -83,8 +92,8 @@ void EgoSetpointBridge::publishTimerCallback(
 {
     if (!_has_planner_command) {
         return;
-    } else {
-        _latest_target.header.stamp = ros::Time::now();
-        _setpoint_pub.publish(_latest_target);
     }
+
+    _latest_target.header.stamp = ros::Time::now();
+    _setpoint_pub.publish(_latest_target);
 }
