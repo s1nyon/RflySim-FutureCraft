@@ -18,6 +18,11 @@ EgoSetpointBridge::EgoSetpointBridge(
         _setpoint_topic,
         "/uav1/mavros/setpoint_raw/local"
     );
+    _pnh.param<std::string>(
+        "goal_topic",
+        _goal_topic,
+        "/uav1/planning/goal"
+    );
     _pnh.param<double>(
         "rate_hz",
         _rate_hz,
@@ -38,6 +43,13 @@ EgoSetpointBridge::EgoSetpointBridge(
         this
     );
 
+    _goal_sub = _nh.subscribe(
+        _goal_topic,
+        10,
+        &EgoSetpointBridge::goalCallback,
+        this
+    );
+
     // Create timer
     _publish_timer = _nh.createTimer(
         ros::Duration(1.0 / _rate_hz),
@@ -53,6 +65,13 @@ void EgoSetpointBridge::plannerCallback(
 
     _latest_target = convertCommand(*msg);
     _has_planner_command = true;
+}
+
+void EgoSetpointBridge::goalCallback(
+    const geometry_msgs::PoseStamped::ConstPtr& stamp)
+{
+    ROS_INFO("Received new planner goal");
+    _has_planner_command = false;
 }
 
 mavros_msgs::PositionTarget 
@@ -92,3 +111,4 @@ void EgoSetpointBridge::publishTimerCallback(
     _latest_target.header.stamp = ros::Time::now();
     _setpoint_pub.publish(_latest_target);
 }
+
