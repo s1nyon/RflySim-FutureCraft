@@ -28,6 +28,11 @@ EgoSetpointBridge::EgoSetpointBridge(
         _rate_hz,
         20.0
     );
+    _pnh.param<double>(
+        "command_timeout",
+        _command_timeout,
+        0.5
+    );
 
     // Create publisher
     _setpoint_pub = _nh.advertise<mavros_msgs::PositionTarget>(
@@ -66,7 +71,7 @@ void EgoSetpointBridge::plannerCallback(
     _latest_target = convertCommand(*msg);
 
     _last_planner_command_time = ros::Time::now();
-    
+
     _has_planner_command = true;
 }
 
@@ -115,6 +120,12 @@ void EgoSetpointBridge::publishTimerCallback(
     const ros::TimerEvent& event)
 {
     if (!_has_planner_command) {
+        return;
+    }
+
+    ros::Duration age = ros::Time::now() - _last_planner_command_time;
+    if (age.toSec() > _command_timeout) {
+        _has_planner_command = false;
         return;
     }
 

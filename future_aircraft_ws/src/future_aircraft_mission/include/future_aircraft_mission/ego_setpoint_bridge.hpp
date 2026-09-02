@@ -41,6 +41,7 @@ private:
     std::string _goal_topic;
 
     double _rate_hz; 
+    double _command_timeout;
 
     bool _has_planner_command;
 };
