@@ -34,12 +34,7 @@ private:
     std::string _planner_topic;
     std::string _setpoint_topic;
 
-    double _rate_hz;
-
-    double _initial_x;
-    double _initial_y;
-    double _initial_z;
-    double _initial_yaw;    
+    double _rate_hz; 
 
     bool _has_planner_command;
 };

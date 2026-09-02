@@ -43,18 +43,13 @@ EgoSetpointBridge::EgoSetpointBridge(
         ros::Duration(1.0 / _rate_hz),
         &EgoSetpointBridge::publishTimerCallback,
         this
-    );
-
-
-    // Create initial target
-
-    
+    );    
 }
 
 void EgoSetpointBridge::plannerCallback(
     const quadrotor_msgs::PositionCommand::ConstPtr& msg)
 {
-    ROS_INFO("Received planner command");
+    ROS_INFO_ONCE("Received planner command");
 
     _latest_target = convertCommand(*msg);
     _has_planner_command = true;
