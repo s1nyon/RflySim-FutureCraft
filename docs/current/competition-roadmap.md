@@ -126,7 +126,7 @@
   运动正确。历史回归
   `stack-20260901T091442Z-ff2e5d81` 与旧 acceptance 保留为 superseded。证据见
   [`2026-09-01-competition-course-v2-map-ready-closure.md`](../evidence/2026-09-01-competition-course-v2-map-ready-closure.md)。
-- current navigation gate：**SIMULATION FROZEN / C++ COMPETITION MISSION NEXT（2026-09-02）**。
+- current navigation gate：**SIMULATION FROZEN / C++ COMPETITION MISSION NEXT / NOT STARTED（2026-09-02）**。
   本节以下为已完成的 Section A 导航基线历史（保留为 superseded 状态，不再作为当前
   active blocker）；正式 freeze/handoff 见
   [`2026-09-02-simulation-baseline-freeze-handoff.md`](2026-09-02-simulation-baseline-freeze-handoff.md)。
@@ -169,8 +169,14 @@
   [`2026-09-01-competition-course-v2-navigation-baseline-design.md`](../architecture/2026-09-01-competition-course-v2-navigation-baseline-design.md)。
   正式 freeze/handoff：`2026-09-02-simulation-baseline-freeze-handoff.md`。
 
-### Phase 2.5 — C++ Competition Mission Development（NEXT ACTIVE）
+### Phase 2.5 — C++ Competition Mission Development（NEXT ACTIVE — ARCHITECTURE NOT STARTED）
 
+- **架构状态：NOT STARTED**。本阶段尚未开始设计/实现；以下 milestone 与状态机仅为
+  conceptual roadmap，**未批准/未创建任何实现 scaffold**。不要据此直接生成代码。
+- **历史 prototype 说明**：`future_aircraft_mission` 中的 `EgoSetpointBridge`
+  （含 `.hpp/.cpp/node/CMake/package`）是早期历史原型/实验，**不是**新 C++ mission
+  架构的起点或骨架；新架构的 package boundary / first node / interface 设计将从零
+  与用户重新讨论。
 - 工作区：`future_aircraft_ws/src/future_aircraft_mission/`（人类拥有比赛行为/控制意图；
   AI 默认承担架构建议/API 提醒/code review/bug 诊断/测试设计/小块代码协助）。
 - 初始 milestone 形状：
@@ -250,7 +256,9 @@ Engineering Foundation (P0, DONE)
         ↓
 PBL Baseline (P1, DONE)
         ↓
-Narrow-Corridor Navigation (P2, NEXT)
+Narrow-Corridor Navigation (P2, BASELINE FROZEN — Section A capability validated)
+        ↓
+C++ Competition Mission Development (P2.5, NEXT ACTIVE / NOT STARTED)
       ↙            ↘
 Coordination (P3)    Perception (P4)
       ↘            ↙

@@ -13,6 +13,9 @@
 > - KNOWN LIMITATION：Section A entrance wall clearance ≈0.072/0.085/0.073 m
 >   （target stable margin 0.25 m），classified as planner/corridor-entry
 >   performance backlog，**不是 infra/map/lifecycle/perception/control blocker**。
+> - C++ Competition Mission：**NEXT / NOT STARTED**；仓库中已有的
+>   `future_aircraft_mission`（EgoSetpointBridge 等）是 **historical prototype**，
+>   不是新 mission 架构 scaffold；用户将从零亲手设计/实现。
 > - DO NOT REOPEN INFRA unless：confirmed regression / confirmed runtime bug /
 >   C++ mission exposes a real interface defect。
 
@@ -157,7 +160,12 @@
   流中断），**不是代码回归**；恢复靠「完整清理 → fresh 栈背靠背启动」，
   见 `../docs/incidents/2026-08-11-offboard-stale-retry-setpoint-stream.md`。
 - PBL-1 是受保护的 `lidar_only` 双机 RflySim/PX4/MAVROS/Faster-LIO/EGO-Swarm/OFFBOARD 错时穿越基线，不是完整比赛 mission strategy。
-- 当前阶段是 Phase 2「Competition-Grade Narrow-Corridor Navigation」；权威路线见 [`docs/current/competition-roadmap.md`](../docs/current/competition-roadmap.md)。
+- 当前阶段是 **Phase 2.5「C++ Competition Mission Development（NEXT / NOT STARTED）」**；
+  Phase 2（Narrow-Corridor Navigation）已完成 Section A 3/3 flight-chain 验证并随
+  simulation/map 一起 FROZEN。权威路线见
+  [`docs/current/competition-roadmap.md`](../docs/current/competition-roadmap.md)，
+  freeze/handoff 见
+  [`docs/current/2026-09-02-simulation-baseline-freeze-handoff.md`](../docs/current/2026-09-02-simulation-baseline-freeze-handoff.md)。
 - 当前 infrastructure 已有 fresh PBL 路线 2/2 PASS；下一工程缺口是按比赛几何/障碍
   验收导航，以及真实视觉目标感知。
 - 2026-08-25 Competition Course V2 近原点错误布局已归档为 resolved incident；

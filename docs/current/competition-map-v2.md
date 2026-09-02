@@ -178,7 +178,8 @@ Observed static passable gaps: 1.225 m / 1.150 m
 Pendulum predicted safe window: 1.858 s (required >=1.50 s)
 Map-only live entity inspection: PASS — 2× fresh startup closure (2026-09-01)
 LiDAR/RGB/IMU visibility and transport: HISTORICAL PASS; rerun belongs to Navigation Baseline
-Faster-LIO output: HISTORICAL PASS; EGO remains intentionally NOT STARTED
+Faster-LIO output: HISTORICAL PASS (superseded: 2026-09-02 EGO integration
+  baseline READY and Section A flight chain 3/3 fresh PASS — see repeatability evidence)
 Competition evaluator: NOT IMPLEMENTED; map-side reference only
 ```
 

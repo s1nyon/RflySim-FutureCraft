@@ -132,6 +132,31 @@ NOT a core READY dependency
 
 ## Next phase — C++ Competition Mission
 
+### C++ Competition Mission architecture: NOT STARTED
+
+The new competition-mission architecture has **not started** (design or
+implementation). Nothing in this document is an approved scaffold; the
+milestone/architecture sketches below are **conceptual roadmap only** — no
+implementation scaffold has been approved or created for this phase.
+
+### Historical C++ prototype (not the new scaffold)
+
+`future_aircraft_ws/src/future_aircraft_mission/` already exists with historical
+code (`ego_setpoint_bridge.hpp/.cpp`, `ego_setpoint_bridge_node.cpp`, its
+`CMakeLists.txt`/`package.xml`). That code **predates** the new C++ Competition
+Mission phase:
+
+```text
+The existing future_aircraft_mission / EgoSetpointBridge code is a historical
+prototype / experiment, NOT the approved architecture scaffold for the new
+mission system.
+```
+
+Do not treat the historical EgoSetpointBridge prototype as the mandatory
+starting point for the new architecture. When the new phase starts, package
+boundary, first node, and the interface/agent/manager design will be discussed
+from zero with the user.
+
 The next roadmap phase is **C++ Competition Mission Development**, in
 `future_aircraft_ws/src/future_aircraft_mission/` (human-owned competition
 behavior/control intent).
@@ -155,6 +180,9 @@ First complete C++ capability:
 ```text
 WAIT_READY → TAKEOFF → SEND_EGO_GOAL → WAIT_REACHED → AUTO.LAND → DISARM → FINISHED
 ```
+
+**Conceptual roadmap only.** No implementation scaffold has been approved or
+created for this phase; do not generate code from this sketch without the user.
 
 Not in scope for the immediate milestone: CorridorCoordinator, TaskAllocator,
 dual-UAV complete mission, vision mission.
@@ -214,6 +242,35 @@ small/local code assistance
 
 AI should not default to rewriting the whole mission package. Infrastructure /
 tooling / validation automation remains agent-assisted.
+
+## C++ Learning / Development Boundary
+
+The user wants to train C++/ROS/OOP/state machine/multi-UAV mission design by
+building this project hands-on. The new C++ Competition Mission therefore starts
+from **zero** in design and coding terms.
+
+AI default role:
+
+```text
+architecture guidance
+concept explanation
+ROS/C++ API reminders
+code review
+debugging
+test design
+small/local code assistance
+```
+
+AI default does NOT:
+
+```text
+create a full mission package skeleton
+write all headers/sources
+generate the full MissionManager/UavAgent architecture
+prebuild CMake/package scaffolding
+```
+
+unless the user explicitly asks later.
 
 ## Ready to Merge into Main
 
