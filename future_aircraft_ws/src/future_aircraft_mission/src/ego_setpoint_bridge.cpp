@@ -125,6 +125,13 @@ void EgoSetpointBridge::publishTimerCallback(
 
     ros::Duration age = ros::Time::now() - _last_planner_command_time;
     if (age.toSec() > _command_timeout) {
+
+        ROS_WARN(
+            "Planner command timeout: age=%.3f s, timeout=%.3f s",
+            age.toSec(),
+            _command_timeout
+        );
+
         _has_planner_command = false;
         return;
     }
