@@ -16,7 +16,11 @@ catkin_package(
 
 include_directories(include ${catkin_INCLUDE_DIRS})
 
-add_library(future_aircraft_mission src/ego_setpoint_bridge.cpp)
+add_library(
+  future_aircraft_mission 
+  src/ego_setpoint_bridge.cpp
+  src/vehicle_interface.cpp
+  )
 add_executable(ego_setpoint_bridge_node src/ego_setpoint_bridge_node.cpp)
 add_dependencies(future_aircraft_mission ${catkin_EXPORTED_TARGETS})
 add_dependencies(ego_setpoint_bridge_node ${catkin_EXPORTED_TARGETS})
