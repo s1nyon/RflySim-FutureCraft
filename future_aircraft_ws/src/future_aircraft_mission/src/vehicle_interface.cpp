@@ -16,6 +16,11 @@ VehicleInterface::VehicleInterface(
         _odom_topic,
         "/uav1/mavros/local_position/odom"
     );
+    pnh.param<std::string>(
+        "set_mode_service",
+        _set_mode_service,
+        "/uav1/mavros/set_mode"
+    );
 
     _state_sub = nh.subscribe(
         _state_topic,
@@ -29,6 +34,11 @@ VehicleInterface::VehicleInterface(
         &VehicleInterface::odomCallback,
         this
     );
+
+    _set_mode_client = 
+        nh.serviceClient<mavros_msgs::SetMode>(
+            _set_mode_service
+        );
 }
 
 void VehicleInterface::stateCallback(
@@ -73,4 +83,17 @@ bool VehicleInterface::hasOdom() const
 geometry_msgs::Point VehicleInterface::position() const
 {
     return _odom.pose.pose.position;
+}
+
+bool VehicleInterface::setOffboard()
+{
+    mavros_msgs::SetMode srv;
+
+    srv.request.custom_mode = "OFFBOARD";
+
+    if(!+_set_mode_client.call(srv)) {
+        return false;
+    }
+
+    return srv.response.mode_sent;
 }

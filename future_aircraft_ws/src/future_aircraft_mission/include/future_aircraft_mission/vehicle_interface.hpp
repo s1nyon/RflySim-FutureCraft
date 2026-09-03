@@ -4,6 +4,7 @@
 #include <mavros_msgs/State.h>
 #include <nav_msgs/Odometry.h>
 #include <geometry_msgs/Point.h>
+#include <mavros_msgs/SetMode.h>
 
 class VehicleInterface
 {
@@ -18,18 +19,22 @@ public:
     geometry_msgs::Point position() const;
     bool hasOdom() const;
 
+    bool setOffboard();
+
 private:
     void stateCallback(const mavros_msgs::State::ConstPtr& msg);
     void odomCallback(const nav_msgs::Odometry::ConstPtr& msg);
 
     ros::Subscriber _state_sub;
     ros::Subscriber _odom_sub;
+    ros::ServiceClient _set_mode_client;
 
     mavros_msgs::State _state;
     nav_msgs::Odometry _odom;
 
     std::string _state_topic;
     std::string _odom_topic;
+    std::string _set_mode_service;
 
     bool _has_state;
     bool _has_odom;
