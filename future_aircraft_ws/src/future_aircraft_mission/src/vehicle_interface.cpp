@@ -5,7 +5,7 @@ VehicleInterface::VehicleInterface(
     ros::NodeHandle& pnh)
     : _has_state(false),
       _has_odom(false),
-      _allow_arming_service(false) // software cant arm except it's pure simulation.
+      _allow_arming_service(false) // Software arming is allowed only in simulation.
 {
     pnh.param<std::string>(
         "state_topic",
