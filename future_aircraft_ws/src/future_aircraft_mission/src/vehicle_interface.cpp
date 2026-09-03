@@ -3,6 +3,7 @@
 VehicleInterface::VehicleInterface(
     ros::NodeHandle& nh,
     ros::NodeHandle& pnh)
+    : _has_state(false)
 {
     pnh.param<std::string>(
         "state_topic",
@@ -22,6 +23,7 @@ void VehicleInterface::stateCallback(
     const mavros_msgs::State::ConstPtr& msg)
 {
     _state = *msg;
+    _has_state = true;
 }
 
 bool VehicleInterface::isConnected() const 
@@ -37,4 +39,9 @@ bool VehicleInterface::isArmed() const
 std::string VehicleInterface::mode() const
 {
     return _state.mode;
+}
+
+bool VehicleInterface::hasState() const
+{
+    return _has_state;
 }

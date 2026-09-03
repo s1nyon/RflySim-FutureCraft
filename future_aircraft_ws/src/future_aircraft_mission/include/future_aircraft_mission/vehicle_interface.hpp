@@ -11,6 +11,7 @@ public:
     bool isConnected() const;
     bool isArmed() const;
     std::string mode() const;
+    bool hasState() const;
 
 private:
     void stateCallback(const mavros_msgs::State::ConstPtr& msg);
@@ -21,4 +22,6 @@ private:
     mavros_msgs::State _state;
 
     std::string _state_topic;
+
+    bool _has_state;
 };
