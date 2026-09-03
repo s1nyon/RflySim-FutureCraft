@@ -19,6 +19,8 @@ public:
 
     bool hasGoal() const;
     bool hasPlannerCommand() const;
+    bool isPlannerConnected() const;
+    bool isPlannerCommandFresh(double timeout_s) const;
 
 private:
     void plannerCommandCallback(
@@ -27,6 +29,7 @@ private:
 
     ros::Publisher  _goal_pub;
     ros::Subscriber _planner_command_sub;
+    ros::Time _last_planner_command_time;
 
     std::string _goal_topic;
     std::string _planner_command_topic;

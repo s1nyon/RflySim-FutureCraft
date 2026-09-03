@@ -45,7 +45,10 @@ void EgoInterface::sendGoal(
 void EgoInterface::plannerCommandCallback(
     const quadrotor_msgs::PositionCommand::ConstPtr& msg)
 {
+    (void)msg;
+
     _has_planner_command = true;
+    _last_planner_command_time = ros::Time::now();
 }
 
 bool EgoInterface::hasGoal() const 
@@ -80,4 +83,23 @@ bool EgoInterface::goalReached(
         std::sqrt(dx * dx + dy * dy + dz * dz);
 
     return distance <= tolerance_m;
+}
+
+bool EgoInterface::isPlannerCommandFresh(
+    double timeout_s) const
+{
+    if (!hasPlannerCommand) {
+        return false;
+    }
+
+    const ros::Duration age = 
+    ros::Time::now() - _last_planner_command_time;
+
+    return age.toSec() <= timeout_s;
+}
+
+bool EgoInterface::isPlannerConnected() const
+{
+    return _goal_pub.getNumSubscribers() > 0 &&
+           _planner_command_sub.getNumPublishers() > 0;
 }
