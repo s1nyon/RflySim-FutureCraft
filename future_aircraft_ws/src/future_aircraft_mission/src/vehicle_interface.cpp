@@ -64,3 +64,13 @@ void VehicleInterface::odomCallback(
     _odom = *msg;
     _has_odom = true;
 }
+
+bool VehicleInterface::hasOdom() const
+{
+    return _has_odom;
+}
+
+geometry_msgs::Point VehicleInterface::position() const
+{
+    return _odom.pose.pose.position;
+}
