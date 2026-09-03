@@ -1,4 +1,5 @@
 #include "future_aircraft_mission/ego_interface.hpp"
+#include <cmath>
 
 EgoInterface::EgoInterface(
     ros::NodeHandle& nh,
@@ -28,7 +29,7 @@ EgoInterface::EgoInterface(
         &EgoInterface::plannerCommandCallback,
         this
     );
-};
+}
 
 void EgoInterface::sendGoal(
     const geometry_msgs::PoseStamped& goal)
@@ -55,4 +56,28 @@ bool EgoInterface::hasGoal() const
 bool EgoInterface::hasPlannerCommand() const 
 {
     return _has_planner_command;
+}
+
+bool EgoInterface::goalReached(
+    const geometry_msgs::Point& current_position,
+    double tolerance_m) const
+{
+    if (!_has_goal) {
+        return false;
+    }
+
+    const geometry_msgs::Point& goal_position = 
+        _last_goal.pose.position;
+
+    const double dx = 
+        current_position.x - goal_position.x;
+    const double dy = 
+        current_position.y - goal_position.y;
+    const double dz = 
+        current_position.z - goal_position.z;
+
+    const double distance = 
+        std::sqrt(dx * dx + dy * dy + dz * dz);
+
+    return distance <= tolerance_m;
 }

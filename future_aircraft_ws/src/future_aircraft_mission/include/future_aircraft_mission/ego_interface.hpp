@@ -3,6 +3,7 @@
 #include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <quadrotor_msgs/PositionCommand.h>
+#include <geometry_msgs/Point.h>
 #include <string>
 
 class EgoInterface
@@ -11,6 +12,10 @@ public:
     EgoInterface(ros::NodeHandle& nh, ros::NodeHandle& pnh);
 
     void sendGoal(const geometry_msgs::PoseStamped& goal);
+    bool goalReached(
+        const geometry_msgs::Point& current_position,
+        double tolerance_m
+    ) const;
 
     bool hasGoal() const;
     bool hasPlannerCommand() const;
