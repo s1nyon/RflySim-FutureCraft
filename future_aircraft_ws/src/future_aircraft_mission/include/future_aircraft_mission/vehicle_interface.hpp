@@ -20,10 +20,13 @@ public:
     bool hasOdom() const;
 
     bool setOffboard();
+    bool land();
 
 private:
     void stateCallback(const mavros_msgs::State::ConstPtr& msg);
     void odomCallback(const nav_msgs::Odometry::ConstPtr& msg);
+
+    bool setMode(const std::string& mode);
 
     ros::Subscriber _state_sub;
     ros::Subscriber _odom_sub;

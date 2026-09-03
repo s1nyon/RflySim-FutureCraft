@@ -85,15 +85,25 @@ geometry_msgs::Point VehicleInterface::position() const
     return _odom.pose.pose.position;
 }
 
-bool VehicleInterface::setOffboard()
+bool VehicleInterface::setMode(const std::string& mode)
 {
     mavros_msgs::SetMode srv;
 
-    srv.request.custom_mode = "OFFBOARD";
+    srv.request.custom_mode = mode;
 
-    if(!+_set_mode_client.call(srv)) {
+    if (!_set_mode_client.call(srv)) {
         return false;
     }
 
     return srv.response.mode_sent;
+}
+
+bool VehicleInterface::setOffboard()
+{
+    return setMode("OFFBOARD");
+}
+
+bool VehicleInterface::land()
+{
+    return setMode("AUTO.LAND");
 }
