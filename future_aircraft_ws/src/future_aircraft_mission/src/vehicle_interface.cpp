@@ -10,17 +10,17 @@ VehicleInterface::VehicleInterface(
     pnh.param<std::string>(
         "state_topic",
         _state_topic,
-        "/uav1/mavros/state"
+        "/mavros/state"
     );
     pnh.param<std::string>(
         "odom_topic",
         _odom_topic,
-        "/uav1/mavros/local_position/odom"
+        "/mavros/local_position/odom"
     );
     pnh.param<std::string>(
         "set_mode_service",
         _set_mode_service,
-        "/uav1/mavros/set_mode"
+        "/mavros/set_mode"
     );
     pnh.param<bool>(
         "allow_arming_service",
@@ -30,7 +30,7 @@ VehicleInterface::VehicleInterface(
     pnh.param<std::string>(
         "arming_service",
         _arming_service,
-        "/uav1/mavros/cmd/arming"
+        "/mavros/cmd/arming"
     );
 
     _state_sub = nh.subscribe(

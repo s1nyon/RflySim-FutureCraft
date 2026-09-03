@@ -10,12 +10,12 @@ EgoInterface::EgoInterface(
     pnh.param<std::string>(
         "goal_topic",
         _goal_topic,
-        "/uav1/planning/goal"
+        "/planning/goal"
     );
     pnh.param<std::string>(
         "planner_command_topic",
         _planner_command_topic,
-        "/uav1/planning/pos_cmd"
+        "/planning/pos_cmd"
     );
 
     _goal_pub = nh.advertise<geometry_msgs::PoseStamped>(
@@ -88,7 +88,7 @@ bool EgoInterface::goalReached(
 bool EgoInterface::isPlannerCommandFresh(
     double timeout_s) const
 {
-    if (!hasPlannerCommand) {
+    if (!hasPlannerCommand()) {
         return false;
     }
 
