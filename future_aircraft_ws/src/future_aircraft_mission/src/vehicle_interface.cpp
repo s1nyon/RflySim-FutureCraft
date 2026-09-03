@@ -23,3 +23,18 @@ void VehicleInterface::stateCallback(
 {
     _state = *msg;
 }
+
+bool VehicleInterface::isConnected() const 
+{
+    return _state.connected;
+}
+
+bool VehicleInterface::isArmed() const 
+{
+    return _state.armed;
+}
+
+std::string VehicleInterface::mode() const
+{
+    return _state.mode;
+}
