@@ -4,7 +4,8 @@ VehicleInterface::VehicleInterface(
     ros::NodeHandle& nh,
     ros::NodeHandle& pnh)
     : _has_state(false),
-      _has_odom(false)
+      _has_odom(false),
+      _allow_arming_service(false) // software cant arm except it's pure simulation.
 {
     pnh.param<std::string>(
         "state_topic",
@@ -20,6 +21,16 @@ VehicleInterface::VehicleInterface(
         "set_mode_service",
         _set_mode_service,
         "/uav1/mavros/set_mode"
+    );
+    pnh.param<bool>(
+        "allow_arming_service",
+        _allow_arming_service,
+        false
+    );
+    pnh.param<std::string>(
+        "arming_service",
+        _arming_service,
+        "/uav1/mavros/cmd/arming"
     );
 
     _state_sub = nh.subscribe(
@@ -38,6 +49,10 @@ VehicleInterface::VehicleInterface(
     _set_mode_client = 
         nh.serviceClient<mavros_msgs::SetMode>(
             _set_mode_service
+        );
+    _arming_client = 
+        nh.serviceClient<mavros_msgs::CommandBool>(
+            _arming_service
         );
 }
 
@@ -106,4 +121,31 @@ bool VehicleInterface::setOffboard()
 bool VehicleInterface::land()
 {
     return setMode("AUTO.LAND");
+}
+
+bool VehicleInterface::setArmed(bool armed)
+{
+    if (!_allow_arming_service) {
+        ROS_WARN("Arming service is disabled");
+        return false;
+    }
+
+    mavros_msgs::CommandBool srv;
+    srv.request.value = armed;
+
+    if (!_arming_client.call(srv)) {
+        return false;
+    }
+
+    return srv.response.success;
+}
+
+bool VehicleInterface::arm()
+{
+    return setArmed(true);
+}
+
+bool VehicleInterface::disarm()
+{
+    return setArmed(false);
 }
