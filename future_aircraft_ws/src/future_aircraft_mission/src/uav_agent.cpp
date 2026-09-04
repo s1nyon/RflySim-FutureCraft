@@ -77,3 +77,15 @@ void UavAgent::publishTakeoffSetpoint(
 
     _vehicle.publishPositionSetpoint(target, yaw);
 }
+
+bool UavAgent::hasReachedTakeoffAltitude(
+    double altitude_m,
+    double tolerance_m) const
+{
+    if (!_vehicle.hasOdom()) {
+        return false;
+    }
+
+    return _vehicle.position().z >=
+        altitude_m - tolerance_m;
+}

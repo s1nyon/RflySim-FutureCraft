@@ -31,6 +31,11 @@ public:
         double yaw
     );
 
+    bool hasReachedTakeoffAltitude(
+        double altitude_m,
+        double tolerance_m
+    ) const;
+
 private:
     std::string _uav_name;
 
