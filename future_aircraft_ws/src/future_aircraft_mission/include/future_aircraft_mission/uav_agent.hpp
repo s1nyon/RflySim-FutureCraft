@@ -15,11 +15,16 @@ public:
         const std::string& uav_name
     );
 
-    bool isReady() const;
-
     void gotoGoal(const geometry_msgs::PoseStamped& goal);
-
     bool hasReachedGoal(double tolerance_m) const;
+    bool requestOffboard();
+    bool arm();
+    bool land();
+    bool disarm();
+
+    bool isArmed() const;
+    bool isOffboard() const;
+    bool isReady() const;
 
 private:
     std::string _uav_name;
