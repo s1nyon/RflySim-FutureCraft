@@ -3,16 +3,16 @@
 MissionManager::MissionManager(
     ros::NodeHandle& nh,
     ros::NodeHandle& pnh)
-    : _uav(nh, pnh, "uav1"),
-      _state(State::WAIT_READY),
-      _state_enter_time(ros::Time::now()),
-      _takeoff_altitude(1.0),
-      _takeoff_yaw(0.0),
-      _takeoff_tolerance_m(0.15),
-      _offboard_warmup_s(2.0),
-      _service_retry_s(1.0),
-      _last_offboard_request_time(0),
-      _last_arm_request_time(0)
+      : _uav(nh, pnh, "uav1"),
+        _state(State::WAIT_READY),
+        _state_enter_time(ros::Time::now()),
+        _last_offboard_request_time(0),
+        _last_arm_request_time(0),
+        _takeoff_altitude(1.0),
+        _takeoff_yaw(0.0),
+        _offboard_warmup_s(2.0),
+        _service_retry_s(1.0),
+        _takeoff_tolerance_m(0.15)
 {
 
 }
@@ -94,7 +94,6 @@ void MissionManager::tick()
             _takeoff_tolerance_m)) {
                 transitionTo(State::SEND_EGO_GOAL);
             }
-
 
         break;
     }
