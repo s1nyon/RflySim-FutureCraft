@@ -11,17 +11,17 @@ EgoSetpointBridge::EgoSetpointBridge(
     _pnh.param<std::string>(
         "planner_topic",
         _planner_topic,
-        "/uav1/planning/pos_cmd"
+        "planning/pos_cmd"
     );
     _pnh.param<std::string>(
         "setpoint_topic",
         _setpoint_topic,
-        "/uav1/mavros/setpoint_raw/local"
+        "mavros/setpoint_raw/local"
     );
     _pnh.param<std::string>(
         "goal_topic",
         _goal_topic,
-        "/uav1/planning/goal"
+        "planning/goal"
     );
     _pnh.param<double>(
         "rate_hz",

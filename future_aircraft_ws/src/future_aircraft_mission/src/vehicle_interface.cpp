@@ -32,6 +32,11 @@ VehicleInterface::VehicleInterface(
         _arming_service,
         "mavros/cmd/arming"
     );
+    pnh.param<std::string>(
+        "position_setpoint_topic",
+        _position_setpoint_topic,
+        "mavros/setpoint_raw/local"
+    );
 
     _state_sub = nh.subscribe(
         _state_topic,
@@ -45,6 +50,11 @@ VehicleInterface::VehicleInterface(
         &VehicleInterface::odomCallback,
         this
     );
+    _position_setpoint_pub = 
+        nh.advertise<mavros_msgs::PositionTarget>(
+            _position_setpoint_topic,
+            10
+        );
 
     _set_mode_client = 
         nh.serviceClient<mavros_msgs::SetMode>(
@@ -148,4 +158,31 @@ bool VehicleInterface::arm()
 bool VehicleInterface::disarm()
 {
     return setArmed(false);
+}
+
+void VehicleInterface::publishPositionSetpoint(
+    const geometry_msgs::Point& position,
+    double yaw)
+{
+    mavros_msgs::PositionTarget target;
+
+    target.header.stamp = ros::Time::now();
+
+    target.coordinate_frame =
+        mavros_msgs::PositionTarget::FRAME_LOCAL_NED;
+
+    target.type_mask = 
+        mavros_msgs::PositionTarget::IGNORE_VX |
+        mavros_msgs::PositionTarget::IGNORE_VY |
+        mavros_msgs::PositionTarget::IGNORE_VZ |
+        mavros_msgs::PositionTarget::IGNORE_AFX |
+        mavros_msgs::PositionTarget::IGNORE_AFY |
+        mavros_msgs::PositionTarget::IGNORE_AFZ |
+        mavros_msgs::PositionTarget::FORCE |
+        mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
+
+    target.position = position;
+    target.yaw = yaw;
+
+    _position_setpoint_pub.publish(target);
 }

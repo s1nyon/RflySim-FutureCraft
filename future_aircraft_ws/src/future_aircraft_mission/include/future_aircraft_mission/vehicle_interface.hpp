@@ -6,6 +6,7 @@
 #include <geometry_msgs/Point.h>
 #include <mavros_msgs/SetMode.h>
 #include <mavros_msgs/CommandBool.h>
+#include <mavros_msgs/PositionTarget.h>
 
 class VehicleInterface
 {
@@ -25,6 +26,11 @@ public:
     bool arm();
     bool disarm();
 
+    void publishPositionSetpoint(
+        const geometry_msgs::Point& position,
+        double yaw
+    );
+
 private:
     void stateCallback(const mavros_msgs::State::ConstPtr& msg);
     void odomCallback(const nav_msgs::Odometry::ConstPtr& msg);
@@ -34,6 +40,7 @@ private:
 
     ros::Subscriber _state_sub;
     ros::Subscriber _odom_sub;
+    ros::Publisher  _position_setpoint_pub;
     ros::ServiceClient _set_mode_client;
     ros::ServiceClient _arming_client;
 
@@ -44,6 +51,7 @@ private:
     std::string _odom_topic;
     std::string _set_mode_service;
     std::string _arming_service;
+    std::string _position_setpoint_topic;
 
     bool _has_state;
     bool _has_odom;

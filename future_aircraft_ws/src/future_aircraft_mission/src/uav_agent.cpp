@@ -54,3 +54,13 @@ bool UavAgent::disarm()
 {
     return _vehicle.disarm();
 }
+
+bool UavAgent::isArmed() const
+{
+    return _vehicle.isArmed();
+}
+
+bool UavAgent::isOffboard() const
+{
+    return _vehicle.mode() == "OFFBOARD";
+}
