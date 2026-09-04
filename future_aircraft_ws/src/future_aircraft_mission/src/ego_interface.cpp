@@ -10,12 +10,12 @@ EgoInterface::EgoInterface(
     pnh.param<std::string>(
         "goal_topic",
         _goal_topic,
-        "/planning/goal"
+        "planning/goal"
     );
     pnh.param<std::string>(
         "planner_command_topic",
         _planner_command_topic,
-        "/planning/pos_cmd"
+        "planning/pos_cmd"
     );
 
     _goal_pub = nh.advertise<geometry_msgs::PoseStamped>(
