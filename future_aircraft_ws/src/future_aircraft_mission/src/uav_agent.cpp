@@ -64,3 +64,16 @@ bool UavAgent::isOffboard() const
 {
     return _vehicle.mode() == "OFFBOARD";
 }
+
+void UavAgent::publishTakeoffSetpoint(
+    double altitude_m,
+    double yaw) 
+{
+    geometry_msgs::Point target;
+
+    target.x = 0.0;
+    target.y = 0.0;
+    target.z = altitude_m;
+
+    _vehicle.publishPositionSetpoint(target, yaw);
+}

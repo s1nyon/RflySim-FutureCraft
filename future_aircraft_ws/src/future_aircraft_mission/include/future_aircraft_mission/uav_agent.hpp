@@ -26,6 +26,11 @@ public:
     bool isOffboard() const;
     bool isReady() const;
 
+    void publishTakeoffSetpoint(
+        double altitude_m,
+        double yaw
+    );
+
 private:
     std::string _uav_name;
 

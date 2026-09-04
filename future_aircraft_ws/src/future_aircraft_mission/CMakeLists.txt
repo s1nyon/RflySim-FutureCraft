@@ -23,6 +23,7 @@ add_library(
   src/vehicle_interface.cpp
   src/ego_interface.cpp
   src/uav_agent.cpp
+  src/mission_manager.cpp
   )
 add_executable(ego_setpoint_bridge_node src/ego_setpoint_bridge_node.cpp)
 add_dependencies(future_aircraft_mission ${catkin_EXPORTED_TARGETS})
