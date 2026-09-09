@@ -1,8 +1,8 @@
 <launch>
-    <!-- Simulation-only C++ mission smoke test. ->>
+    <!-- Simulation-only C++ mission smoke test. -->
 
     <arg name="smoke_test" default="true" />
-    <arg name="allowing_arming_service" default="false" />
+    <arg name="allow_arming_service" default="false" />
 
     <node
         pkg="future_aircraft_mission"
@@ -15,8 +15,8 @@
             value="$(arg smoke_test)" />
 
         <param
-            name="uav1/allowing_arming_service"
-            value="$(arg allowing_arming_service)" />
+            name="uav1/allow_arming_service"
+            value="$(arg allow_arming_service)" />
 
     </node>
 </launch>
