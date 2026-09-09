@@ -20,7 +20,10 @@ MissionManager::MissionManager(
         _goal_y(0.0),
         _goal_z(1.0),
         _planner_command_timeout_s(0.5),
-        _ego_goal_sent(false)
+        _ego_goal_sent(false),
+        _goal_tolerance_m(0.30),
+        _goal_settle_s(1.0),
+        _goal_reached_since(0)
 {
     pnh.param<bool>(
         "smoke_test",
@@ -125,8 +128,16 @@ void MissionManager::tick()
     
     case State::SEND_EGO_GOAL:
     {
-        // Until EGO really starts producing commands,
-        // direct MAVRS setpoint remains the active controller.
+        // EGO has taken over:
+        // stop the direct MAVROS source before leaving this state.
+        if (_ego_goal_sent &&
+            _uav.hasPlannerCommand() &&
+            _uav.isPlannerCommandFresh(_planner_command_timeout_s)) {
+                transitionTo(State::WAIT_REACHED);
+                break;
+            }
+
+        // EGO has not taken over yet.
         _uav.publishTakeoffSetpoint(
             _takeoff_altitude,
             _takeoff_yaw
@@ -168,7 +179,41 @@ void MissionManager::tick()
     }
 
     case State::WAIT_REACHED:
+    {   
+        const ros::Time now = ros::Time::now();
+
+        // Planner should still be actively controlling the UAV.
+        if (!_uav.isPlannerCommandFresh(_planner_command_timeout_s)) {
+
+            ROS_WARN("Planner command lost during navigation");
+
+            transitionTo(State::AUTO_LAND);
+            break;
+        }
+
+        // Outside goal tolerance: settle timer must restart.
+        if (!_uav.hasReachedGoal(_goal_tolerance_m)) {
+            _goal_reached_since = ros::Time(0);
+            break;
+        }
+
+        // First tick inside goal tolerance.
+        if (_goal_reached_since.isZero()) {
+
+            _goal_reached_since = now;
+            break;
+        }
+
+        // Remain inside the tolerance continuously.
+        const ros::Duration settled = 
+            now - _goal_reached_since;
+
+        if (settled.toSec() >= _goal_settle_s) {
+            transitionTo(State::AUTO_LAND);
+        }
+
         break;
+    }
 
     case State::AUTO_LAND:
     {
@@ -177,10 +222,12 @@ void MissionManager::tick()
         if (!_uav.isAutoLand()) {
 
             // Keep OFFBOARD alive until AUTO.LAND is confirmed.
-            _uav.publishTakeoffSetpoint(
-                _takeoff_altitude,
-                _takeoff_yaw
-            );
+            if (_smoke_test) {
+                _uav.publishTakeoffSetpoint(
+                    _takeoff_altitude,
+                    _takeoff_yaw
+                );
+            }
 
             const bool never_requested = 
                 _last_land_request_time.isZero();

@@ -36,6 +36,7 @@ private:
     ros::Time _last_arm_request_time;
     ros::Time _last_land_request_time;
     ros::Time _last_disarm_request_time;
+    ros::Time _goal_reached_since;
 
     double _takeoff_altitude;
     double _takeoff_yaw;
@@ -53,4 +54,7 @@ private:
     bool _ego_goal_sent;
 
     bool _smoke_test; // smoke_test contains takeoff -> land
+
+    double _goal_tolerance_m;
+    double _goal_settle_s;
 };
