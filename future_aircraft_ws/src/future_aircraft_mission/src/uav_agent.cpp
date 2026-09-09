@@ -10,14 +10,18 @@ UavAgent::UavAgent(ros::NodeHandle& nh, ros::NodeHandle& pnh, const std::string&
     
 }
 
+bool UavAgent::isVehicleReady() const
+{
+    return _vehicle.hasState() &&
+           _vehicle.hasOdom()  &&
+           _vehicle.isConnected() &&
+           !_vehicle.isArmed() &&
+           _vehicle.mode() != "OFFBOARD";
+}
+
 bool UavAgent::isReady() const
 {
-    return _vehicle.hasState()    && 
-           _vehicle.hasOdom()     &&
-           _vehicle.isConnected() &&
-           !_vehicle.isArmed()    &&
-           _vehicle.mode() != "OFFBOARD" &&
-           _ego.isPlannerConnected();
+    return isVehicleReady() && _ego.isPlannerConnected();
 }
 
 void UavAgent::gotoGoal(

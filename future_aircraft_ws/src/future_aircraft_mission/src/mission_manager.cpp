@@ -17,7 +17,11 @@ MissionManager::MissionManager(
         _takeoff_tolerance_m(0.15),
         _landing_altitude_threshold_m(0.20)
 {
-
+    pnh.param<bool>(
+        "smoke_test",
+        _smoke_test,
+        false
+    );
 }
 
 void MissionManager::tick()
@@ -25,11 +29,18 @@ void MissionManager::tick()
     switch (_state)
     {
     case State::WAIT_READY:
-        if (_uav.isReady()) {
+    {
+        const bool ready = 
+            _smoke_test
+            ? _uav.isVehicleReady()
+            : _uav.isReady();
+
+        if (ready) {
             transitionTo(State::TAKEOFF);
         }
         break;
-    
+    }
+
     case State::TAKEOFF:
     {
         // OFFBOARD requires a continuous setpoint stream.
@@ -95,7 +106,13 @@ void MissionManager::tick()
         if (_uav.hasReachedTakeoffAltitude(
             _takeoff_altitude,
             _takeoff_tolerance_m)) {
-                transitionTo(State::AUTO_LAND);
+
+                if (_smoke_test) {
+                    transitionTo(State::AUTO_LAND);
+                }
+                else {
+                    transitionTo(State::SEND_EGO_GOAL);
+                }                
             }
 
         break;
@@ -112,6 +129,12 @@ void MissionManager::tick()
         const ros::Time now = ros::Time::now();
 
         if (!_uav.isAutoLand()) {
+
+            // Keep OFFBOARD alive until AUTO.LAND is confirmed.
+            _uav.publishTakeoffSetpoint(
+                _takeoff_altitude,
+                _takeoff_yaw
+            );
 
             const bool never_requested = 
                 _last_land_request_time.isZero();

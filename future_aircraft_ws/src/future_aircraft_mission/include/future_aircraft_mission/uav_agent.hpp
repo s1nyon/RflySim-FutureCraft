@@ -25,6 +25,7 @@ public:
     bool isArmed() const;
     bool isOffboard() const;
     bool isAutoLand() const;
+    bool isVehicleReady() const;
     bool isReady() const;
 
     void publishTakeoffSetpoint(
