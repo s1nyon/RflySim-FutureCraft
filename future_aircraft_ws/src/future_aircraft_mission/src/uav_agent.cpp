@@ -119,3 +119,15 @@ bool UavAgent::isPlannerCommandFresh(
 {
     return _ego.isPlannerCommandFresh(timeout_s);
 }
+
+void UavAgent::publishCurrentPositionHold(double yaw)
+{
+    if (!_vehicle.hasOdom()) {
+        return;
+    }
+
+    _vehicle.publishPositionSetpoint(
+        _vehicle.position(),
+        yaw
+    );
+}

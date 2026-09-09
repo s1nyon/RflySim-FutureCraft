@@ -43,6 +43,8 @@ public:
     bool hasPlannerCommand() const;
     bool isPlannerCommandFresh(double timeout_s) const;
 
+    void publishCurrentPositionHold(double yaw);
+
 private:
     std::string _uav_name;
 

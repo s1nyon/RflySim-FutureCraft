@@ -10,6 +10,7 @@ MissionManager::MissionManager(
         _last_arm_request_time(0),
         _last_land_request_time(0),
         _last_disarm_request_time(0),
+        _goal_reached_since(0),
         _takeoff_altitude(1.0),
         _takeoff_yaw(0.0),
         _offboard_warmup_s(2.0),
@@ -21,9 +22,9 @@ MissionManager::MissionManager(
         _goal_z(1.0),
         _planner_command_timeout_s(0.5),
         _ego_goal_sent(false),
+        _smoke_test(false),
         _goal_tolerance_m(0.30),
-        _goal_settle_s(1.0),
-        _goal_reached_since(0)
+        _goal_settle_s(1.0)
 {
     pnh.param<bool>(
         "smoke_test",
@@ -222,9 +223,8 @@ void MissionManager::tick()
         if (!_uav.isAutoLand()) {
 
             // Keep OFFBOARD alive until AUTO.LAND is confirmed.
-            if (_smoke_test) {
-                _uav.publishTakeoffSetpoint(
-                    _takeoff_altitude,
+            if (_smoke_test || !_uav.isPlannerCommandFresh(_planner_command_timeout_s)) {
+                _uav.publishCurrentPositionHold(
                     _takeoff_yaw
                 );
             }
