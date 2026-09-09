@@ -40,6 +40,9 @@ public:
 
     bool isNearGround(double threshold_m) const;
 
+    bool hasPlannerCommand() const;
+    bool isPlannerCommandFresh(double timeout_s) const;
+
 private:
     std::string _uav_name;
 

@@ -15,7 +15,12 @@ MissionManager::MissionManager(
         _offboard_warmup_s(2.0),
         _service_retry_s(1.0),
         _takeoff_tolerance_m(0.15),
-        _landing_altitude_threshold_m(0.20)
+        _landing_altitude_threshold_m(0.20),
+        _goal_x(1.0),
+        _goal_y(0.0),
+        _goal_z(1.0),
+        _planner_command_timeout_s(0.5),
+        _ego_goal_sent(false)
 {
     pnh.param<bool>(
         "smoke_test",
@@ -119,7 +124,48 @@ void MissionManager::tick()
     }
     
     case State::SEND_EGO_GOAL:
+    {
+        // Until EGO really starts producing commands,
+        // direct MAVRS setpoint remains the active controller.
+        _uav.publishTakeoffSetpoint(
+            _takeoff_altitude,
+            _takeoff_yaw
+        );
+
+        if (!_ego_goal_sent) {
+
+            geometry_msgs::PoseStamped goal;
+
+            goal.header.stamp = ros::Time::now();
+            goal.header.frame_id = "map";
+
+            goal.pose.position.x = _goal_x;
+            goal.pose.position.y = _goal_y;
+            goal.pose.position.z = _goal_z;
+
+            goal.pose.orientation.w = 1.0;
+
+            _uav.gotoGoal(goal);
+
+            _ego_goal_sent = true;
+
+            ROS_INFO("EGO goal published");
+
+            break;
+        }
+
+        if (!_uav.hasPlannerCommand()) {
+            break;
+        }
+
+        if (!_uav.isPlannerCommandFresh(_planner_command_timeout_s)) {
+            break;
+        }
+
+        transitionTo(State::WAIT_REACHED);
+
         break;
+    }
 
     case State::WAIT_REACHED:
         break;

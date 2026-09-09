@@ -108,3 +108,14 @@ bool UavAgent::isNearGround(
 
     return _vehicle.position().z <= threshold_m;
 }
+
+bool UavAgent::hasPlannerCommand() const
+{
+    return _ego.hasPlannerCommand();
+}
+
+bool UavAgent::isPlannerCommandFresh(
+    double timeout_s) const
+{
+    return _ego.isPlannerCommandFresh(timeout_s);
+}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ros/ros.h>
+#include <geometry_msgs/PoseStamped.h>
 
 #include "future_aircraft_mission/uav_agent.hpp"
 
@@ -42,6 +43,14 @@ private:
     double _service_retry_s;
     double _takeoff_tolerance_m;
     double _landing_altitude_threshold_m;
+
+    double _goal_x;
+    double _goal_y;
+    double _goal_z;
+
+    double _planner_command_timeout_s;
+
+    bool _ego_goal_sent;
 
     bool _smoke_test; // smoke_test contains takeoff -> land
 };
