@@ -17,9 +17,6 @@ MissionManager::MissionManager(
         _service_retry_s(1.0),
         _takeoff_tolerance_m(0.15),
         _landing_altitude_threshold_m(0.20),
-        _goal_x(1.0),
-        _goal_y(0.0),
-        _goal_z(1.0),
         _planner_command_timeout_s(0.5),
         _ego_goal_sent(false),
         _smoke_test(false),
@@ -31,6 +28,10 @@ MissionManager::MissionManager(
         _smoke_test,
         false
     );
+
+    pnh.param<double>("goal_x", _goal_x, 1.0);
+    pnh.param<double>("goal_y", _goal_y, 0.0);
+    pnh.param<double>("goal_z", _goal_z, 1.0);
 }
 
 void MissionManager::tick()
@@ -163,14 +164,6 @@ void MissionManager::tick()
 
             ROS_INFO("EGO goal published");
 
-            break;
-        }
-
-        if (!_uav.hasPlannerCommand()) {
-            break;
-        }
-
-        if (!_uav.isPlannerCommandFresh(_planner_command_timeout_s)) {
             break;
         }
 

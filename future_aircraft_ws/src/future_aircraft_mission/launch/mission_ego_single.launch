@@ -1,0 +1,35 @@
+<launch>
+    <arg name="allow_arming_service" default="true" />
+
+    <arg name="goal_x" default="1.0" />
+    <arg name="goal_y" default="0.0" />
+    <arg name="goal_z" default="1.0" />
+
+    <!-- EGO PositionCommand -> MAVROS setpoint -->
+    <group ns="uav1">
+        <node
+            pkg="future_aircraft_mission"
+            type="ego_setpoint_bridge_node"
+            name="ego_setpoint_bridge"
+            output="screen"/>
+    </group>
+
+
+    <!-- C++ Mission -->
+    <node
+        pkg="future_aircraft_mission"
+        type="future_aircraft_mission_node"
+        name="future_aircraft_mission"
+        output="screen">
+
+        <param name="smoke_test" value="false" />
+
+        <param
+            name="uav1/allow_arming_service"
+            value="$(arg allow_arming_service)" />
+
+        <param name="goal_x" value="$(arg goal_x)" />
+        <param name="goal_y" value="$(arg goal_y)" />
+        <param name="goal_z" value="$(arg goal_z)" />
+    </node>
+</launch>
