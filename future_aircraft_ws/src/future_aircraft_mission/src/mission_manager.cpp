@@ -8,11 +8,14 @@ MissionManager::MissionManager(
         _state_enter_time(ros::Time::now()),
         _last_offboard_request_time(0),
         _last_arm_request_time(0),
+        _last_land_request_time(0),
+        _last_disarm_request_time(0),
         _takeoff_altitude(1.0),
         _takeoff_yaw(0.0),
         _offboard_warmup_s(2.0),
         _service_retry_s(1.0),
-        _takeoff_tolerance_m(0.15)
+        _takeoff_tolerance_m(0.15),
+        _landing_altitude_threshold_m(0.20)
 {
 
 }
@@ -92,7 +95,7 @@ void MissionManager::tick()
         if (_uav.hasReachedTakeoffAltitude(
             _takeoff_altitude,
             _takeoff_tolerance_m)) {
-                transitionTo(State::SEND_EGO_GOAL);
+                transitionTo(State::AUTO_LAND);
             }
 
         break;
@@ -105,10 +108,67 @@ void MissionManager::tick()
         break;
 
     case State::AUTO_LAND:
+    {
+        const ros::Time now = ros::Time::now();
+
+        if (!_uav.isAutoLand()) {
+
+            const bool never_requested = 
+                _last_land_request_time.isZero();
+            
+            const bool retry_due = 
+                !never_requested && 
+                (now - _last_land_request_time).toSec()
+                    >= _service_retry_s;
+
+            if (never_requested || retry_due) {
+
+                _last_land_request_time = now;
+
+                if (!_uav.land()) {
+                    ROS_WARN("AUTO.LAND request failed");
+                }
+            }
+
+            break;
+
+        }
+
+        if (_uav.isNearGround(_landing_altitude_threshold_m)) {
+            transitionTo(State::DISARM);
+        }
+
         break;
+    }  
 
     case State::DISARM:
+    {
+        if (!_uav.isArmed()) {
+            transitionTo(State::FINISHED);
+            break;
+        }
+        
+        const ros::Time now = ros::Time::now();
+
+        const bool never_requested = 
+            _last_disarm_request_time.isZero();
+
+        const bool retry_due = 
+            !never_requested &&
+            (now - _last_disarm_request_time).toSec()
+                >= _service_retry_s;
+        
+        if (never_requested || retry_due) {
+
+            _last_disarm_request_time = now;
+
+            if (!_uav.disarm()) {
+                ROS_WARN("Disarm request failed");
+            }
+        }
+
         break;
+    }
 
     case State::FINISHED:
         break;

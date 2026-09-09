@@ -65,6 +65,11 @@ bool UavAgent::isOffboard() const
     return _vehicle.mode() == "OFFBOARD";
 }
 
+bool UavAgent::isAutoLand() const
+{
+    return _vehicle.mode() == "AUTO.LAND";
+}
+
 void UavAgent::publishTakeoffSetpoint(
     double altitude_m,
     double yaw) 
@@ -88,4 +93,14 @@ bool UavAgent::hasReachedTakeoffAltitude(
 
     return _vehicle.position().z >=
         altitude_m - tolerance_m;
+}
+
+bool UavAgent::isNearGround(
+    double threshold_m) const
+{
+    if (!_vehicle.hasOdom()) {
+        return false;
+    }
+
+    return _vehicle.position().z <= threshold_m;
 }

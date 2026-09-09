@@ -24,7 +24,6 @@ add_library(
   src/ego_interface.cpp
   src/uav_agent.cpp
   src/mission_manager.cpp
-  src/mission_node.cpp
 )
 
 add_executable(ego_setpoint_bridge_node src/ego_setpoint_bridge_node.cpp)

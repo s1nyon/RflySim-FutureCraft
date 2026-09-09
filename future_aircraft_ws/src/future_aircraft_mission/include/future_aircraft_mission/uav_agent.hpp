@@ -24,6 +24,7 @@ public:
 
     bool isArmed() const;
     bool isOffboard() const;
+    bool isAutoLand() const;
     bool isReady() const;
 
     void publishTakeoffSetpoint(
@@ -35,6 +36,8 @@ public:
         double altitude_m,
         double tolerance_m
     ) const;
+
+    bool isNearGround(double threshold_m) const;
 
 private:
     std::string _uav_name;
