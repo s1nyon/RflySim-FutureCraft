@@ -1,5 +1,5 @@
 <launch>
-    <arg name="allow_arming_service" default="true" />
+    <arg name="allow_arming_service" default="false" />
 
     <arg name="goal_x" default="1.0" />
     <arg name="goal_y" default="0.0" />

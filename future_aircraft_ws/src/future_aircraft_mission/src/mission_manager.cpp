@@ -155,20 +155,13 @@ void MissionManager::tick()
             goal.pose.position.x = _goal_x;
             goal.pose.position.y = _goal_y;
             goal.pose.position.z = _goal_z;
-
             goal.pose.orientation.w = 1.0;
 
             _uav.gotoGoal(goal);
-
             _ego_goal_sent = true;
 
             ROS_INFO("EGO goal published");
-
-            break;
         }
-
-        transitionTo(State::WAIT_REACHED);
-
         break;
     }
 
