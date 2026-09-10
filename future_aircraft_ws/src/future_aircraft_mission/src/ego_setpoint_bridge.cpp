@@ -67,6 +67,10 @@ EgoSetpointBridge::EgoSetpointBridge(
 void EgoSetpointBridge::plannerCallback(
     const quadrotor_msgs::PositionCommand::ConstPtr& msg)
 {
+    if(!_has_received_goal) {
+        return;
+    }
+
     ROS_INFO_ONCE("Received planner command");
 
     _latest_target = convertCommand(*msg);
