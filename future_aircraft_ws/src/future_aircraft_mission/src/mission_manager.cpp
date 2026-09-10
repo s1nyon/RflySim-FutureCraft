@@ -5,7 +5,7 @@ MissionManager::MissionManager(
     ros::NodeHandle& pnh)
       : _uav1(nh, pnh, "uav1"),
         _uav2(nh, pnh, "uav2"),
-        _state(State::WAIT_READY),
+        _mission_state(MissionState::WAIT_READY),
         _state_enter_time(ros::Time::now()),
         _last_offboard_request_time(0),
         _last_arm_request_time(0),
@@ -38,9 +38,9 @@ MissionManager::MissionManager(
 
 void MissionManager::tick()
 {
-    switch (_state)
+    switch (_mission_state)
     {
-    case State::WAIT_READY:
+    case MissionState::WAIT_READY:
     {
         const bool ready = 
             _smoke_test
@@ -48,12 +48,12 @@ void MissionManager::tick()
             : _uav1.isReady();
 
         if (ready) {
-            transitionTo(State::TAKEOFF);
+            transitionTo(MissionState::TAKEOFF);
         }
         break;
     }
 
-    case State::TAKEOFF:
+    case MissionState::TAKEOFF:
     {
         // OFFBOARD requires a continuous setpoint stream.
         _uav1.publishTakeoffSetpoint(
@@ -120,24 +120,24 @@ void MissionManager::tick()
             _takeoff_tolerance_m)) {
 
                 if (_smoke_test) {
-                    transitionTo(State::AUTO_LAND);
+                    transitionTo(MissionState::AUTO_LAND);
                 }
                 else {
-                    transitionTo(State::SEND_EGO_GOAL);
+                    transitionTo(MissionState::SEND_EGO_GOAL);
                 }                
             }
 
         break;
     }
     
-    case State::SEND_EGO_GOAL:
+    case MissionState::SEND_EGO_GOAL:
     {
         // EGO has taken over:
         // stop the direct MAVROS source before leaving this state.
         if (_ego_goal_sent &&
             _uav1.hasPlannerCommand() &&
             _uav1.isPlannerCommandFresh(_planner_command_timeout_s)) {
-                transitionTo(State::WAIT_REACHED);
+                transitionTo(MissionState::WAIT_REACHED);
                 break;
             }
 
@@ -172,14 +172,14 @@ void MissionManager::tick()
 
             ROS_WARN("EGO handoff timeout");
 
-            transitionTo(State::AUTO_LAND);
+            transitionTo(MissionState::AUTO_LAND);
             break;
         }
 
         break;
     }
 
-    case State::WAIT_REACHED:
+    case MissionState::WAIT_REACHED:
     {   
         const ros::Time now = ros::Time::now();
 
@@ -188,7 +188,7 @@ void MissionManager::tick()
 
             ROS_WARN("Planner command lost during navigation");
 
-            transitionTo(State::AUTO_LAND);
+            transitionTo(MissionState::AUTO_LAND);
             break;
         }
 
@@ -210,13 +210,13 @@ void MissionManager::tick()
             now - _goal_reached_since;
 
         if (settled.toSec() >= _goal_settle_s) {
-            transitionTo(State::AUTO_LAND);
+            transitionTo(MissionState::AUTO_LAND);
         }
 
         break;
     }
 
-    case State::AUTO_LAND:
+    case MissionState::AUTO_LAND:
     {
         const ros::Time now = ros::Time::now();
 
@@ -251,16 +251,16 @@ void MissionManager::tick()
         }
 
         if (_uav1.isNearGround(_landing_altitude_threshold_m)) {
-            transitionTo(State::DISARM);
+            transitionTo(MissionState::DISARM);
         }
 
         break;
     }  
 
-    case State::DISARM:
+    case MissionState::DISARM:
     {
         if (!_uav1.isArmed()) {
-            transitionTo(State::FINISHED);
+            transitionTo(MissionState::FINISHED);
             break;
         }
         
@@ -286,21 +286,21 @@ void MissionManager::tick()
         break;
     }
 
-    case State::FINISHED:
+    case MissionState::FINISHED:
         break;
         
     }
 }
 
-void MissionManager::transitionTo(State next_state)
+void MissionManager::transitionTo(MissionState next_state)
 {
     ROS_INFO("Mission state changed");
 
-    _state = next_state;
+    _mission_state = next_state;
     _state_enter_time = ros::Time::now();
 }
 
-MissionManager::State MissionManager::state() const
+MissionManager::MissionState MissionManager::state() const
 {
-    return _state;
+    return _mission_state;
 }

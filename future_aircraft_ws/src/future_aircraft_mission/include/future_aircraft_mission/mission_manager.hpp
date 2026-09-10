@@ -8,7 +8,7 @@
 class MissionManager
 {
 public:
-    enum class State
+    enum class MissionState
     {
         WAIT_READY,
         TAKEOFF,
@@ -23,14 +23,14 @@ public:
 
     void tick();
 
-    State state() const;
+    MissionState state() const;
 
 private:
-    void transitionTo(State next_state);
+    void transitionTo(MissionState next_state);
 
     UavAgent _uav1;
     UavAgent _uav2;
-    State _state;
+    MissionState _mission_state;
 
     ros::Time _state_enter_time;
     ros::Time _last_offboard_request_time;
