@@ -15,6 +15,16 @@ public:
         const std::string& uav_name
     );
 
+    enum class State
+    {
+        IDLE,
+        TAKING_OFF,
+        HOLDING,
+        NAVIGATING,
+        LANDING,
+        FINISHED
+    };
+
     void gotoGoal(const geometry_msgs::PoseStamped& goal);
     bool hasReachedGoal(double tolerance_m) const;
     bool requestOffboard();
@@ -45,6 +55,8 @@ public:
 
     void publishCurrentPositionHold(double yaw);
 
+    State state() const;
+
 private:
     std::string _uav_name;
 
@@ -53,4 +65,5 @@ private:
 
     VehicleInterface _vehicle;
     EgoInterface _ego;
+    State _state;
 };

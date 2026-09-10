@@ -5,7 +5,8 @@ UavAgent::UavAgent(ros::NodeHandle& nh, ros::NodeHandle& pnh, const std::string&
       _nh(nh, uav_name), 
       _pnh(pnh, uav_name),
       _vehicle(_nh, _pnh), 
-      _ego(_nh, _pnh)
+      _ego(_nh, _pnh),
+      _state(State::IDLE)
 {
     
 }
@@ -130,4 +131,9 @@ void UavAgent::publishCurrentPositionHold(double yaw)
         _vehicle.position(),
         yaw
     );
+}
+
+UavAgent::State UavAgent::state() const
+{
+    return _state;
 }
