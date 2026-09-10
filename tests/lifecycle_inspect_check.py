@@ -153,7 +153,27 @@ def main() -> int:
     assert reused_group_report.orphans == [], "reused leader PID/PGID must not become owned_orphan"
     assert reused_group_report.fail_closed is True
 
-    # 5. owned orphan: leader exited but registered PGID still has processes.
+    # 5. The same registered process may legitimately exec into its full
+    # sensor-bridge argv.  Same PID/start-time plus a role-specific fragment is
+    # still the owned leader, not stale reuse.
+    transformed_bridge = table_mod.ProcessInfo(
+        pid=737, name="python3", start_time_utc="2026-09-09T07:45:17Z",
+        command_line="python3 /project/rflysim_sensor_bridge.py --copter-id 2 --sensor-mode lidar_only",
+        parent_pid=700, pgid=737,
+    )
+    transformed_report = inspect.inspect_stack(
+        manifest4,
+        win_table=table_mod.FakeProcessTable([]),
+        wsl_table=table_mod.FakeProcessTable([transformed_bridge]),
+        ports_probe=CleanPortsProbe(),
+        ros_probe=None,
+    )
+    assert transformed_report.stale == []
+    assert transformed_report.orphans == []
+    assert transformed_report.owned[0].status == "owned_and_alive"
+    assert transformed_report.fail_closed is False
+
+    # 6. owned orphan: leader exited but registered PGID still has processes.
     orphan = table_mod.ProcessInfo(pid=777, name="px4", start_time_utc="2026-08-08T12:00:15Z",
                                    command_line="/mnt/d/PX4PSP/Firmware/build/px4_sitl_default/bin/px4 -s etc/init.d/rcS",
                                    parent_pid=1, pgid=500)

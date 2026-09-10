@@ -17,7 +17,7 @@ if __name__ == "__main__" and __package__ is None:
     raise SystemExit(_self._cli_main())
 
 from .process_table import find_by_pgid, find_by_pid
-from .stack_manifest import entry_matches_process, load_manifest
+from .stack_manifest import entry_matches_process, load_manifest, normalize_command_line, parse_utc
 
 WINDOWS_STACK_NAMES = {"RflySim3D", "CopterSim", "QGroundControl"}
 WSL_SUSPICIOUS_PATTERNS = [
@@ -32,6 +32,50 @@ WSL_SUSPICIOUS_PATTERNS = [
     re.compile(r"multi_uav_mission", re.IGNORECASE),
     re.compile(r"predicted_narrow_course", re.IGNORECASE),
 ]
+
+# WSL `/proc` start ticks and the Windows-side registration timestamp can
+# differ by a few seconds while a launcher self-registers, then execs.  Keep a
+# narrow five-second window and still require a role-specific argv fragment.
+MATCH_TOLERANCE_SEC = 5.0
+
+# Narrow relaxations for at-creation WSL sessions whose process keeps the same
+# PID/start-time/PGID but legitimately execs into a component-specific argv.
+# The role-specific fragment prevents an arbitrary same-group process from
+# inheriting ownership merely because the numeric PID/PGID matches.
+WSL_SESSION_ROLE_FRAGMENTS = {
+    "wsl:px4_build_session": ("sitl_multiple_run_rfly.sh", "tail -f /dev/null"),
+    "wsl:stage2_launcher": ("stage2_two_mavros.sh",),
+    "wsl:roscore": ("roscore",),
+    "wsl:mavros_uav1": ("mavros",),
+    "wsl:mavros_uav2": ("mavros",),
+    "wsl:px4_mavlink_uav1": ("px4-mavlink",),
+    "wsl:px4_mavlink_uav2": ("px4-mavlink",),
+    "wsl:fastlio_session": ("stage7_live_fastlio_dual.sh",),
+    "wsl:sensor_bridge_uav1": ("--copter-id 1",),
+    "wsl:sensor_bridge_uav2": ("--copter-id 2",),
+    "wsl:fastlio": ("rflysim_fastlio_dual.launch",),
+    "wsl:ego_swarm_session": ("rflysim_ego_swarm_dual.launch",),
+    "wsl:rviz_session": ("rflysim_rviz.launch",),
+}
+
+
+def wsl_session_argv_verified(entry: dict, proc) -> bool:
+    """Verify a known same-incarnation WSL exec transformation."""
+    fragments = WSL_SESSION_ROLE_FRAGMENTS.get(str(entry.get("role", "")))
+    if fragments is None or int(entry["pid"]) != int(getattr(proc, "pid", -1)):
+        return False
+    cmd = normalize_command_line(getattr(proc, "command_line", ""))
+    if not any(fragment in cmd for fragment in fragments):
+        return False
+    entry_time = parse_utc(entry.get("start_time_utc", ""))
+    proc_time = parse_utc(getattr(proc, "start_time_utc", ""))
+    if entry_time is None or proc_time is None:
+        return False
+    return abs((entry_time - proc_time).total_seconds()) <= MATCH_TOLERANCE_SEC
+
+
+def wsl_entry_matches_process(entry: dict, proc) -> bool:
+    return entry_matches_process(entry, proc) or wsl_session_argv_verified(entry, proc)
 
 # Required-port owners mapped to the live stack WSL components that legitimately
 # bind them. WSL2 localhost-forwarded sockets are reflected to the Windows side
@@ -114,7 +158,7 @@ def _classify_entries(entries: Sequence[dict], processes: Sequence, side: str = 
         if side == "wsl" and pgid is not None:
             group = find_by_pgid(processes, pgid)
             if proc is not None:
-                if entry_matches_process(entry, proc):
+                if wsl_entry_matches_process(entry, proc):
                     owned.append(OwnedStatus(entry=entry, status="owned_and_alive"))
                 else:
                     # A live process at the recorded leader PID is authoritative.

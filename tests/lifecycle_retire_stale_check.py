@@ -195,7 +195,29 @@ def main() -> int:
     assert wsl_reused_group.snapshot() == [foreign_shell]
     assert manifest_reused_group["wsl_processes"] == []
 
-    # G: any unknown suspicious process is fail-closed.
+    # G: a legitimate same-incarnation exec transformation remains active and
+    # can never be metadata-retired.
+    manifest_transformed = base_manifest(manifest_mod, ownership)
+    ownership.register_process(
+        manifest_transformed, side="wsl", pid=737, pgid=737,
+        role="wsl:sensor_bridge_uav2", name="python3",
+        start_time_utc="2026-09-09T07:45:14Z",
+        command_line="python3 .../rflysim_sensor_bridge.py --copter-id 2",
+        reason="created with setsid",
+    )
+    transformed_bridge = proc(
+        process_table, 737, "python3", "2026-09-09T07:45:17Z",
+        "python3 /project/rflysim_sensor_bridge.py --config uav2.json --copter-id 2",
+        pgid=737, parent=700,
+    )
+    plan_transformed = retire.build_retirement_plan(
+        manifest_transformed, MutableTable([foreign]), MutableTable([transformed_bridge]),
+        free_ports, inactive_ros,
+    )
+    assert plan_transformed.eligible is False
+    assert "owned_and_alive=1" in plan_transformed.denial_reasons
+
+    # H: any unknown suspicious process is fail-closed.
     manifest_f = base_manifest(manifest_mod, ownership)
     unknown = proc(process_table, 999, "QGroundControl", "2026-09-01T08:00:00Z", "QGroundControl.exe")
     plan_f = retire.build_retirement_plan(

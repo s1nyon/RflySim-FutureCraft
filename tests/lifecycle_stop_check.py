@@ -282,48 +282,72 @@ def main() -> int:
     assert report.clean is False, "unverified reused PID must fail closed"
     assert wsl_table.snapshot() == [reused_tail], "foreign reused leader must survive unchanged"
 
-    # 6d. roscore argv transform (bash -> python3 roscore): registered with a
-    # label cmdline, live argv differs; role-fragment relaxation must allow the
-    # group stop and keep the closure clean.
+    # 6d. A registered sensor bridge expands its abbreviated label into the
+    # full Python argv.  Same PID/start-time plus the role-specific copter id
+    # must remain stoppable.
     manifest6d = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
     ownership.register_process(
-        manifest6d, side="wsl", pid=796, pgid=796, role="wsl:roscore", name="roscore",
+        manifest6d, side="wsl", pid=737, pgid=737, role="wsl:sensor_bridge_uav2", name="python3",
+        command_line="python3 .../rflysim_sensor_bridge.py --copter-id 2 --sensor-mode lidar_only",
+        start_time_utc=start, reason="t",
+    )
+    bridge = make_proc(
+        737, "python3", "2026-08-08T12:00:03Z",
+        "python3 /project/rflysim_sensor_bridge.py --config uav2.json --copter-id 2 --sensor-mode lidar_only",
+        pgid=737,
+    )
+    wsl_table = MutableTable([bridge])
+    backend = FakeStopBackend(win_table=MutableTable([]), wsl_table=wsl_table)
+    bridge_dry = stop.execute_stop(
+        manifest6d, win_table=MutableTable([]), wsl_table=wsl_table,
+        win_backend=backend, wsl_backend=backend, dry_run=True, reason="t",
+        int_wait_s=0, term_wait_s=0,
+    )
+    assert bridge_dry.refused == []
+    assert any(action.pgid == 737 for action in bridge_dry.actions)
+
+    # 6e. roscore argv transform (bash -> python3 roscore): registered with a
+    # label cmdline, live argv differs; role-fragment relaxation must allow the
+    # group stop and keep the closure clean.
+    manifest6e = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
+    ownership.register_process(
+        manifest6e, side="wsl", pid=796, pgid=796, role="wsl:roscore", name="roscore",
         command_line="/opt/ros/noetic/bin/roscore", start_time_utc=start, reason="t",
     )
     roscore_proc = make_proc(796, "python3.10", start, "/usr/bin/python3.10 /opt/ros/noetic/bin/roscore", pgid=796)
     wsl_table = MutableTable([roscore_proc])
     backend = FakeStopBackend(win_table=MutableTable([]), wsl_table=wsl_table)
     report = stop.execute_stop(
-        manifest6d, win_table=MutableTable([]), wsl_table=wsl_table,
+        manifest6e, win_table=MutableTable([]), wsl_table=wsl_table,
         win_backend=backend, wsl_backend=backend, dry_run=False, reason="t",
         int_wait_s=0, term_wait_s=0,
     )
     assert -796 in {pid for _, pid in backend.calls}, "roscore argv-transform must be stoppable via PGID"
     assert report.clean is True, "roscore argv-transform stop must be clean"
 
-    # 6e. Same role but a foreign argv (no roscore fragment) must be refused.
-    manifest6e = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
+    # 6f. Same role but a foreign argv (no roscore fragment) must be refused.
+    manifest6f = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
     ownership.register_process(
-        manifest6e, side="wsl", pid=796, pgid=796, role="wsl:roscore", name="roscore",
+        manifest6f, side="wsl", pid=796, pgid=796, role="wsl:roscore", name="roscore",
         command_line="/opt/ros/noetic/bin/roscore", start_time_utc=start, reason="t",
     )
     foreign = make_proc(796, "evil", start, "/usr/bin/evil --daemon", pgid=796)
     wsl_table = MutableTable([foreign])
     backend = FakeStopBackend(win_table=MutableTable([]), wsl_table=wsl_table)
     report = stop.execute_stop(
-        manifest6e, win_table=MutableTable([]), wsl_table=wsl_table,
+        manifest6f, win_table=MutableTable([]), wsl_table=wsl_table,
         win_backend=backend, wsl_backend=backend, dry_run=False, reason="t",
         int_wait_s=0, term_wait_s=0,
     )
     assert not any(pid == -796 for pid in [c for _, c in backend.calls]), "foreign argv must not be killed"
     assert report.clean is False, "foreign argv must fail closed"
 
-    # 6f. RViz session wrapper execs roslaunch after registering its own
+    # 6g. RViz session wrapper execs roslaunch after registering its own
     # PID/PGID. The same PID + start-time + project-specific launch argv must
     # remain stoppable through the registered group.
-    manifest6f = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
+    manifest6g = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
     ownership.register_process(
-        manifest6f, side="wsl", pid=9329, pgid=9329, role="wsl:rviz_session", name="bash",
+        manifest6g, side="wsl", pid=9329, pgid=9329, role="wsl:rviz_session", name="bash",
         command_line="rviz_live.sh -> roslaunch rflysim_rviz.launch mode=dual",
         start_time_utc=start, reason="created by rviz_live.sh before exec",
     )
@@ -336,7 +360,7 @@ def main() -> int:
     wsl_table = MutableTable([rviz_roslaunch])
     backend = FakeStopBackend(win_table=MutableTable([]), wsl_table=wsl_table)
     report = stop.execute_stop(
-        manifest6f, win_table=MutableTable([]), wsl_table=wsl_table,
+        manifest6g, win_table=MutableTable([]), wsl_table=wsl_table,
         win_backend=backend, wsl_backend=backend, dry_run=False, reason="t",
         int_wait_s=0, term_wait_s=0,
     )

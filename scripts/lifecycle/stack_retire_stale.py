@@ -28,6 +28,7 @@ from .stack_inspect import (
     WslAwarePortsProbe,
     inspect_stack,
     summarize,
+    wsl_entry_matches_process,
 )
 from .stack_manifest import (
     command_line_fingerprint,
@@ -180,7 +181,12 @@ def build_retirement_plan(manifest, win_table, wsl_table, ports_probe, ros_probe
         for entry in manifest[key]:
             current = find_by_pid(snapshot, entry["pid"])
             group = find_by_pgid(snapshot, entry.get("pgid")) if side == "wsl" and entry.get("pgid") else []
-            if current is not None and entry_matches_process(entry, current):
+            current_matches = current is not None and (
+                wsl_entry_matches_process(entry, current)
+                if side == "wsl"
+                else entry_matches_process(entry, current)
+            )
+            if current_matches:
                 continue
             # A present leader with mismatched identity is stale PID/PGID reuse;
             # only an absent leader can leave a genuinely owned orphan group.

@@ -18,17 +18,13 @@ if __name__ == "__main__" and __package__ is None:
 
 from . import stack_ownership  # noqa: E402
 from .process_table import find_by_pgid, find_by_pid  # noqa: E402
-from .stack_inspect import WslAwarePortsProbe, inspect_stack  # noqa: E402
+from .stack_inspect import WslAwarePortsProbe, inspect_stack, wsl_session_argv_verified  # noqa: E402
 from .stack_manifest import (  # noqa: E402
     command_line_fingerprint,
     entry_matches_process,
     load_manifest,
-    normalize_command_line,
-    parse_utc,
     save_manifest,
 )
-
-MATCH_TOLERANCE_SEC = 2.0
 
 
 @dataclass
@@ -200,43 +196,6 @@ class WslMarkerVerifier(MarkerVerifier):
             return result.returncode == 0
         except (subprocess.SubprocessError, OSError):
             return False
-
-
-WSL_SESSION_ROLE_FRAGMENTS = {
-    "wsl:px4_build_session": ("sitl_multiple_run_rfly.sh", "tail -f /dev/null"),
-    "wsl:stage2_launcher": ("stage2_two_mavros.sh",),
-    "wsl:roscore": ("roscore",),
-    "wsl:mavros_uav1": ("roslaunch", "mavros"),
-    "wsl:mavros_uav2": ("roslaunch", "mavros"),
-    "wsl:px4_mavlink_uav1": ("px4-mavlink",),
-    "wsl:px4_mavlink_uav2": ("px4-mavlink",),
-    "wsl:rviz_session": ("rflysim_rviz.launch",),
-}
-
-
-def wsl_session_argv_verified(entry: dict, proc) -> bool:
-    """Narrow identity relaxation for WSL launcher sessions whose argv
-    legitimately transforms after registration (same PID, argv replaced by the
-    exec chain, e.g. bash -> roscore/roslaunch or the injected keepalive).
-
-    Accepts only known launcher roles where role + PID + start-time match AND
-    the current argv contains a fragment specific to that component. This does
-    NOT apply to spawn_attested PX4 entries and does NOT relax inspect's stale
-    detection (which still uses entry_matches_process).
-    """
-    fragments = WSL_SESSION_ROLE_FRAGMENTS.get(str(entry.get("role", "")))
-    if fragments is None:
-        return False
-    if int(entry["pid"]) != int(getattr(proc, "pid", -1)):
-        return False
-    cmd = normalize_command_line(getattr(proc, "command_line", ""))
-    if not any(fragment in cmd for fragment in fragments):
-        return False
-    entry_time = parse_utc(entry.get("start_time_utc", ""))
-    proc_time = parse_utc(getattr(proc, "start_time_utc", ""))
-    if entry_time is None or proc_time is None:
-        return False
-    return abs((entry_time - proc_time).total_seconds()) <= MATCH_TOLERANCE_SEC
 
 
 def _identity_verified(entry: dict, proc) -> bool:
