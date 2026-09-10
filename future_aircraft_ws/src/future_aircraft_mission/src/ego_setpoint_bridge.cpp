@@ -5,7 +5,8 @@ EgoSetpointBridge::EgoSetpointBridge(
     ros::NodeHandle& pnh)
     : _nh(nh),
     _pnh(pnh),
-    _has_planner_command(false)
+    _has_planner_command(false),
+    _has_received_goal(false)
 {
     // Get parameter
     _pnh.param<std::string>(
@@ -86,6 +87,7 @@ void EgoSetpointBridge::goalCallback(
         msg->pose.position.z
     );
 
+    _has_received_goal = true;
     _has_planner_command = false;
 }
 

@@ -44,4 +44,5 @@ private:
     double _command_timeout;
 
     bool _has_planner_command;
+    bool _has_received_goal;
 };
