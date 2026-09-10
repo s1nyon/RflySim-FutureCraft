@@ -127,7 +127,33 @@ def main() -> int:
     assert {item.entry["pid"] for item in stale_report.stale} == {111}
     assert stale_report.fail_closed is True
 
-    # 4. owned orphan: leader exited but registered PGID still has processes.
+    # 4. A foreign WSL process may reuse BOTH the recorded leader PID and its
+    # numeric PGID.  The present leader identity mismatch takes precedence over
+    # group membership: this is stale PID reuse, not an owned orphan.
+    manifest4 = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
+    ownership.register_process(
+        manifest4, side="wsl", pid=737, pgid=737, role="wsl:sensor_bridge_uav2", name="python3",
+        command_line="python3 /project/rflysim_sensor_bridge.py --copter-id 2",
+        start_time_utc="2026-09-09T07:45:14Z", reason="created with setsid",
+    )
+    foreign_reused_leader = table_mod.ProcessInfo(
+        pid=737, name="bash", start_time_utc="2026-09-10T02:12:18Z",
+        command_line="/bin/bash --init-file /root/.vscode-server/shellIntegration-bash.sh",
+        parent_pid=700, pgid=737,
+    )
+    reused_group_report = inspect.inspect_stack(
+        manifest4,
+        win_table=table_mod.FakeProcessTable([]),
+        wsl_table=table_mod.FakeProcessTable([foreign_reused_leader]),
+        ports_probe=CleanPortsProbe(),
+        ros_probe=None,
+    )
+    assert len(reused_group_report.stale) == 1
+    assert reused_group_report.stale[0].entry["pid"] == 737
+    assert reused_group_report.orphans == [], "reused leader PID/PGID must not become owned_orphan"
+    assert reused_group_report.fail_closed is True
+
+    # 5. owned orphan: leader exited but registered PGID still has processes.
     orphan = table_mod.ProcessInfo(pid=777, name="px4", start_time_utc="2026-08-08T12:00:15Z",
                                    command_line="/mnt/d/PX4PSP/Firmware/build/px4_sitl_default/bin/px4 -s etc/init.d/rcS",
                                    parent_pid=1, pgid=500)
@@ -143,7 +169,7 @@ def main() -> int:
     assert len(orphan_report.orphans) == 1
     assert orphan_report.fail_closed is False, "owned orphans must not block stop (they are owned)"
 
-    # 5. JSON serializable.
+    # 6. JSON serializable.
     json.dumps(inspect.report_to_dict(orphan_report))
 
     # 6. Semantic port attribution: required MAVROS/roscore ports bound inside

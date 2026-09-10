@@ -113,17 +113,20 @@ def _classify_entries(entries: Sequence[dict], processes: Sequence, side: str = 
         pgid = entry.get("pgid")
         if side == "wsl" and pgid is not None:
             group = find_by_pgid(processes, pgid)
-            leader_ok = proc is not None and entry_matches_process(entry, proc)
-            if leader_ok:
-                owned.append(OwnedStatus(entry=entry, status="owned_and_alive"))
+            if proc is not None:
+                if entry_matches_process(entry, proc):
+                    owned.append(OwnedStatus(entry=entry, status="owned_and_alive"))
+                else:
+                    # A live process at the recorded leader PID is authoritative.
+                    # If its identity differs, numeric PGID reuse cannot turn the
+                    # foreign process into an owned orphan.
+                    stale.append(OwnedStatus(entry=entry, status="stale_pid_reuse"))
             elif group:
                 status = OwnedStatus(entry=entry, status="owned_orphan")
                 owned.append(status)
                 orphans.append(status)
-            elif proc is None:
-                owned.append(OwnedStatus(entry=entry, status="owned_but_exited"))
             else:
-                stale.append(OwnedStatus(entry=entry, status="stale_pid_reuse"))
+                owned.append(OwnedStatus(entry=entry, status="owned_but_exited"))
         else:
             if proc is None:
                 owned.append(OwnedStatus(entry=entry, status="owned_but_exited"))

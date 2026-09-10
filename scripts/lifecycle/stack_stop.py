@@ -278,18 +278,18 @@ def plan_stop(manifest: dict, win_table, wsl_table) -> tuple:
         if side == "wsl" and pgid is not None:
             group = find_by_pgid(snapshot, pgid)
             leader_ok = proc is not None and _identity_verified(entry, proc)
-            if not group and proc is None:
-                actions.append(_action(entry, side, "INT", "pgid", status="already_exited"))
-                continue
-            if not group and proc is not None and not leader_ok:
+            if proc is not None and not leader_ok:
                 refused.append(
                     {
                         "pid": int(entry["pid"]),
                         "pgid": int(pgid),
                         "role": entry["role"],
-                        "reason": "PID/start-time/command-line verification failed and PGID group is gone (PID reuse)",
+                        "reason": "PID/start-time/command-line verification failed (possible PID/PGID reuse)",
                     }
                 )
+                continue
+            if not group and proc is None:
+                actions.append(_action(entry, side, "INT", "pgid", status="already_exited"))
                 continue
             for signal in ("INT", "TERM", "KILL"):
                 actions.append(_action(entry, side, signal, "pgid"))
@@ -393,18 +393,18 @@ def execute_stop(
 
         if side == "wsl" and pgid is not None:
             leader_ok = proc is not None and _identity_verified(entry, proc)
-            if not group and proc is None:
-                performed.append(_action(entry, side, "INT", "pgid", status="already_exited"))
-                continue
-            if not group and proc is not None and not leader_ok:
+            if proc is not None and not leader_ok:
                 refused.append(
                     {
                         "pid": pid,
                         "pgid": int(pgid),
                         "role": entry["role"],
-                        "reason": "verification failed and PGID group is gone (PID reuse)",
+                        "reason": "verification failed (possible PID/PGID reuse)",
                     }
                 )
+                continue
+            if not group and proc is None:
+                performed.append(_action(entry, side, "INT", "pgid", status="already_exited"))
                 continue
 
             # spawn_attested marker re-verification (leader, or an owned group member).

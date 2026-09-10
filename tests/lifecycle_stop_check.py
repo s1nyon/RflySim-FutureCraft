@@ -265,6 +265,14 @@ def main() -> int:
     reused_tail = make_proc(66, "tail", "2026-08-08T14:00:00Z", "tail -f /dev/null", pgid=66)
     wsl_table = MutableTable([reused_tail])
     backend = FakeStopBackend(win_table=MutableTable([]), wsl_table=wsl_table)
+    dry_report = stop.execute_stop(
+        manifest6c, win_table=MutableTable([]), wsl_table=wsl_table,
+        win_backend=backend, wsl_backend=backend, dry_run=True, reason="t",
+        int_wait_s=0, term_wait_s=0,
+    )
+    assert dry_report.actions == [], "DryRun must never plan signals for a reused leader PID/PGID"
+    assert dry_report.refused, "DryRun must explicitly refuse reused leader PID/PGID"
+    assert backend.calls == []
     report = stop.execute_stop(
         manifest6c, win_table=MutableTable([]), wsl_table=wsl_table,
         win_backend=backend, wsl_backend=backend, dry_run=False, reason="t",
@@ -272,6 +280,7 @@ def main() -> int:
     )
     assert not any(pid == -66 for pid in [c for _, c in backend.calls]), "reused PID must not be killed"
     assert report.clean is False, "unverified reused PID must fail closed"
+    assert wsl_table.snapshot() == [reused_tail], "foreign reused leader must survive unchanged"
 
     # 6d. roscore argv transform (bash -> python3 roscore): registered with a
     # label cmdline, live argv differs; role-fragment relaxation must allow the

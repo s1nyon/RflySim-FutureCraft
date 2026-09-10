@@ -182,7 +182,9 @@ def build_retirement_plan(manifest, win_table, wsl_table, ports_probe, ros_probe
             group = find_by_pgid(snapshot, entry.get("pgid")) if side == "wsl" and entry.get("pgid") else []
             if current is not None and entry_matches_process(entry, current):
                 continue
-            if group:
+            # A present leader with mismatched identity is stale PID/PGID reuse;
+            # only an absent leader can leave a genuinely owned orphan group.
+            if current is None and group:
                 continue
             if current is not None:
                 current_name = str(getattr(current, "name", ""))

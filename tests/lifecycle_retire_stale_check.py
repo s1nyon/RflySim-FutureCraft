@@ -161,7 +161,41 @@ def main() -> int:
     )
     assert plan_e.eligible is False and "owned_orphan=1" in plan_e.denial_reasons
 
-    # F: any unknown suspicious process is fail-closed.
+    # F: a foreign process occupying both the recorded WSL leader PID and the
+    # numeric PGID is stale identity reuse, not an owned orphan.  It is eligible
+    # for metadata-only retirement and must survive unchanged.
+    manifest_reused_group = base_manifest(manifest_mod, ownership)
+    ownership.register_process(
+        manifest_reused_group, side="wsl", pid=737, pgid=737,
+        role="wsl:sensor_bridge_uav2", name="python3",
+        start_time_utc="2026-09-09T07:45:14Z",
+        command_line="python3 /project/rflysim_sensor_bridge.py --copter-id 2",
+        reason="created with setsid",
+    )
+    foreign_shell = proc(
+        process_table, 737, "bash", "2026-09-10T02:12:18Z",
+        "/bin/bash --init-file /root/.vscode-server/shellIntegration-bash.sh",
+        pgid=737, parent=700,
+    )
+    win_reused_group = MutableTable([foreign])
+    wsl_reused_group = MutableTable([foreign_shell])
+    plan_reused_group = retire.build_retirement_plan(
+        manifest_reused_group, win_reused_group, wsl_reused_group, free_ports, inactive_ros,
+    )
+    assert plan_reused_group.eligible is True, plan_reused_group.denial_reasons
+    assert plan_reused_group.planned_process_signals == []
+    assert {item["recorded_pid"] for item in plan_reused_group.entries} == {20072, 737}
+    wsl_entry = [item for item in plan_reused_group.entries if item["side"] == "wsl"][0]
+    assert wsl_entry["retirement_reason"] == "pid_identity_mismatch"
+    assert wsl_entry["observed_identity"]["name"] == "bash"
+    retire.execute_retirement(
+        manifest_reused_group, win_reused_group, wsl_reused_group, free_ports, inactive_ros,
+        expected_plan_token=plan_reused_group.plan_token,
+    )
+    assert wsl_reused_group.snapshot() == [foreign_shell]
+    assert manifest_reused_group["wsl_processes"] == []
+
+    # G: any unknown suspicious process is fail-closed.
     manifest_f = base_manifest(manifest_mod, ownership)
     unknown = proc(process_table, 999, "QGroundControl", "2026-09-01T08:00:00Z", "QGroundControl.exe")
     plan_f = retire.build_retirement_plan(
