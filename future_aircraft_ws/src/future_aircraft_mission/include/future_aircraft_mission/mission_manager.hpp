@@ -28,7 +28,8 @@ public:
 private:
     void transitionTo(State next_state);
 
-    UavAgent _uav;
+    UavAgent _uav1;
+    UavAgent _uav2;
     State _state;
 
     ros::Time _state_enter_time;

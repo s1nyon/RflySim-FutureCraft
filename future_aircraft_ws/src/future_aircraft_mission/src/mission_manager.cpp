@@ -3,7 +3,8 @@
 MissionManager::MissionManager(
     ros::NodeHandle& nh,
     ros::NodeHandle& pnh)
-      : _uav(nh, pnh, "uav1"),
+      : _uav1(nh, pnh, "uav1"),
+        _uav2(nh, pnh, "uav2"),
         _state(State::WAIT_READY),
         _state_enter_time(ros::Time::now()),
         _last_offboard_request_time(0),
@@ -43,8 +44,8 @@ void MissionManager::tick()
     {
         const bool ready = 
             _smoke_test
-            ? _uav.isVehicleReady()
-            : _uav.isReady();
+            ? _uav1.isVehicleReady()
+            : _uav1.isReady();
 
         if (ready) {
             transitionTo(State::TAKEOFF);
@@ -55,7 +56,7 @@ void MissionManager::tick()
     case State::TAKEOFF:
     {
         // OFFBOARD requires a continuous setpoint stream.
-        _uav.publishTakeoffSetpoint(
+        _uav1.publishTakeoffSetpoint(
             _takeoff_altitude,
             _takeoff_yaw
         );
@@ -71,7 +72,7 @@ void MissionManager::tick()
         }
 
         // Phase 2: request and confirm OFFBOARD.
-        if (!_uav.isOffboard()) {
+        if (!_uav1.isOffboard()) {
 
             const bool never_requested = 
                 _last_offboard_request_time.isZero();
@@ -84,7 +85,7 @@ void MissionManager::tick()
 
                 _last_offboard_request_time = now;
 
-                if (!_uav.requestOffboard()) {
+                if (!_uav1.requestOffboard()) {
                     ROS_WARN("OFFBOARD request failed");
                 }
             }
@@ -92,7 +93,7 @@ void MissionManager::tick()
         }
 
         // Phase 3: request and confirm arming.
-        if (!_uav.isArmed()) {
+        if (!_uav1.isArmed()) {
 
             const bool never_requested = 
                 _last_arm_request_time.isZero();
@@ -106,7 +107,7 @@ void MissionManager::tick()
 
                 _last_arm_request_time = now;
 
-                if (!_uav.arm()) {
+                if (!_uav1.arm()) {
                     ROS_WARN("Arming request failed");
                 }
             }
@@ -114,7 +115,7 @@ void MissionManager::tick()
         }
 
         // Phase 4: wait until the vehicle climbs to takeoff altitude.
-        if (_uav.hasReachedTakeoffAltitude(
+        if (_uav1.hasReachedTakeoffAltitude(
             _takeoff_altitude,
             _takeoff_tolerance_m)) {
 
@@ -134,14 +135,14 @@ void MissionManager::tick()
         // EGO has taken over:
         // stop the direct MAVROS source before leaving this state.
         if (_ego_goal_sent &&
-            _uav.hasPlannerCommand() &&
-            _uav.isPlannerCommandFresh(_planner_command_timeout_s)) {
+            _uav1.hasPlannerCommand() &&
+            _uav1.isPlannerCommandFresh(_planner_command_timeout_s)) {
                 transitionTo(State::WAIT_REACHED);
                 break;
             }
 
         // EGO has not taken over yet.
-        _uav.publishTakeoffSetpoint(
+        _uav1.publishTakeoffSetpoint(
             _takeoff_altitude,
             _takeoff_yaw
         );
@@ -158,7 +159,7 @@ void MissionManager::tick()
             goal.pose.position.z = _goal_z;
             goal.pose.orientation.w = 1.0;
 
-            _uav.gotoGoal(goal);
+            _uav1.gotoGoal(goal);
             _ego_goal_sent = true;
 
             ROS_INFO("EGO goal published");
@@ -183,7 +184,7 @@ void MissionManager::tick()
         const ros::Time now = ros::Time::now();
 
         // Planner should still be actively controlling the UAV.
-        if (!_uav.isPlannerCommandFresh(_planner_command_timeout_s)) {
+        if (!_uav1.isPlannerCommandFresh(_planner_command_timeout_s)) {
 
             ROS_WARN("Planner command lost during navigation");
 
@@ -192,7 +193,7 @@ void MissionManager::tick()
         }
 
         // Outside goal tolerance: settle timer must restart.
-        if (!_uav.hasReachedGoal(_goal_tolerance_m)) {
+        if (!_uav1.hasReachedGoal(_goal_tolerance_m)) {
             _goal_reached_since = ros::Time(0);
             break;
         }
@@ -219,11 +220,11 @@ void MissionManager::tick()
     {
         const ros::Time now = ros::Time::now();
 
-        if (!_uav.isAutoLand()) {
+        if (!_uav1.isAutoLand()) {
 
             // Keep OFFBOARD alive until AUTO.LAND is confirmed.
-            if (_smoke_test || !_uav.isPlannerCommandFresh(_planner_command_timeout_s)) {
-                _uav.publishCurrentPositionHold(
+            if (_smoke_test || !_uav1.isPlannerCommandFresh(_planner_command_timeout_s)) {
+                _uav1.publishCurrentPositionHold(
                     _takeoff_yaw
                 );
             }
@@ -240,7 +241,7 @@ void MissionManager::tick()
 
                 _last_land_request_time = now;
 
-                if (!_uav.land()) {
+                if (!_uav1.land()) {
                     ROS_WARN("AUTO.LAND request failed");
                 }
             }
@@ -249,7 +250,7 @@ void MissionManager::tick()
 
         }
 
-        if (_uav.isNearGround(_landing_altitude_threshold_m)) {
+        if (_uav1.isNearGround(_landing_altitude_threshold_m)) {
             transitionTo(State::DISARM);
         }
 
@@ -258,7 +259,7 @@ void MissionManager::tick()
 
     case State::DISARM:
     {
-        if (!_uav.isArmed()) {
+        if (!_uav1.isArmed()) {
             transitionTo(State::FINISHED);
             break;
         }
@@ -277,7 +278,7 @@ void MissionManager::tick()
 
             _last_disarm_request_time = now;
 
-            if (!_uav.disarm()) {
+            if (!_uav1.disarm()) {
                 ROS_WARN("Disarm request failed");
             }
         }
