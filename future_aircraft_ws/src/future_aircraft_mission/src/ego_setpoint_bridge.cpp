@@ -72,23 +72,22 @@ void EgoSetpointBridge::plannerCallback(
 {
     const int trajectory_id = msg->trajectory_id;
 
+    _last_seen_trajectory_id = trajectory_id;
+    _has_seen_trajectory_id = true;
+
     if (!_has_received_goal) {
-        _last_seen_trajectory_id = trajectory_id;
-        _has_seen_trajectory_id = true;
         return;
     }
-
-    ROS_INFO_ONCE("Received planner command");
 
     if (_goal_baseline_trajectory_id >= 0 &&
         trajectory_id <= _goal_baseline_trajectory_id) {
         return;
     }
 
+    ROS_INFO_ONCE("Received planner command");
+
     _latest_target = convertCommand(*msg);
-
     _last_planner_command_time = ros::Time::now();
-
     _has_planner_command = true;
 }
 
