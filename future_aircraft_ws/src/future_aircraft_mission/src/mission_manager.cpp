@@ -21,7 +21,8 @@ MissionManager::MissionManager(
         _ego_goal_sent(false),
         _smoke_test(false),
         _goal_tolerance_m(0.30),
-        _goal_settle_s(1.0)
+        _goal_settle_s(1.0),
+        _ego_handoff_timeout_s(5.0)
 {
     pnh.param<bool>(
         "smoke_test",
@@ -162,6 +163,18 @@ void MissionManager::tick()
 
             ROS_INFO("EGO goal published");
         }
+
+        const ros::Duration elapsed =
+        ros::Time::now() - _state_enter_time;
+
+        if (_ego_goal_sent && elapsed.toSec() >= _ego_handoff_timeout_s) {
+
+            ROS_WARN("EGO handoff timeout");
+
+            transitionTo(State::AUTO_LAND);
+            break;
+        }
+
         break;
     }
 

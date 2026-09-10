@@ -57,4 +57,6 @@ private:
 
     double _goal_tolerance_m;
     double _goal_settle_s;
+
+    double _ego_handoff_timeout_s;
 };
