@@ -217,6 +217,57 @@ def main() -> int:
     assert plan_transformed.eligible is False
     assert "owned_and_alive=1" in plan_transformed.denial_reasons
 
+    # G2. The SITL wrapper keepalive argv is generic, so the launcher's
+    #     RFLY_STACK_ID marker decides: verified marker -> active (never
+    #     retired); unverifiable marker -> stale, metadata-only retirement
+    #     with the foreign keepalive left untouched and unsignalled.
+    class MarkerProbe:
+        def __init__(self, verified):
+            self.verified = bool(verified)
+            self.calls = []
+
+        def __call__(self, pid, stack_id):
+            self.calls.append((int(pid), str(stack_id)))
+            return self.verified
+
+    manifest_build = base_manifest(manifest_mod, ownership)
+    ownership.register_process(
+        manifest_build, side="wsl", pid=1396, pgid=1396, role="wsl:px4_build_session",
+        name="bash", start_time_utc="2026-09-10T04:13:50Z",
+        command_line="sitl_multiple_run_rfly.sh", reason="created by the SITL wrapper",
+    )
+    keepalive = proc(
+        process_table, 1396, "tail", "2026-09-10T04:13:50Z", "tail -f /dev/null",
+        pgid=1396, parent=1395,
+    )
+    plan_build_owned = retire.build_retirement_plan(
+        manifest_build, MutableTable([foreign]), MutableTable([keepalive]),
+        free_ports, inactive_ros, MarkerProbe(True),
+    )
+    assert plan_build_owned.eligible is False
+    assert "owned_and_alive=1" in plan_build_owned.denial_reasons
+
+    plan_build_stale = retire.build_retirement_plan(
+        manifest_build, MutableTable([foreign]), MutableTable([keepalive]),
+        free_ports, inactive_ros, MarkerProbe(False),
+    )
+    assert plan_build_stale.eligible is True, plan_build_stale.denial_reasons
+    assert plan_build_stale.planned_process_signals == []
+    stale_wsl = [item for item in plan_build_stale.entries if item["side"] == "wsl"]
+    assert len(stale_wsl) == 1, plan_build_stale.entries
+    assert stale_wsl[0]["retirement_reason"] == "pid_identity_mismatch"
+    keepalive_table = MutableTable([keepalive])
+    retire.execute_retirement(
+        manifest_build, MutableTable([foreign]), keepalive_table,
+        free_ports, inactive_ros,
+        expected_plan_token=plan_build_stale.plan_token,
+        session_marker_probe=MarkerProbe(False),
+    )
+    assert manifest_build["wsl_processes"] == []
+    assert keepalive_table.snapshot() == [keepalive], (
+        "metadata retirement must never remove or signal the foreign keepalive"
+    )
+
     # H: any unknown suspicious process is fail-closed.
     manifest_f = base_manifest(manifest_mod, ownership)
     unknown = proc(process_table, 999, "QGroundControl", "2026-09-01T08:00:00Z", "QGroundControl.exe")

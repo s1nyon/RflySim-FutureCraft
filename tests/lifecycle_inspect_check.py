@@ -189,6 +189,200 @@ def main() -> int:
     assert len(orphan_report.orphans) == 1
     assert orphan_report.fail_closed is False, "owned orphans must not block stop (they are owned)"
 
+    # 9. WSL exec-session relaxation must be a conjunction of role-specific
+    #    argv fragments; a single generic string ("mavros", "--copter-id 1",
+    #    "tail -f /dev/null") must never transfer ownership on its own.  Every
+    #    case below reuses the recorded PID with a start time inside the five
+    #    second tolerance, so only the argv evidence decides the classification.
+    def wsl_session_case(role, recorded_cmd, live_cmd, *, pid=640,
+                         granted="at_creation",
+                         stack_id="stack-20260910T040000Z-abcd1234",
+                         recorded_start="2026-09-10T04:00:00Z",
+                         live_start="2026-09-10T04:00:03Z"):
+        case_manifest = manifest_mod.new_manifest(stack_id=stack_id)
+        extras = None
+        if granted != "at_creation":
+            extras = {
+                "reason": "spawn attested",
+                "ownership_parent_role": "wsl:px4_build_session",
+                "stack_marker": {"name": "RFLY_STACK_ID", "value": stack_id},
+                "ownership_evidence": {"marker_match": True},
+            }
+        ownership.register_process(
+            case_manifest, side="wsl", pid=pid, pgid=pid, role=role, name="proc",
+            command_line=recorded_cmd, start_time_utc=recorded_start, reason="t",
+            ownership_extras=extras,
+        )
+        case_proc = table_mod.ProcessInfo(
+            pid=pid, name="proc", start_time_utc=live_start,
+            command_line=live_cmd, parent_pid=1, pgid=pid,
+        )
+        return case_manifest, case_proc
+
+    def session_status(case_manifest, case_proc, marker_probe=None):
+        report = inspect.inspect_stack(
+            case_manifest,
+            win_table=table_mod.FakeProcessTable([]),
+            wsl_table=table_mod.FakeProcessTable([case_proc]),
+            ports_probe=CleanPortsProbe(),
+            ros_probe=None,
+            session_marker_probe=marker_probe,
+        )
+        if report.stale:
+            return "stale"
+        if report.orphans:
+            return "orphan"
+        assert len(report.owned) == 1, report.owned
+        return report.owned[0].status
+
+    mavros_recorded = (
+        "bash -lc source /opt/ros/noetic/setup.bash; roslaunch multi_uav_mission "
+        "rflysim_mavros_px4.launch uav_namespace:=uav1 tgt_system:=1"
+    )
+    mavros_uav1_live = (
+        "/usr/bin/python3 /opt/ros/noetic/bin/roslaunch multi_uav_mission "
+        "rflysim_mavros_px4.launch uav_namespace:=uav1 "
+        "fcu_url:=udp://:14601@127.0.0.1:14600 tgt_system:=1"
+    )
+    mavros_uav2_live = (
+        "/usr/bin/python3 /opt/ros/noetic/bin/roslaunch multi_uav_mission "
+        "rflysim_mavros_px4.launch uav_namespace:=uav2 "
+        "fcu_url:=udp://:14611@127.0.0.1:14610 tgt_system:=2"
+    )
+
+    # 9a. The verified in-place exec transformation stays owned.
+    assert session_status(*wsl_session_case("wsl:mavros_uav1", mavros_recorded, mavros_uav1_live)) \
+        == "owned_and_alive"
+
+    # 9b. UAV1 entry, UAV2 live argv (role swap) -> stale, never owned.
+    assert session_status(*wsl_session_case("wsl:mavros_uav1", mavros_recorded, mavros_uav2_live)) \
+        == "stale"
+
+    # 9c. A foreign process inside the same window whose argv merely contains
+    #     "mavros" must not inherit ownership.
+    assert session_status(*wsl_session_case(
+        "wsl:mavros_uav1", mavros_recorded,
+        "/usr/bin/python3 /opt/ros/noetic/lib/mavros/mavros_node __name:=mavros",
+    )) == "stale"
+
+    # 9d. sensor bridge: the script name AND the copter id must both match.
+    bridge_recorded = "python3 .../rflysim_sensor_bridge.py --copter-id 1 --sensor-mode lidar_only"
+    bridge_live = (
+        "python3 /project/future_aircraft_ws/src/multi_uav_mission/scripts/rflysim_sensor_bridge.py "
+        "--config /project/config/rflysim_sensor_uav1.json --change-mode 1 --copter-id 1 "
+        "--sensor-seq-id 0 --udp-port 9999 --sensor-mode lidar_only --keepalive"
+    )
+    assert session_status(*wsl_session_case("wsl:sensor_bridge_uav1", bridge_recorded, bridge_live)) \
+        == "owned_and_alive"
+    assert session_status(*wsl_session_case(
+        "wsl:sensor_bridge_uav1", bridge_recorded,
+        "python3 /tmp/unrelated_tool.py --copter-id 1 --watch",
+    )) == "stale"
+    assert session_status(*wsl_session_case(
+        "wsl:sensor_bridge_uav1", bridge_recorded,
+        bridge_live.replace("--copter-id 1", "--copter-id 2"),
+    )) == "stale"
+
+    # 9e. px4-mavlink: the MAVLink link instance must match.
+    mavlink_recorded = (
+        "/mnt/d/PX4PSP/Firmware/build/px4_sitl_default/bin/px4-mavlink "
+        "--instance 1 start -u 14600 -o 14601 -r 4000000"
+    )
+    assert session_status(*wsl_session_case("wsl:px4_mavlink_uav1", mavlink_recorded, mavlink_recorded)) \
+        == "owned_and_alive"
+    assert session_status(*wsl_session_case(
+        "wsl:px4_mavlink_uav1", mavlink_recorded,
+        mavlink_recorded.replace("--instance 1", "--instance 2"),
+    )) == "stale"
+
+    # 9f. The exec exception is only valid for at_creation ownership; a
+    #     spawn_attested entry never inherits it, even with a perfect argv.
+    assert session_status(*wsl_session_case(
+        "wsl:sensor_bridge_uav1", bridge_recorded, bridge_live, granted="spawn_attested",
+    )) == "stale"
+
+    # 9g. The five second window still applies to a matching argv.
+    assert session_status(*wsl_session_case(
+        "wsl:px4_mavlink_uav1", mavlink_recorded, mavlink_recorded,
+        live_start="2026-09-10T04:01:00Z",
+    )) == "stale"
+
+    # 9h. The SITL wrapper session execs its last `bash -lic` command in place,
+    # so its live argv is only the generic keepalive command.  Ownership then
+    # rests on the launcher-inherited RFLY_STACK_ID marker, never on the argv.
+    class SessionMarkerProbe:
+        def __init__(self, verified):
+            self.verified = bool(verified)
+            self.calls = []
+
+        def __call__(self, pid, stack_id):
+            self.calls.append((int(pid), str(stack_id)))
+            return self.verified
+
+    build_recorded = "sitl_multiple_run_rfly.sh"
+    build_keepalive = "tail -f /dev/null"
+    marker_ok = SessionMarkerProbe(True)
+    build_manifest, build_proc = wsl_session_case(
+        "wsl:px4_build_session", build_recorded, build_keepalive,
+        stack_id="stack-20260910T040000Z-abcd1234",
+    )
+    assert session_status(build_manifest, build_proc, marker_ok) == "owned_and_alive"
+    assert marker_ok.calls == [(640, "stack-20260910T040000Z-abcd1234")], marker_ok.calls
+
+    # 9i. Same keepalive argv, marker belongs to a different stack (or is
+    #     otherwise unverifiable) -> stale, never owned.
+    marker_denied = SessionMarkerProbe(False)
+    assert session_status(build_manifest, build_proc, marker_denied) == "stale"
+
+    # 9j. No marker probe at all -> fail closed, never owned.
+    assert session_status(build_manifest, build_proc) == "stale"
+
+    # 9k. A foreign process at the recorded PID whose argv has no keepalive
+    #     command stays stale even when the marker probe would accept it.
+    foreign_shell = "/bin/bash --init-file /root/.vscode-server/shellIntegration-bash.sh"
+    assert session_status(*wsl_session_case(
+        "wsl:px4_build_session", build_recorded, foreign_shell,
+    ), SessionMarkerProbe(True)) == "stale"
+
+    # 9l. The marker helper WSL path must resolve to the real frozen helper.
+    helper_wsl = inspect.default_wsl_ops_helper_path()
+    assert helper_wsl.startswith("/mnt/"), helper_wsl
+    assert helper_wsl.endswith("/scripts/wsl/live_stack_wsl_ops.sh"), helper_wsl
+    helper_parts = helper_wsl.split("/")
+    helper_windows = Path(
+        helper_parts[2].upper() + ":\\" + "\\".join(helper_parts[3:])
+    )
+    assert helper_windows.is_file(), helper_windows
+
+    # 9m. Remaining launcher exec shapes, as produced by the frozen start
+    #     chain, must stay owned (each requires two fragments).
+    project_wsl = "/mnt/d/PX4PSP/RflySimAPIs/8.RflySimVision/3.CustExps/e13.RobotCom26Adv/future_aircraft_sim"
+    assert session_status(*wsl_session_case(
+        "wsl:stage2_launcher", "stage2_two_mavros.sh",
+        f"bash {project_wsl}/scripts/wsl/stage2_two_mavros.sh",
+    )) == "owned_and_alive"
+    assert session_status(*wsl_session_case(
+        "wsl:fastlio_session", "stage7_live_fastlio_dual.sh",
+        f"bash {project_wsl}/scripts/wsl/stage7_live_fastlio_dual.sh",
+    )) == "owned_and_alive"
+    assert session_status(*wsl_session_case(
+        "wsl:fastlio", "roslaunch multi_uav_mission rflysim_fastlio_dual.launch rviz:=false",
+        "/usr/bin/python3 /opt/ros/noetic/bin/roslaunch multi_uav_mission "
+        "rflysim_fastlio_dual.launch rviz:=false",
+    )) == "owned_and_alive"
+    assert session_status(*wsl_session_case(
+        "wsl:ego_swarm_session",
+        "stage7_live_ego_swarm_dual.sh -> roslaunch multi_uav_mission rflysim_ego_swarm_dual.launch",
+        "/usr/bin/python3 /opt/ros/noetic/bin/roslaunch multi_uav_mission "
+        "rflysim_ego_swarm_dual.launch",
+    )) == "owned_and_alive"
+    # A launcher session started from a copy outside scripts/wsl/ is not the
+    # registered one and must stay stale.
+    assert session_status(*wsl_session_case(
+        "wsl:stage2_launcher", "stage2_two_mavros.sh",
+        "/tmp/copy/stage2_two_mavros.sh",
+    )) == "stale"
+
     # 6. JSON serializable.
     json.dumps(inspect.report_to_dict(orphan_report))
 

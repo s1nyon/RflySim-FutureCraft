@@ -18,7 +18,12 @@ if __name__ == "__main__" and __package__ is None:
 
 from . import stack_ownership  # noqa: E402
 from .process_table import find_by_pgid, find_by_pid  # noqa: E402
-from .stack_inspect import WslAwarePortsProbe, inspect_stack, wsl_session_argv_verified  # noqa: E402
+from .stack_inspect import (  # noqa: E402
+    WslAwarePortsProbe,
+    WslSessionMarkerProbe,
+    inspect_stack,
+    wsl_session_argv_verified,
+)
 from .stack_manifest import (  # noqa: E402
     command_line_fingerprint,
     entry_matches_process,
@@ -198,8 +203,10 @@ class WslMarkerVerifier(MarkerVerifier):
             return False
 
 
-def _identity_verified(entry: dict, proc) -> bool:
-    return entry_matches_process(entry, proc) or wsl_session_argv_verified(entry, proc)
+def _identity_verified(entry: dict, proc, *, stack_id=None, marker_probe=None) -> bool:
+    return entry_matches_process(entry, proc) or wsl_session_argv_verified(
+        entry, proc, stack_id=stack_id, marker_probe=marker_probe
+    )
 
 
 def _ordered_entries(manifest: dict):
@@ -225,9 +232,10 @@ def _action(entry: dict, side: str, signal: str, target: str, status: str = "pla
     )
 
 
-def plan_stop(manifest: dict, win_table, wsl_table) -> tuple:
+def plan_stop(manifest: dict, win_table, wsl_table, *, session_marker_probe=None) -> tuple:
     actions: List[StopAction] = []
     refused: List[dict] = []
+    stack_id = manifest.get("stack_id")
     for side, entry in _ordered_entries(manifest):
         table = win_table if side == "windows" else wsl_table
         snapshot = table.snapshot()
@@ -236,7 +244,9 @@ def plan_stop(manifest: dict, win_table, wsl_table) -> tuple:
 
         if side == "wsl" and pgid is not None:
             group = find_by_pgid(snapshot, pgid)
-            leader_ok = proc is not None and _identity_verified(entry, proc)
+            leader_ok = proc is not None and _identity_verified(
+                entry, proc, stack_id=stack_id, marker_probe=session_marker_probe
+            )
             if proc is not None and not leader_ok:
                 refused.append(
                     {
@@ -323,9 +333,12 @@ def execute_stop(
     term_wait_s: float = 5.0,
     wait_fn=None,
     attest_verifier: Optional[MarkerVerifier] = None,
+    session_marker_probe=None,
 ) -> StopReport:
     wait = wait_fn or time.sleep
-    planned, refused = plan_stop(manifest, win_table, wsl_table)
+    planned, refused = plan_stop(
+        manifest, win_table, wsl_table, session_marker_probe=session_marker_probe
+    )
     if dry_run:
         return StopReport(
             stack_id=manifest.get("stack_id"),
@@ -340,6 +353,7 @@ def execute_stop(
     force_reasons: List[str] = []
     failure_reasons: List[str] = []
     recycled_after_term: List[int] = []
+    stack_id = manifest.get("stack_id")
 
     for side, entry in _ordered_entries(manifest):
         table = win_table if side == "windows" else wsl_table
@@ -351,7 +365,9 @@ def execute_stop(
         group = find_by_pgid(snapshot, pgid) if (side == "wsl" and pgid is not None) else []
 
         if side == "wsl" and pgid is not None:
-            leader_ok = proc is not None and _identity_verified(entry, proc)
+            leader_ok = proc is not None and _identity_verified(
+                entry, proc, stack_id=stack_id, marker_probe=session_marker_probe
+            )
             if proc is not None and not leader_ok:
                 refused.append(
                     {
@@ -383,7 +399,9 @@ def execute_stop(
 
             def member_verified(member) -> bool:
                 member_entry = owned_entries.get(int(member.pid))
-                if member_entry is None or not _identity_verified(member_entry, member):
+                if member_entry is None or not _identity_verified(
+                    member_entry, member, stack_id=stack_id, marker_probe=session_marker_probe
+                ):
                     return False
                 if member_entry.get("ownership", {}).get("granted") == "spawn_attested" and attest_verifier is not None:
                     return attest_verifier.verify(member_entry, member)
@@ -554,6 +572,7 @@ def _cli_main() -> int:
     manifest = load_manifest(args.manifest)
     win_table = WindowsProcessTable()
     wsl_table = WslProcessTable(args.distro)
+    session_marker_probe = WslSessionMarkerProbe(args.distro)
     dry_run = not args.execute
 
     if not dry_run:
@@ -565,6 +584,7 @@ def _cli_main() -> int:
             wsl_table=wsl_table,
             ports_probe=WslAwarePortsProbe(owned_pids, owned_wsl_pids, args.distro),
             ros_probe=None,
+            session_marker_probe=session_marker_probe,
         )
         if inspection.fail_closed:
             print(json.dumps(inspect_to_dict(inspection), indent=2, ensure_ascii=False))
@@ -582,6 +602,7 @@ def _cli_main() -> int:
         int_wait_s=args.int_wait,
         term_wait_s=args.term_wait,
         attest_verifier=WslMarkerVerifier(args.distro) if not dry_run else None,
+        session_marker_probe=session_marker_probe,
     )
     if not dry_run:
         save_manifest(manifest, args.manifest)

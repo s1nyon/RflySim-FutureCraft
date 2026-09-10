@@ -44,6 +44,18 @@ class MutableTable:
         self._by_pid[int(pid)] = proc
 
 
+class FakeMarkerProbe:
+    """Records `marker <pid> <stack_id>` lookups; returns a fixed verdict."""
+
+    def __init__(self, verified):
+        self.verified = bool(verified)
+        self.calls = []
+
+    def __call__(self, pid, stack_id):
+        self.calls.append((int(pid), str(stack_id)))
+        return self.verified
+
+
 class FakeStopBackend:
     """Records calls; KILL removes the pid/group from the matching table."""
 
@@ -239,7 +251,8 @@ def main() -> int:
 
     # 6b. SITL build session argv transform (bash exec tail -f /dev/null):
     # same PID + start-time, registered at_creation with a label cmdline, must
-    # still be stopped via its PGID and produce a clean closure.
+    # still be stopped via its PGID and produce a clean closure.  The keepalive
+    # argv alone is generic, so the launcher's RFLY_STACK_ID marker is required.
     manifest6b = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
     ownership.register_process(
         manifest6b, side="wsl", pid=66, pgid=66, role="wsl:px4_build_session", name="bash",
@@ -248,13 +261,63 @@ def main() -> int:
     keepalive = make_proc(66, "tail", start, "tail -f /dev/null", pgid=66)
     wsl_table = MutableTable([keepalive])
     backend = FakeStopBackend(win_table=MutableTable([]), wsl_table=wsl_table)
+    marker_ok = FakeMarkerProbe(True)
     report = stop.execute_stop(
         manifest6b, win_table=MutableTable([]), wsl_table=wsl_table,
         win_backend=backend, wsl_backend=backend, dry_run=False, reason="t",
-        int_wait_s=0, term_wait_s=0,
+        int_wait_s=0, term_wait_s=0, session_marker_probe=marker_ok,
     )
     assert -66 in {pid for _, pid in backend.calls}, "build session keepalive must be stopped via PGID"
     assert report.clean is True, "build session keepalive stop must be clean"
+    assert marker_ok.calls and all(
+        call == (66, manifest6b["stack_id"]) for call in marker_ok.calls
+    ), "build session ownership must rest on the launcher marker, not on the generic argv"
+
+    # 6b2. Same keepalive argv but the launcher marker cannot be verified
+    # (foreign keepalive reusing PID/PGID, or an unreadable marker): fail closed
+    # with no planned signal and no backend call.
+    manifest6b2 = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
+    ownership.register_process(
+        manifest6b2, side="wsl", pid=66, pgid=66, role="wsl:px4_build_session", name="bash",
+        command_line="sitl_multiple_run_rfly.sh", start_time_utc=start, reason="t",
+    )
+    foreign_keepalive = make_proc(66, "tail", start, "tail -f /dev/null", pgid=66)
+    wsl_table = MutableTable([foreign_keepalive])
+    backend = FakeStopBackend(win_table=MutableTable([]), wsl_table=wsl_table)
+    marker_denied = FakeMarkerProbe(False)
+    dry_report = stop.execute_stop(
+        manifest6b2, win_table=MutableTable([]), wsl_table=wsl_table,
+        win_backend=backend, wsl_backend=backend, dry_run=True, reason="t",
+        int_wait_s=0, term_wait_s=0, session_marker_probe=marker_denied,
+    )
+    assert dry_report.actions == [], "unverified marker must plan no signal at all"
+    assert dry_report.refused, "unverified marker must be reported as refused"
+    report = stop.execute_stop(
+        manifest6b2, win_table=MutableTable([]), wsl_table=wsl_table,
+        win_backend=backend, wsl_backend=backend, dry_run=False, reason="t",
+        int_wait_s=0, term_wait_s=0, session_marker_probe=marker_denied,
+    )
+    assert backend.calls == [], "unverified marker must never reach the stop backend"
+    assert report.clean is False, "unverified marker must fail closed"
+    assert wsl_table.snapshot() == [foreign_keepalive], "foreign keepalive must survive unchanged"
+
+    # 6b3. Without an explicit marker probe the marker-backed role must fail
+    # closed as well (no accidental ownership from the generic argv).
+    manifest6b3 = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
+    ownership.register_process(
+        manifest6b3, side="wsl", pid=66, pgid=66, role="wsl:px4_build_session", name="bash",
+        command_line="sitl_multiple_run_rfly.sh", start_time_utc=start, reason="t",
+    )
+    wsl_table = MutableTable([make_proc(66, "tail", start, "tail -f /dev/null", pgid=66)])
+    backend = FakeStopBackend(win_table=MutableTable([]), wsl_table=wsl_table)
+    report = stop.execute_stop(
+        manifest6b3, win_table=MutableTable([]), wsl_table=wsl_table,
+        win_backend=backend, wsl_backend=backend, dry_run=False, reason="t",
+        int_wait_s=0, term_wait_s=0,
+    )
+    assert backend.calls == [] and report.clean is False, (
+        "marker-backed roles must fail closed when no marker probe is provided"
+    )
 
     # 6c. Same scenario but a WRONG start time (PID reuse) must be refused.
     manifest6c = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
@@ -368,6 +431,39 @@ def main() -> int:
         "registered RViz exec-transformed session must be stopped via its PGID"
     )
     assert report.clean is True, "registered RViz session stop must be clean"
+
+    # 6h. UAV1 MAVROS entry whose live argv belongs to UAV2 (role swap inside
+    # the five second window): no signal may be planned or executed.
+    manifest6h = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")
+    ownership.register_process(
+        manifest6h, side="wsl", pid=2395, pgid=2395, role="wsl:mavros_uav1", name="bash",
+        command_line=(
+            "bash -lc source /opt/ros/noetic/setup.bash; roslaunch multi_uav_mission "
+            "rflysim_mavros_px4.launch uav_namespace:=uav1 tgt_system:=1"
+        ),
+        start_time_utc=start, reason="created by stage2_two_mavros.sh start_one (setsid)",
+    )
+    swapped = make_proc(
+        2395, "roslaunch", "2026-08-08T12:00:03Z",
+        "/usr/bin/python3 /opt/ros/noetic/bin/roslaunch multi_uav_mission "
+        "rflysim_mavros_px4.launch uav_namespace:=uav2 tgt_system:=2",
+        pgid=2395,
+    )
+    wsl_table = MutableTable([swapped])
+    backend = FakeStopBackend(win_table=MutableTable([]), wsl_table=wsl_table)
+    swap_dry = stop.execute_stop(
+        manifest6h, win_table=MutableTable([]), wsl_table=wsl_table,
+        win_backend=backend, wsl_backend=backend, dry_run=True, reason="t",
+        int_wait_s=0, term_wait_s=0,
+    )
+    assert swap_dry.actions == [] and swap_dry.refused, "swapped role argv must be refused"
+    report = stop.execute_stop(
+        manifest6h, win_table=MutableTable([]), wsl_table=wsl_table,
+        win_backend=backend, wsl_backend=backend, dry_run=False, reason="t",
+        int_wait_s=0, term_wait_s=0,
+    )
+    assert backend.calls == [], "swapped role argv must never be signalled"
+    assert report.clean is False and wsl_table.snapshot() == [swapped]
 
     # 7. Signal failure -> clean=false with failure reasons recorded.
     manifest7 = manifest_mod.new_manifest(stack_id="stack-20260808T120000Z-a1b2c3d4")

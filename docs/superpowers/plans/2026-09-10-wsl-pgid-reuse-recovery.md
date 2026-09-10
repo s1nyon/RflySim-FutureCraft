@@ -130,3 +130,49 @@ source future_aircraft_ws/devel/setup.bash
 - [ ] Document actual `rospack` path, EGO odom subscription, odometry subscriber status, PositionCommand frequency, arm state, stack identity, and final PASS/FAIL.
 - [ ] Update Current Truth only with claims supported by the new run-scoped evidence.
 - [ ] Re-run relevant documentation/lifecycle checks, review the final diff, and create a local commit without pushing.
+
+---
+
+## Pass 2: Exec-Session Matcher Hardening (review follow-up)
+
+**Trigger:** review of `78d7f16` found the WSL exec-session exception too wide
+(one generic argv fragment per role, reused by the stop path), so an unrelated
+same-window PID/PGID occupant could be treated as owned and signalled.
+
+**Goal:** make every role's exception a conjunctive fingerprint, restrict it to
+`at_creation` grants, and give the one role whose live argv is generic (the SITL
+wrapper session) a second, launcher-issued identity signal.
+
+- [x] Add conjunction/role-swap counterexample tests to
+      `tests/lifecycle_inspect_check.py` and confirm they fail on `78d7f16`.
+- [x] Replace the per-role fragment list with `WslSessionFingerprint`
+      (all-patterns-must-match) and require `ownership.granted == at_creation`.
+- [x] Distinguish MAVROS by launch file + `uav_namespace`, px4-mavlink by
+      `--instance`, sensor bridge by script name + `--copter-id`.
+- [x] Measure on the host that `bash -lic` execs its final command in place
+      (live argv of the wrapper session is only `tail -f /dev/null`) and that
+      `RFLY_STACK_ID` survives that exec and is readable through
+      `scripts/wsl/live_stack_wsl_ops.sh marker`.
+- [x] Require the inherited `RFLY_STACK_ID` marker for `wsl:px4_build_session`
+      and thread an injectable marker probe through inspect, stop (including
+      per-member verification) and stale retirement; fail closed when absent.
+- [x] Add stop-path and retirement-path coverage (marker denied -> no signal;
+      marker verified -> still owned; UAV1/UAV2 swap -> refused).
+- [x] Prove red-green: disable the marker requirement and confirm the new
+      inspect/stop/retire assertions fail, then restore.
+- [x] Re-run `scripts\validate_lifecycle.ps1`, `scripts\validate_stage7.ps1`,
+      `scripts\validate_stage8.ps1` (all PASS).
+- [ ] Fresh-eyes review of the hardened diff before committing.
+- [ ] Local commit (no push).
+
+## Pass 2 / Follow-up: Independent Live Evidence
+
+The 2026-09-10 no-arm EGO run observed the required values interactively but
+did not save the raw diagnostics into its run-scoped directory. If fully
+independent audit is required, repeat one authorized no-arm live run and save,
+under the new stack id: overlay source order, `rospack find ego_planner`,
+`rosnode info` for the EGO node, `rostopic info /uav1/mavros/odometry/out`,
+MAVROS state before/after, the goal publication record, the `pos_cmd` type,
+samples and frequency, and the stop DryRun/Execute plus final inspect output.
+This needs explicit Red-Zone authorization (fresh start `-Execute`, real stop
+`-Execute`) and also serves as the live re-validation of the hardened matcher.

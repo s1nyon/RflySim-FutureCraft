@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import Callable, List, Optional, Sequence, Tuple
 
 if __name__ == "__main__" and __package__ is None:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -38,44 +39,131 @@ WSL_SUSPICIOUS_PATTERNS = [
 # narrow five-second window and still require a role-specific argv fragment.
 MATCH_TOLERANCE_SEC = 5.0
 
+
+@dataclass(frozen=True)
+class WslSessionFingerprint:
+    """Conjunctive identity evidence for one known in-place WSL exec transform.
+
+    ``argv_patterns`` are regexes over the whitespace-normalized, lowercased
+    live argv and EVERY pattern must match.  A single generic token therefore
+    never transfers ownership: the numeric PID/PGID occupant must also carry
+    the component identity (launch file plus namespace, script name plus
+    instance argument, ...) of the role it claims to be.
+
+    ``requires_stack_marker`` additionally demands the launcher-inherited
+    ``RFLY_STACK_ID`` environment marker.  It is reserved for the SITL wrapper
+    session, whose final ``bash -lic`` command is exec'd in place and thus
+    keeps only the generic keepalive argv; a generic argv can never prove
+    ownership and must be combined with the marker the launcher exported.
+    """
+
+    argv_patterns: Tuple[str, ...]
+    requires_stack_marker: bool = False
+
+
 # Narrow relaxations for at-creation WSL sessions whose process keeps the same
 # PID/start-time/PGID but legitimately execs into a component-specific argv.
-# The role-specific fragment prevents an arbitrary same-group process from
-# inheriting ownership merely because the numeric PID/PGID matches.
-WSL_SESSION_ROLE_FRAGMENTS = {
-    "wsl:px4_build_session": ("sitl_multiple_run_rfly.sh", "tail -f /dev/null"),
-    "wsl:stage2_launcher": ("stage2_two_mavros.sh",),
-    "wsl:roscore": ("roscore",),
-    "wsl:mavros_uav1": ("mavros",),
-    "wsl:mavros_uav2": ("mavros",),
-    "wsl:px4_mavlink_uav1": ("px4-mavlink",),
-    "wsl:px4_mavlink_uav2": ("px4-mavlink",),
-    "wsl:fastlio_session": ("stage7_live_fastlio_dual.sh",),
-    "wsl:sensor_bridge_uav1": ("--copter-id 1",),
-    "wsl:sensor_bridge_uav2": ("--copter-id 2",),
-    "wsl:fastlio": ("rflysim_fastlio_dual.launch",),
-    "wsl:ego_swarm_session": ("rflysim_ego_swarm_dual.launch",),
-    "wsl:rviz_session": ("rflysim_rviz.launch",),
+# Each entry is an AND-combination of role-specific fragments; a subset must
+# never be enough to inherit ownership from a numeric PID/PGID collision.
+WSL_SESSION_FINGERPRINTS = {
+    # `bash -lic '<wrapper>'` execs its last command in place, so the live argv
+    # is only the keepalive command; the wrapper's exported RFLY_STACK_ID
+    # marker is the component-specific half of this fingerprint.
+    "wsl:px4_build_session": WslSessionFingerprint(
+        (r"tail -f /dev/null",), requires_stack_marker=True,
+    ),
+    "wsl:stage2_launcher": WslSessionFingerprint(
+        (r"stage2_two_mavros\.sh", r"scripts/wsl/"),
+    ),
+    "wsl:roscore": WslSessionFingerprint(
+        (r"roscore", r"/opt/ros/noetic/"),
+    ),
+    "wsl:mavros_uav1": WslSessionFingerprint(
+        (r"rflysim_mavros_px4\.launch", r"uav_namespace:=uav1(?!\d)"),
+    ),
+    "wsl:mavros_uav2": WslSessionFingerprint(
+        (r"rflysim_mavros_px4\.launch", r"uav_namespace:=uav2(?!\d)"),
+    ),
+    "wsl:px4_mavlink_uav1": WslSessionFingerprint(
+        (r"px4-mavlink", r"--instance 1(?!\d)"),
+    ),
+    "wsl:px4_mavlink_uav2": WslSessionFingerprint(
+        (r"px4-mavlink", r"--instance 2(?!\d)"),
+    ),
+    "wsl:fastlio_session": WslSessionFingerprint(
+        (r"stage7_live_fastlio_dual\.sh", r"scripts/wsl/"),
+    ),
+    "wsl:sensor_bridge_uav1": WslSessionFingerprint(
+        (r"rflysim_sensor_bridge\.py", r"--copter-id 1(?!\d)"),
+    ),
+    "wsl:sensor_bridge_uav2": WslSessionFingerprint(
+        (r"rflysim_sensor_bridge\.py", r"--copter-id 2(?!\d)"),
+    ),
+    "wsl:fastlio": WslSessionFingerprint(
+        (r"roslaunch", r"rflysim_fastlio_dual\.launch"),
+    ),
+    "wsl:ego_swarm_session": WslSessionFingerprint(
+        (r"roslaunch", r"rflysim_ego_swarm_dual\.launch"),
+    ),
+    "wsl:rviz_session": WslSessionFingerprint(
+        (r"roslaunch", r"rflysim_rviz\.launch"),
+    ),
 }
 
 
-def wsl_session_argv_verified(entry: dict, proc) -> bool:
-    """Verify a known same-incarnation WSL exec transformation."""
-    fragments = WSL_SESSION_ROLE_FRAGMENTS.get(str(entry.get("role", "")))
-    if fragments is None or int(entry["pid"]) != int(getattr(proc, "pid", -1)):
+def wsl_session_argv_verified(
+    entry: dict,
+    proc,
+    *,
+    stack_id: Optional[str] = None,
+    marker_probe: Optional[Callable[[int, str], bool]] = None,
+) -> bool:
+    """Verify a known same-incarnation WSL exec transformation.
+
+    The relaxation never widens ownership: the recorded PID must still be
+    alive, the start time must stay inside the narrow window, every
+    role-specific argv fragment must match, and the exception only applies to
+    entries the launcher registered at creation time.  Roles whose live argv
+    cannot be made specific additionally require the inherited stack marker
+    (fail closed when it cannot be read).
+    """
+    fingerprint = WSL_SESSION_FINGERPRINTS.get(str(entry.get("role", "")))
+    if fingerprint is None:
+        return False
+    # Exec compatibility may only confirm an at_creation grant.  spawn_attested
+    # entries have their own marker + recorded-identity verification path and
+    # must never inherit this exception.
+    if str(entry.get("ownership", {}).get("granted", "")) != "at_creation":
+        return False
+    if int(entry["pid"]) != int(getattr(proc, "pid", -1)):
         return False
     cmd = normalize_command_line(getattr(proc, "command_line", ""))
-    if not any(fragment in cmd for fragment in fragments):
+    if not cmd or not all(re.search(pattern, cmd) for pattern in fingerprint.argv_patterns):
         return False
     entry_time = parse_utc(entry.get("start_time_utc", ""))
     proc_time = parse_utc(getattr(proc, "start_time_utc", ""))
     if entry_time is None or proc_time is None:
         return False
-    return abs((entry_time - proc_time).total_seconds()) <= MATCH_TOLERANCE_SEC
+    if abs((entry_time - proc_time).total_seconds()) > MATCH_TOLERANCE_SEC:
+        return False
+    if fingerprint.requires_stack_marker:
+        if not stack_id or marker_probe is None:
+            return False
+        return bool(marker_probe(int(proc.pid), str(stack_id)))
+    return True
 
 
-def wsl_entry_matches_process(entry: dict, proc) -> bool:
-    return entry_matches_process(entry, proc) or wsl_session_argv_verified(entry, proc)
+def wsl_entry_matches_process(
+    entry: dict,
+    proc,
+    *,
+    stack_id: Optional[str] = None,
+    marker_probe: Optional[Callable[[int, str], bool]] = None,
+) -> bool:
+    return entry_matches_process(entry, proc) or wsl_session_argv_verified(
+        entry, proc, stack_id=stack_id, marker_probe=marker_probe
+    )
+
 
 # Required-port owners mapped to the live stack WSL components that legitimately
 # bind them. WSL2 localhost-forwarded sockets are reflected to the Windows side
@@ -148,7 +236,14 @@ class RosProbe:
         raise NotImplementedError
 
 
-def _classify_entries(entries: Sequence[dict], processes: Sequence, side: str = "windows") -> tuple:
+def _classify_entries(
+    entries: Sequence[dict],
+    processes: Sequence,
+    side: str = "windows",
+    *,
+    stack_id: Optional[str] = None,
+    marker_probe: Optional[Callable[[int, str], bool]] = None,
+) -> tuple:
     owned: List[OwnedStatus] = []
     stale: List[OwnedStatus] = []
     orphans: List[OwnedStatus] = []
@@ -158,7 +253,9 @@ def _classify_entries(entries: Sequence[dict], processes: Sequence, side: str = 
         if side == "wsl" and pgid is not None:
             group = find_by_pgid(processes, pgid)
             if proc is not None:
-                if wsl_entry_matches_process(entry, proc):
+                if wsl_entry_matches_process(
+                    entry, proc, stack_id=stack_id, marker_probe=marker_probe
+                ):
                     owned.append(OwnedStatus(entry=entry, status="owned_and_alive"))
                 else:
                     # A live process at the recorded leader PID is authoritative.
@@ -215,6 +312,7 @@ def inspect_stack(
     wsl_table,
     ports_probe: Optional[PortsProbe] = None,
     ros_probe: Optional[RosProbe] = None,
+    session_marker_probe: Optional[Callable[[int, str], bool]] = None,
 ) -> InspectReport:
     win_procs = win_table.snapshot()
     wsl_procs = wsl_table.snapshot()
@@ -222,7 +320,13 @@ def inspect_stack(
     owned: List[OwnedStatus] = []
     stale: List[OwnedStatus] = []
     w_owned, w_stale, _ = _classify_entries(manifest["windows_processes"], win_procs, side="windows")
-    s_owned, s_stale, s_orphans = _classify_entries(manifest["wsl_processes"], wsl_procs, side="wsl")
+    s_owned, s_stale, s_orphans = _classify_entries(
+        manifest["wsl_processes"],
+        wsl_procs,
+        side="wsl",
+        stack_id=manifest.get("stack_id"),
+        marker_probe=session_marker_probe,
+    )
     owned.extend(w_owned)
     owned.extend(s_owned)
     stale.extend(w_stale)
@@ -454,6 +558,68 @@ class WslAwarePortsProbe:
         return pids
 
 
+def default_wsl_ops_helper_path() -> str:
+    """WSL path of the frozen read-only WSL ops helper for this repository."""
+    project_root = Path(__file__).resolve().parents[2]
+    parts = project_root.parts
+    if len(parts) > 1 and re.fullmatch(r"[A-Za-z]:\\?", parts[0]):
+        return (
+            "/mnt/" + parts[0][0].lower() + "/" + "/".join(parts[1:])
+            + "/scripts/wsl/live_stack_wsl_ops.sh"
+        )
+    return str(project_root / "scripts" / "wsl" / "live_stack_wsl_ops.sh").replace("\\", "/")
+
+
+class WslSessionMarkerProbe:
+    """Read-only `RFLY_STACK_ID` marker probe for marker-backed exec sessions.
+
+    Uses the frozen WSL ops helper (`marker <pid> <stack_id>`), which reads
+    `/proc/<pid>/environ` and exits 0 only when the process inherited exactly
+    this stack's launcher marker.  Any transport error, timeout, or non-zero
+    exit means "not verified": the caller must then fail closed instead of
+    treating the numeric PID/PGID occupant as owned.
+    """
+
+    def __init__(
+        self,
+        distro: str = "RflySim-20.04",
+        wsl: str = "wsl.exe",
+        helper_wsl_path: Optional[str] = None,
+        timeout_s: int = 30,
+    ):
+        self.distro = distro
+        self.wsl = wsl
+        self.helper_wsl_path = helper_wsl_path or default_wsl_ops_helper_path()
+        self.timeout_s = int(timeout_s)
+        self.last_error: Optional[str] = None
+
+    def __call__(self, pid: int, stack_id: str) -> bool:
+        if not stack_id:
+            self.last_error = "missing stack_id"
+            return False
+        command = (
+            f"bash {shlex.quote(self.helper_wsl_path)} marker "
+            f"{int(pid)} {shlex.quote(str(stack_id))}"
+        )
+        try:
+            result = subprocess.run(
+                [self.wsl, "-d", self.distro, "-e", "bash", "-lic", command],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=self.timeout_s,
+            )
+        except (subprocess.SubprocessError, OSError) as exc:
+            self.last_error = str(exc)
+            return False
+        if result.returncode != 0:
+            self.last_error = f"exit={result.returncode}"
+            return False
+        self.last_error = None
+        return True
+
+
 class WslRosProbe:
     def __init__(self, distro: str = "RflySim-20.04"):
         self.distro = distro
@@ -506,6 +672,7 @@ def _cli_main() -> int:
         wsl_table=WslProcessTable(args.distro),
         ports_probe=WindowsPortsProbe(owned_pids),
         ros_probe=WslRosProbe(args.distro),
+        session_marker_probe=WslSessionMarkerProbe(args.distro),
     )
     print(json.dumps(report_to_dict(report), indent=2, ensure_ascii=False))
     print(f"[inspect] {json.dumps(summarize(report), ensure_ascii=False)}", file=sys.stderr)

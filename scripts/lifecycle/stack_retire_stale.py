@@ -26,6 +26,7 @@ from .stack_inspect import (
     WINDOWS_STACK_NAMES,
     WSL_SUSPICIOUS_PATTERNS,
     WslAwarePortsProbe,
+    WslSessionMarkerProbe,
     inspect_stack,
     summarize,
     wsl_entry_matches_process,
@@ -122,8 +123,11 @@ def _capture_processes(win_table, wsl_table):
     return win_snapshot, wsl_snapshot, win_error, wsl_error
 
 
-def build_retirement_plan(manifest, win_table, wsl_table, ports_probe, ros_probe) -> RetirementPlan:
+def build_retirement_plan(
+    manifest, win_table, wsl_table, ports_probe, ros_probe, session_marker_probe=None
+) -> RetirementPlan:
     win_snapshot, wsl_snapshot, win_error, wsl_error = _capture_processes(win_table, wsl_table)
+    stack_id = manifest.get("stack_id")
 
     class SnapshotTable:
         def __init__(self, values):
@@ -138,6 +142,7 @@ def build_retirement_plan(manifest, win_table, wsl_table, ports_probe, ros_probe
         wsl_table=SnapshotTable(wsl_snapshot),
         ports_probe=ports_probe,
         ros_probe=ros_probe,
+        session_marker_probe=session_marker_probe,
     )
     summary = summarize(report)
     denial: List[str] = []
@@ -182,7 +187,9 @@ def build_retirement_plan(manifest, win_table, wsl_table, ports_probe, ros_probe
             current = find_by_pid(snapshot, entry["pid"])
             group = find_by_pgid(snapshot, entry.get("pgid")) if side == "wsl" and entry.get("pgid") else []
             current_matches = current is not None and (
-                wsl_entry_matches_process(entry, current)
+                wsl_entry_matches_process(
+                    entry, current, stack_id=stack_id, marker_probe=session_marker_probe
+                )
                 if side == "wsl"
                 else entry_matches_process(entry, current)
             )
@@ -250,15 +257,20 @@ def execute_retirement(
     *,
     expected_plan_token: str,
     before_commit=None,
+    session_marker_probe=None,
 ) -> RetirementPlan:
-    first = build_retirement_plan(manifest, win_table, wsl_table, ports_probe, ros_probe)
+    first = build_retirement_plan(
+        manifest, win_table, wsl_table, ports_probe, ros_probe, session_marker_probe
+    )
     if not first.eligible:
         raise RetirementError("retirement admission denied: " + ", ".join(first.denial_reasons))
     if not expected_plan_token or first.plan_token != expected_plan_token:
         raise RetirementError("DryRun plan token does not match current full snapshot")
     if before_commit is not None:
         before_commit()
-    final = build_retirement_plan(manifest, win_table, wsl_table, ports_probe, ros_probe)
+    final = build_retirement_plan(
+        manifest, win_table, wsl_table, ports_probe, ros_probe, session_marker_probe
+    )
     if not final.eligible or final.plan_token != first.plan_token:
         raise RetirementError("state changed after admission; manifest unchanged")
 
@@ -355,15 +367,20 @@ def _cli_main() -> int:
         args.distro,
     )
     ros_probe = ProvenWslRosProbe(args.distro)
+    session_marker_probe = WslSessionMarkerProbe(args.distro)
     try:
         if args.execute:
             plan = execute_retirement(
                 manifest, win_table, wsl_table, ports_probe, ros_probe,
                 expected_plan_token=args.plan_token,
+                session_marker_probe=session_marker_probe,
             )
             save_manifest(manifest, args.manifest)
         else:
-            plan = build_retirement_plan(manifest, win_table, wsl_table, ports_probe, ros_probe)
+            plan = build_retirement_plan(
+                manifest, win_table, wsl_table, ports_probe, ros_probe,
+                session_marker_probe=session_marker_probe,
+            )
     except RetirementError as exc:
         print(f"[retire-stale] ABORT: {exc}", file=sys.stderr)
         return 2

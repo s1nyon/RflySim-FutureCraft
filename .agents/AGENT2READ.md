@@ -22,6 +22,24 @@
 >   C++ mission exposes a real interface defect。
 
 - Lifecycle 是 **FROZEN / CLOSED**：5 次 fresh start→READY→stop-clean closure 与 3 次 PBL-1 full regression 已通过。
+- **2026-09-10 WSL PID/PGID reuse recovery + NO-ARM EGO fresh live PASS**：旧
+  `stack-20260909T073830Z-51e7b3ef` 中 sensor bridge PID/PGID 737 被次日 VS Code shell
+  数值复用，已确认为真实 recovery-path 分类缺陷；修复后按 stale identity 做 token-bound、
+  zero-signal metadata retirement，外来 shell 前后未受影响。最终 fresh stack
+  `stack-20260910T041329Z-aba6cc07` / `px4-95c5b5184fb3eaa4` 由标准 `sim.ps1 start
+  -Execute` 返回 0；仓库 EGO overlay、`/uav1/mavros/odometry/out → EGO →
+  /uav1/planning/pos_cmd` 均实证通过，PositionCommand ≈98.6–101.6 Hz，前后
+  `armed=false / MANUAL`，stop `clean=true`。未修改/启动 C++ mission，未 arm。
+  证据见 `../docs/evidence/2026-09-10-no-arm-ego-overlay-live-validation.md`。
+  **同日 review 收尾（offline）**：WSL exec-session 例外已改为组合指纹（每条规则要求
+  多个 argv 片段同时命中）且仅对 `ownership.granted == at_creation` 生效；MAVROS 区分
+  `uav_namespace`、px4-mavlink 区分 `--instance`、sensor bridge 要求脚本名 +
+  `--copter-id`；SITL wrapper session 因 `bash -lic` 末条命令被原地 exec（live argv 只剩
+  `tail -f /dev/null`）而额外要求继承的 `RFLY_STACK_ID` marker（不可验证即 fail closed）。
+  `validate_lifecycle` / `validate_stage7` / `validate_stage8` 离线全 PASS；
+  **收紧后的 matcher 尚未在 live stack 上复验**（下一次授权的 no-arm live 必须确认所有
+  role 仍为 `owned_and_alive`），且该次 live 的原始诊断未落盘到 run-scoped 目录，
+  独立审计需重跑一次授权 live。
 - 2026-08-11 仓库结构迁移后，`dev` live 链的 armed 验证已恢复并通过
   （fresh-instance：双机 OFFBOARD/arm/起飞/14 段导航/降落，`success=true` 41.5s，
   证据 `../docs/evidence/2026-08-11-live-import-and-pwsh-compat-armed-verified.md`）。
@@ -60,10 +78,11 @@
   min clearance 0.102–0.136m，min 机间距 1.815m）。S4 曾出现 uav2 在 arc2
   入口偶发切角（几何壁距 -0.03m）记录为残余间歇风险；后续若加固，单独验证
   turn checkpoint 0.5→0.4。本轮稳定性测试结束。
-- **已知 OPEN 缺陷（Yellow Zone，待修）**：`stack_stop.py` 对 WSL 进程组
-  `kill -- -PGID` 无效（返回 0 但进程组存活），stop 报 NOT clean，需要按显式 PID
-  补清后再收尾记录 `clean: true`；2 个 fresh 栈均 2/2 复现。
-  详见 `../docs/incidents/2026-08-11-wsl-pgid-stop-ineffective.md`。
+- **历史缺陷（RESOLVED，不是当前 blocker）**：2026-08-11 曾出现 WSL PGID stop
+  ineffective；2026-09-10 两个 fresh live 栈均由标准 manifest stop 完成
+  `clean=true`，未用名称扫杀或 WSL shutdown。历史见
+  `../docs/incidents/2026-08-11-wsl-pgid-stop-ineffective.md`，最新证据见
+  `../docs/evidence/2026-09-10-no-arm-ego-overlay-live-validation.md`。
 - **2026-08-25 Infrastructure Baseline READY**：RViz `exec roslaunch` ownership 已纳入
   标准 stop 身份校验，PGID 9329 与后续 dual-RViz sessions 均由 repository lifecycle
   clean stop；最终 owned/orphan/unknown/stale 为 0、核心端口 free。startup 3/3 fresh
