@@ -38,4 +38,8 @@ private:
 
     bool _has_goal;
     bool _has_planner_command;
+
+    int _last_seen_trajectory_id;
+    int _goal_baseline_trajectory_id;
+    bool _has_seen_trajectory_id;
 };

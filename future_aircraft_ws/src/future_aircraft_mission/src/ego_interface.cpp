@@ -5,7 +5,10 @@ EgoInterface::EgoInterface(
     ros::NodeHandle& nh,
     ros::NodeHandle& pnh)
     : _has_goal(false),
-      _has_planner_command(false)
+      _has_planner_command(false),
+      _last_seen_trajectory_id(-1),
+      _goal_baseline_trajectory_id(-1),
+      _has_seen_trajectory_id(false)
 {
     pnh.param<std::string>(
         "goal_topic",
@@ -37,6 +40,12 @@ void EgoInterface::sendGoal(
     _last_goal = goal;
     _has_goal = true;
 
+    if (_has_seen_trajectory_id) {
+        _goal_baseline_trajectory_id = _last_seen_trajectory_id;
+    } else {
+        _goal_baseline_trajectory_id = -1;
+    }
+
     _has_planner_command = false;
 
     _goal_pub.publish(goal);
@@ -45,7 +54,19 @@ void EgoInterface::sendGoal(
 void EgoInterface::plannerCommandCallback(
     const quadrotor_msgs::PositionCommand::ConstPtr& msg)
 {
-    (void)msg;
+    const int trajectory_id = msg->trajectory_id;
+
+    _last_seen_trajectory_id = trajectory_id;
+    _has_seen_trajectory_id = true;
+
+    if (!_has_goal) {
+        return;
+    }
+
+    if (_goal_baseline_trajectory_id >= 0 &&
+        trajectory_id <= _goal_baseline_trajectory_id) {
+        return;
+    }
 
     _has_planner_command = true;
     _last_planner_command_time = ros::Time::now();

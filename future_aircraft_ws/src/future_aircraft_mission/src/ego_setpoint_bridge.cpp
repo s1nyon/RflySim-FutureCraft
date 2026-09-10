@@ -6,7 +6,10 @@ EgoSetpointBridge::EgoSetpointBridge(
     : _nh(nh),
     _pnh(pnh),
     _has_planner_command(false),
-    _has_received_goal(false)
+    _has_received_goal(false),
+    _last_seen_trajectory_id(-1),
+    _goal_baseline_trajectory_id(-1),
+    _has_seen_trajectory_id(false)
 {
     // Get parameter
     _pnh.param<std::string>(
@@ -67,11 +70,20 @@ EgoSetpointBridge::EgoSetpointBridge(
 void EgoSetpointBridge::plannerCallback(
     const quadrotor_msgs::PositionCommand::ConstPtr& msg)
 {
-    if(!_has_received_goal) {
+    const int trajectory_id = msg->trajectory_id;
+
+    if (!_has_received_goal) {
+        _last_seen_trajectory_id = trajectory_id;
+        _has_seen_trajectory_id = true;
         return;
     }
 
     ROS_INFO_ONCE("Received planner command");
+
+    if (_goal_baseline_trajectory_id >= 0 &&
+        trajectory_id <= _goal_baseline_trajectory_id) {
+        return;
+    }
 
     _latest_target = convertCommand(*msg);
 
@@ -90,6 +102,14 @@ void EgoSetpointBridge::goalCallback(
         msg->pose.position.y,
         msg->pose.position.z
     );
+
+    if (_has_seen_trajectory_id) {
+        _goal_baseline_trajectory_id =
+            _last_seen_trajectory_id;
+    }
+    else {
+        _goal_baseline_trajectory_id = -1;
+    }
 
     _has_received_goal = true;
     _has_planner_command = false;
