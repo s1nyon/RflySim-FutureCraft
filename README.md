@@ -1,61 +1,200 @@
-# future_aircraft_sim
+<div align="center">
 
-## Competition Goal
+# RflySim FutureCraft
 
-本项目面向未来飞行器创新大赛赛题 2.1「室内狭窄通道环境下多飞行器智能协同导航与作业挑战赛」。目标是让不少于两架自主飞行器在狭窄、带转弯并含静态/动态障碍的通道中完成起飞、定位避障、未知目标协同作业、穿越和 ArUco 平台精准降落。正式要求以[参赛指南](docs/reference/competition-guide-2026.pdf)为准，阶段路线与验收标准见[当前竞赛路线图](docs/current/competition-roadmap.md)。
+### Multi-UAV Cooperative Navigation in Narrow Indoor Environments
 
-## Current Capability
+An autonomous multi-UAV simulation and competition framework built with<br>
+**RflySim · PX4 · ROS · Faster-LIO · EGO-Swarm · C++**
 
-- PBL-1（`lidar_only` 双机 RflySim/PX4/MAVROS/Faster-LIO/EGO-Swarm/OFFBOARD 错时穿越基线）已通过 3 次 fresh-instance 完整 live 回归并冻结。
-- Competition Course V2 地图基线 `MAP READY → FROZEN`（2026-09-01/09-02），
-  两轮独立 fresh startup world-state retention PASS；正式 freeze/handoff 见
-  [Simulation Freeze & C++ Handoff](docs/current/2026-09-02-simulation-baseline-freeze-handoff.md)。
-- UAV1 Section A 完整飞行链 **3/3 independent fresh-instance PASS**（endpoint、
-  collision 0、watchdog/geofence 0、UAV2 0 违规、AUTO.LAND/disarm 全确认）；
-  Section A 入口 wall clearance ≈0.072–0.085m 低于 0.25m 稳定阈值，列为已知
-  planner/corridor-entry performance limitation（非 infra blocker），
-  证据见 [repeatability evidence](docs/evidence/2026-09-02-v2-section-a-repeatability-clearance-not-stable.md)。
-- manifest 化 lifecycle 已通过 5 次 start/READY/stop closure 与 PBL-1 回归；启动、检查、停止和 fresh-instance 均 fail closed。
-- 2026-08-11 仓库结构迁移后的 `dev` live 链已恢复：fresh-instance armed 验证
-  （双机 OFFBOARD/arm/起飞/14 段导航/降落，`success=true` 41.5s）通过，
-  证据见 `docs/evidence/2026-08-11-live-import-and-pwsh-compat-armed-verified.md`。
-  已知待修缺陷：WSL 进程组 stop 在 `stack_stop.py` 中失效（stop 报 NOT clean，
-  需显式 PID 补清），见 `docs/incidents/2026-08-11-wsl-pgid-stop-ineffective.md`。
-- 当前开发阶段：**Phase 2.5 C++ Competition Mission Development（NEXT ACTIVE；
-  现有 package 基础 PRESENT，广义 mission 架构尚未实现）**；仿真/infrastructure/map
-  已冻结为稳定底座；PBL-1 是回归基线，不等于比赛完整能力。
-- D435i RGB/Depth 接口已保留，但 `full` 多传感器模式的 live 飞行稳定性尚未闭环；默认飞行配置仍为 `lidar_only`。
-- `future_aircraft_mission` 是**现有且计划继续使用**的 C++ competition mission
-  package；现有 `EgoSetpointBridge` 为 PRESENT / KEEP 的 baseline 模块；更广义的
-  mission 架构尚未实现，后续模块在该 package 内由用户增量设计。
-  `multi_uav_mission` Python 与 lifecycle 是受保护基线。
+<p>
+  <strong>English</strong>
+  ·
+  <a href="./README.zh-CN.md">简体中文</a>
+</p>
 
-## Repository Layout
+<p>
+  <a href="#demo">Demo</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="docs/current/competition-roadmap.md">Roadmap</a> ·
+  <a href="docs/README.md">Documentation</a>
+</p>
 
-| Path | Purpose |
+<img src="docs/assets/readme/hero.png" width="94%" alt="Two UAVs navigating an indoor competition corridor">
+
+<sub>Concept visualization of the dual-UAV competition mission. Live validation claims are linked to recorded repository evidence below.</sub>
+
+</div>
+
+> [!IMPORTANT]
+> Before modifying this repository, contributors and AI agents **must** read
+> [AGENTS.md](AGENTS.md), [.agents/AGENT2READ.md](.agents/AGENT2READ.md), and—when working on the live RflySim/PX4/MAVROS/WSL chain—[.agents/RFLYSIM_TOOLCHAIN_REFERENCE.md](.agents/RFLYSIM_TOOLCHAIN_REFERENCE.md).
+
+## Overview
+
+RflySim FutureCraft is a dual-UAV research and competition platform for autonomous flight in narrow indoor environments. It connects a Windows/WSL simulation lifecycle with PX4 SITL, MAVROS, LiDAR/IMU sensing, Faster-LIO localization, EGO-Swarm planning, and project-owned mission logic.
+
+The repository is organized around two goals:
+
+- preserve a repeatable, evidence-backed simulation baseline; and
+- incrementally develop the C++ competition mission without silently weakening flight safety or reopening frozen infrastructure.
+
+The public project name is **RflySim FutureCraft**. Existing package and workspace names such as `future_aircraft_mission` remain unchanged.
+
+## Competition Mission
+
+The project targets Challenge 2.1 of the Future Aircraft Innovation Competition: cooperative navigation and operation by at least two autonomous aircraft in a narrow indoor course.
+
+```text
+Autonomous takeoff (≥2 UAVs)
+        ↓
+Enter a narrow, turning corridor
+        ↓
+Avoid static and dynamic obstacles
+        ↓
+Detect and coordinate work on unknown targets
+        ↓
+Traverse the course in an orderly manner
+        ↓
+Land precisely on ArUco-marked platforms
+```
+
+The complete mission must operate without manual piloting except for the explicitly permitted start and emergency-stop actions. See the [official competition guide](docs/reference/competition-guide-2026.pdf) and the [competition capability roadmap](docs/current/competition-roadmap.md) for authoritative requirements and acceptance criteria.
+
+## Demo
+
+The frozen simulation baseline includes dual PX4/MAVROS instances, dual Faster-LIO localization, EGO-Swarm planning, OFFBOARD flight, corridor traversal, landing, and controlled lifecycle closure.
+
+<p align="center">
+  <img src="docs/assets/readme/corridor-flight.jpg" width="49%" alt="UAV flying through a narrow turning corridor">
+  <img src="docs/assets/readme/dual-uav-corridor.jpg" width="49%" alt="Two UAVs operating inside the simulated corridor">
+</p>
+
+<p align="center"><sub>Narrow-corridor flight · Dual-UAV operation</sub></p>
+
+<p align="center">
+  <img src="docs/assets/readme/dual-uav-platforms.jpg" width="82%" alt="Dual-UAV simulation with raised obstacle platforms">
+</p>
+
+<p align="center"><sub>Actual RflySim capture showing both aircraft and raised course obstacles</sub></p>
+
+| Demonstrated result | Evidence |
 | --- | --- |
-| `future_aircraft_ws/src/future_aircraft_mission/` | 现有且继续使用的 C++ competition mission package（广义 mission 架构待增量实现） |
-| `future_aircraft_ws/src/multi_uav_mission/` | 受保护的 live-validated Python/launch 基线 |
-| `third_party/ego-planner-swarm/` | 固定 team-fork commit 的独立 Catkin overlay |
-| `config/` | 环境模板、阶段契约、传感器与赛道定义 |
-| `scripts/` | 入口、生命周期内部实现和诊断脚本；分类见[脚本索引](scripts/README.md) |
-| `tests/` | 离线 contract 与 regression 检查 |
-| `docs/` | 当前状态、架构、证据、事故、决策和参考资料；见[文档索引](docs/README.md) |
-| `logs/`, `generated/` | 被忽略的运行态证据和确定性生成产物；路径属于受保护运行契约 |
-| `.agents/`, `.vscode/` | Agent 入口规则与双 workspace 开发配置 |
+| Protected PBL-1 full-stack flight | [3× fresh-instance regression closure](docs/evidence/2026-08-08-pbl1-fullstack-regression-closure.md) |
+| Current parameter and flight-plan stability | [4× fresh armed verification](docs/evidence/2026-08-20-current-params-4x-fresh-arm-verified.md) |
+| Competition Course V2 world and motion gate | [Map-ready closure](docs/evidence/2026-09-01-competition-course-v2-map-ready-closure.md) |
+| UAV1 Section A repeatability | [3/3 fresh flight-chain PASS](docs/evidence/2026-09-02-v2-section-a-repeatability-clearance-not-stable.md) |
+
+> [!NOTE]
+> Section A flight is repeatable, but its entrance wall clearance (approximately 0.072–0.085 m) remains below the 0.25 m stability target. This is a planner/corridor-entry performance backlog, not evidence that the full competition mission is complete.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Mission["Mission Layer"]
+        CPP["C++ Competition Mission"]
+        BASE["Protected Python Baseline"]
+    end
+
+    subgraph Perception["Perception & State Estimation"]
+        SENSORS["LiDAR / IMU / D435i"]
+        LIO["Faster-LIO"]
+        TARGETS["Target Perception"]
+    end
+
+    subgraph Navigation["Navigation"]
+        EGO["EGO-Swarm"]
+        BRIDGE["Setpoint Bridge"]
+    end
+
+    subgraph Flight["Flight & Simulation"]
+        MAVROS["MAVROS"]
+        PX4["PX4 SITL ×2"]
+        RFLY["RflySim / CopterSim / RflySim3D"]
+    end
+
+    SENSORS --> LIO --> EGO
+    TARGETS --> CPP
+    CPP --> EGO
+    BASE --> EGO
+    EGO --> BRIDGE --> MAVROS --> PX4
+    PX4 <--> RFLY
+```
+
+The C++ mission layer decides **what** the aircraft should do; EGO-Swarm decides **how** to navigate locally. The existing `EgoSetpointBridge` is part of the retained baseline. The broader `VehicleInterface → EgoInterface → UavAgent → MissionManager` architecture is a roadmap concept and is **not yet implemented**.
+
+## Current Capabilities
+
+Status reflects the [simulation freeze handoff](docs/current/2026-09-02-simulation-baseline-freeze-handoff.md), not an unverified claim of competition readiness.
+
+| Capability | Status | Notes |
+| --- | --- | --- |
+| Manifest-based lifecycle and ownership | **Frozen baseline** | Start, readiness, inspection, and controlled stop are evidence-backed and fail closed. |
+| Dual RflySim / PX4 SITL / MAVROS | **Validated** | Two-vehicle topology and flight chain are established. |
+| LiDAR/IMU + Faster-LIO | **Validated baseline** | `lidar_only` remains the default flight configuration. |
+| EGO-Swarm local planning and setpoint handoff | **Validated baseline** | Retained as protected infrastructure. |
+| Competition Course V2 | **Frozen / map ready** | Static geometry, pendulum motion, and world-state probes passed. |
+| UAV1 Section A flight chain | **3/3 fresh PASS** | Clearance stability remains an explicit limitation. |
+| C++ competition mission | **Active next phase** | Existing package and bridge retained; broader mission architecture is not implemented. |
+| RGB/depth competition perception | **Experimental / scaffold** | Not a hard dependency of the protected flight baseline. |
+| Multi-UAV target operation and ArUco landing | **Planned** | Full competition capability is not yet implemented. |
+| Real-world deployment | **Planned** | Human-controlled arming and Offboard authorization remain mandatory. |
+
+## Tech Stack
+
+| Layer | Technologies |
+| --- | --- |
+| Simulation and flight | RflySim, CopterSim, RflySim3D, PX4 SITL, MAVROS |
+| Localization and sensing | Faster-LIO, LiDAR, IMU, optional D435i RGB/depth |
+| Planning and control | EGO-Swarm, ROS, OFFBOARD setpoint handoff |
+| Mission development | C++17, Python, ROS packages and launch files |
+| Tooling and orchestration | PowerShell, Windows, WSL, deterministic manifests and validators |
+
+## Repository Structure
+
+```text
+RflySim-FutureCraft/
+├── AGENTS.md                                  # Mandatory safety and ownership rules
+├── .agents/
+│   ├── AGENT2READ.md                          # Current truth and engineering entry guide
+│   └── RFLYSIM_TOOLCHAIN_REFERENCE.md         # Live toolchain boundaries
+├── config/                                    # Environment, sensors, stages, and course specs
+├── docs/                                      # Current state, architecture, evidence, incidents
+├── future_aircraft_ws/src/
+│   ├── future_aircraft_mission/               # Human-owned C++ competition mission workspace
+│   └── multi_uav_mission/                     # Protected Python/launch flight baseline
+├── scripts/                                   # CLI, lifecycle, diagnostics, and validation
+├── tests/                                     # Offline contract and regression checks
+├── third_party/ego-planner-swarm/             # Pinned team-fork Catkin overlay
+└── sim.ps1                                    # Main project command entry point
+```
+
+Runtime evidence in `logs/` and deterministic outputs in `generated/` are intentionally ignored by Git. Their paths still belong to protected runtime contracts and must not be casually renamed or repurposed.
 
 ## Quick Start
 
-先做只读环境检查和 DryRun：
+### Prerequisites
+
+- Windows with the project-compatible RflySim/PX4 toolchain
+- WSL with the required ROS workspace dependencies
+- PowerShell and the environment paths described in the [toolchain reference](.agents/RFLYSIM_TOOLCHAIN_REFERENCE.md)
+- Repository submodules initialized where required
+
+Start with read-only checks and dry runs:
 
 ```powershell
+# Inspect the local environment
 .\sim.ps1 doctor
+
+# Preview lifecycle actions; state changes require explicit -Execute
 .\sim.ps1 start
 .\sim.ps1 status
 .\sim.ps1 stop
 ```
 
-状态变更必须显式使用 `-Execute`。默认 `dev` 启动配置包含双传感器、Faster-LIO readiness 和 EGO-Swarm，并停在 mission execution、OFFBOARD 与 arming 之前。开发构建与验证：
+Build and run offline validation:
 
 ```powershell
 .\sim.ps1 build
@@ -63,24 +202,76 @@
 .\sim.ps1 validate -Suite core
 ```
 
+The default `dev` profile prepares dual sensors, Faster-LIO readiness, and EGO-Swarm, but stops before mission execution, OFFBOARD mode, and arming. Never infer permission to arm from a successful dry run or offline validation.
+
+## Roadmap
+
+| Phase | Scope | Status |
+| --- | --- | --- |
+| 0 | Safe engineering foundation and lifecycle | **Closed / frozen** |
+| 1 | Protected dual-UAV full-stack baseline | **Closed** |
+| 2 | Competition Course V2 and Section A baseline | **Frozen; clearance backlog retained** |
+| 2.5 | Incremental C++ competition mission | **Next active phase** |
+| 3 | Multi-UAV corridor coordination | Planned |
+| 4 | Competition perception | Planned |
+| 5 | Cooperative target operation | Planned |
+| 6 | Precision exit and ArUco landing | Planned |
+| 7 | Full competition mission integration | Planned |
+| 8 | Score, reliability, and competition-day optimization | Planned |
+
+Do not use **competition ready** until a fresh, recorded end-to-end mission passes the acceptance criteria. Detailed milestones and dependencies live in the [competition roadmap](docs/current/competition-roadmap.md).
+
+## Documentation
+
+| Entry | Purpose |
+| --- | --- |
+| [Documentation index](docs/README.md) | Navigation across current state, architecture, evidence, incidents, decisions, and references |
+| [Current agent truth](.agents/AGENT2READ.md) | Authoritative handoff, truth priority, and debugging workflow |
+| [Simulation freeze handoff](docs/current/2026-09-02-simulation-baseline-freeze-handoff.md) | Frozen scope, accepted baseline, limitations, and next phase |
+| [Competition roadmap](docs/current/competition-roadmap.md) | Requirements, capability gaps, phases, and evidence mapping |
+| [Lifecycle architecture](docs/architecture/2026-08-08-live-stack-lifecycle-design.md) | Manifest ownership and safe lifecycle design |
+| [Script index](scripts/README.md) | Supported entry points, internals, diagnostics, and retired hazards |
+
+Only the root README, `AGENTS.md`, `.agents/AGENT2READ.md`, and documents explicitly marked current can define current project truth. Historical evidence and incident reports provide context but do not independently reopen resolved blockers.
+
 ## Safety
 
-- 所有 live lifecycle 操作必须使用 manifest 化入口；unknown/stale ownership、端口歧义或 stop-clean 失败时只报告并停止，不自动 force retry。
-- 禁止恢复 `scripts/cleanup_sim_stack.ps1` 与 `scripts/restart_live_stack.ps1` 的旧逻辑；它们是恒失败的 hazard tombstone。
-- 禁止名称扫杀、`wsl --shutdown`、自动硬重启循环和隐式 arming。
-- 仿真飞行仅在当前实例 readiness PASS，并同时显式提供 `--simulation-only`、`--allow-arm` 且 policy 允许时执行。真机始终由人类 arm/授权 Offboard。
-- 完整安全规则和 Red-Zone 见 [AGENTS.md](AGENTS.md)。
+> [!WARNING]
+> This repository can control simulated—and potentially real—aircraft. A passing offline check does not authorize live execution, OFFBOARD mode, or arming.
 
-## Development Ownership
+<details>
+<summary><strong>Read the non-negotiable live-operation rules</strong></summary>
 
-- 人类默认拥有 `future_aircraft_mission` 的比赛行为、任务策略和控制意图。
-- Agent 默认维护仿真编排、地图、项目侧 adapter、诊断、维护脚本及其测试。
-- ROS 接口、launch 组合、package manifest、lifecycle/launcher 和任何可能影响 PBL-1 的改动属于 change-gated shared boundary，修改前必须说明证据、影响、回滚与验证方案。
-- `multi_uav_mission` Python 基线和 lifecycle 实现冻结，除非 fresh regression evidence 证明必须修改。
+- Use only the manifest-based lifecycle entry points for live stack operations.
+- Unknown or stale ownership, ambiguous ports, or an unclean stop must fail closed: report the condition and stop; do not force-retry.
+- Never restore the retired behavior in `scripts/cleanup_sim_stack.ps1` or `scripts/restart_live_stack.ps1`; these files are hazard tombstones that must continue to fail.
+- Do not use process-name sweeps, `wsl --shutdown`, automatic hard-restart loops, or implicit arming.
+- Simulation arming is allowed only when the current run passes readiness and the caller explicitly provides `--simulation-only` and `--allow-arm`, with a matching run/instance identity and an enabled policy.
+- Real aircraft must always be armed by a human, and a human must authorize Offboard operation.
+- Executing a real stack stop, forced PGID termination, fresh-instance execution, or first live lifecycle validation requires the explicit authorization defined in [AGENTS.md](AGENTS.md).
 
-## Validation
+</details>
 
-文档与仓库结构改动运行：
+## Development & Agent Guidelines
+
+Do not read this README and start changing code. Establish context in this order:
+
+1. [AGENTS.md](AGENTS.md)
+2. [.agents/AGENT2READ.md](.agents/AGENT2READ.md)
+3. [.agents/RFLYSIM_TOOLCHAIN_REFERENCE.md](.agents/RFLYSIM_TOOLCHAIN_REFERENCE.md) for RflySim/PX4/MAVROS/WSL work
+4. Task-relevant documents under `docs/`
+5. Current implementation, configuration, tests, and run-scoped artifacts
+6. Historical incidents only when necessary
+
+Ownership and change boundaries:
+
+- Humans own competition behavior, mission strategy, and control intent under `future_aircraft_mission` by default.
+- Agents may maintain project-owned orchestration, maps, adapters, diagnostics, maintenance tooling, documentation, and tests within the rules.
+- ROS interfaces, launch composition, package manifests, lifecycle/launcher code, third-party planning code, and anything that can affect PBL-1 are change-gated shared boundaries.
+- The `multi_uav_mission` Python/launch baseline and lifecycle internals are frozen unless fresh regression evidence justifies reopening them.
+- Any gated change must state the evidence, impact, risk, rollback, and validation plan before implementation.
+
+Validation for documentation and repository-structure changes:
 
 ```powershell
 D:\PX4PSP\Python38\python.exe tests\script_inventory_check.py --project-root .
@@ -88,22 +279,16 @@ D:\PX4PSP\Python38\python.exe tests\docs_link_check.py --project-root .
 powershell -ExecutionPolicy Bypass -File scripts\validate_repository.ps1
 ```
 
-当前核心离线门：
+Offline PASS is not live PASS. If no fresh live run was performed, say so explicitly.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\validate_stage6c.ps1
-powershell -ExecutionPolicy Bypass -File scripts\validate_stage6d.ps1
-powershell -ExecutionPolicy Bypass -File scripts\validate_stage7.ps1
-powershell -ExecutionPolicy Bypass -File scripts\validate_stage8.ps1
-```
+## Acknowledgements
 
-离线 PASS 不代表 live PASS；未运行 fresh live 时必须明确写明 live parity 未验证。
+This project builds on the RflySim simulation platform, PX4, ROS/MAVROS, Faster-LIO, EGO-Swarm, and the broader open-source aerial robotics community. Competition requirements are derived from the official Future Aircraft Innovation Competition materials included in the repository.
 
-## Documentation Index
+---
 
-- [文档总索引](docs/README.md)
-- [当前竞赛路线图](docs/current/competition-roadmap.md)
-- [PBL-1 live 回归证据](docs/evidence/2026-08-08-pbl1-fullstack-regression-closure.md)
-- [Lifecycle 架构](docs/architecture/2026-08-08-live-stack-lifecycle-design.md)
-- [Agent 当前入口](.agents/AGENT2READ.md)
-- [RflySim 工具链边界](.agents/RFLYSIM_TOOLCHAIN_REFERENCE.md)
+<div align="center">
+
+**Research carefully. Validate honestly. Fly safely.**
+
+</div>
