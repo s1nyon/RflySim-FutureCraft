@@ -57,6 +57,8 @@ public:
 
     State state() const;
 
+    bool startTakeoff(double altitude_m, double yaw);
+
 private:
     std::string _uav_name;
 
@@ -66,4 +68,9 @@ private:
     VehicleInterface _vehicle;
     EgoInterface _ego;
     State _state;
+
+    void transitionTo(State next_state);
+
+    double _takeoff_altitude;
+    double _takeoff_yaw;
 };

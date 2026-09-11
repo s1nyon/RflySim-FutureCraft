@@ -137,3 +137,22 @@ UavAgent::State UavAgent::state() const
 {
     return _state;
 }
+
+bool UavAgent::startTakeoff(double altitude_m, double yaw) 
+{
+    if (_state != State::IDLE) {
+        return false;
+    }
+
+    _takeoff_altitude = altitude_m;
+    _takeoff_yaw = yaw;
+
+    transitionTo(State::TAKING_OFF);
+
+    return true;
+}
+
+void UavAgent::transitionTo(State next_state)
+{
+    _state = next_state;
+}
