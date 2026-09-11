@@ -59,6 +59,8 @@ public:
 
     bool startTakeoff(double altitude_m, double yaw);
 
+    void tick();
+
 private:
     std::string _uav_name;
 

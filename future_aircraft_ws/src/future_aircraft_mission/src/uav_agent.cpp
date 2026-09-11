@@ -156,3 +156,37 @@ void UavAgent::transitionTo(State next_state)
 {
     _state = next_state;
 }
+
+void UavAgent::tick()
+{
+    switch (_state)
+    {
+    case State::IDLE:
+    {
+        break;
+    }
+
+    case State::TAKING_OFF:
+    {
+        break;
+    }
+
+    case State::HOLDING:
+    {
+        break;
+    }
+
+    case State::NAVIGATING:
+    {
+        break;
+    }
+
+    case State::LANDING:
+    {
+        break;
+    }
+
+    case State::FINISHED:
+        break;
+    }
+}
