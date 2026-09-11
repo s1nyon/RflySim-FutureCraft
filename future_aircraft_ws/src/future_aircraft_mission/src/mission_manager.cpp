@@ -60,34 +60,10 @@ void MissionManager::tick()
 
     case MissionState::TAKEOFF:
     {
-        if (!_uav1.isOffboard()) {
-            break;
-        }
-        const ros::Time now = ros::Time::now();
-
-        // Phase 3: request and confirm arming.
         if (!_uav1.isArmed()) {
-
-            const bool never_requested = 
-                _last_arm_request_time.isZero();
-
-            const bool retry_due = 
-                !never_requested && 
-                (now - _last_arm_request_time).toSec()
-                    >= _service_retry_s;
-
-            if (never_requested || retry_due) {
-
-                _last_arm_request_time = now;
-
-                if (!_uav1.arm()) {
-                    ROS_WARN("Arming request failed");
-                }
-            }
             break;
         }
 
-        // Phase 4: wait until the vehicle climbs to takeoff altitude.
         if (_uav1.hasReachedTakeoffAltitude(
             _takeoff_altitude,
             _takeoff_tolerance_m)) {

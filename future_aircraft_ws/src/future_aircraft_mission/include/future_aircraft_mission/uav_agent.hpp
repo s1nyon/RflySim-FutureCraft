@@ -78,4 +78,5 @@ private:
 
     ros::Time _takeoff_start_time;
     ros::Time _last_offboard_request_time;
+    ros::Time _last_arm_request_time;
 };

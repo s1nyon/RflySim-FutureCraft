@@ -151,6 +151,7 @@ bool UavAgent::startTakeoff(double altitude_m, double yaw)
 
     _takeoff_start_time = ros::Time::now();
     _last_offboard_request_time = ros::Time(0);
+    _last_arm_request_time = ros::Time(0);
 
     return true;
 }
@@ -200,6 +201,26 @@ void UavAgent::tick()
             }
             break;
         }
+
+        if (!isArmed()) {
+
+            const bool never_requested = 
+                _last_arm_request_time.isZero();
+
+            const bool retry_due = 
+                !never_requested &&
+                (now - _last_arm_request_time).toSec() >= 1.0;
+
+            if (never_requested || retry_due) {
+
+                _last_arm_request_time = now;
+
+                if (!arm()) {
+                    ROS_WARN("%s arming request failed", _uav_name.c_str());
+                }
+            }
+        }
+
         break;
     }
 
