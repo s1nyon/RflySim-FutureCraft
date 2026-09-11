@@ -65,9 +65,6 @@ void MissionManager::tick()
         }
         const ros::Time now = ros::Time::now();
 
-        const ros::Duration elapsed = 
-            now - _state_enter_time;
-
         // Phase 3: request and confirm arming.
         if (!_uav1.isArmed()) {
 
