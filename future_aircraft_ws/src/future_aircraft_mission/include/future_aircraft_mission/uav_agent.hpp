@@ -75,4 +75,7 @@ private:
 
     double _takeoff_altitude;
     double _takeoff_yaw;
+
+    ros::Time _takeoff_start_time;
+    ros::Time _last_offboard_request_time;
 };

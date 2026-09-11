@@ -38,6 +38,9 @@ MissionManager::MissionManager(
 
 void MissionManager::tick()
 {
+    _uav1.tick();
+    _uav2.tick();
+
     switch (_mission_state)
     {
     case MissionState::WAIT_READY:
@@ -48,19 +51,15 @@ void MissionManager::tick()
             : _uav1.isReady();
 
         if (ready) {
-            transitionTo(MissionState::TAKEOFF);
+            if (_uav1.startTakeoff(_takeoff_altitude, _takeoff_yaw)) {
+                transitionTo(MissionState::TAKEOFF);
+            }
         }
         break;
     }
 
     case MissionState::TAKEOFF:
     {
-        // OFFBOARD requires a continuous setpoint stream.
-        _uav1.publishTakeoffSetpoint(
-            _takeoff_altitude,
-            _takeoff_yaw
-        );
-
         const ros::Time now = ros::Time::now();
 
         const ros::Duration elapsed = 
@@ -68,27 +67,6 @@ void MissionManager::tick()
 
         // Phase 1: warm up the OFFBOARD setpoint stream.
         if (elapsed.toSec() < _offboard_warmup_s) {
-            break;
-        }
-
-        // Phase 2: request and confirm OFFBOARD.
-        if (!_uav1.isOffboard()) {
-
-            const bool never_requested = 
-                _last_offboard_request_time.isZero();
-
-            const bool retry_due = 
-                !never_requested &&
-                (now - _last_offboard_request_time).toSec()
-                    >= _service_retry_s;
-            if (never_requested || retry_due) {
-
-                _last_offboard_request_time = now;
-
-                if (!_uav1.requestOffboard()) {
-                    ROS_WARN("OFFBOARD request failed");
-                }
-            }
             break;
         }
 

@@ -149,6 +149,9 @@ bool UavAgent::startTakeoff(double altitude_m, double yaw)
 
     transitionTo(State::TAKING_OFF);
 
+    _takeoff_start_time = ros::Time::now();
+    _last_offboard_request_time = ros::Time(0);
+
     return true;
 }
 
@@ -168,6 +171,35 @@ void UavAgent::tick()
 
     case State::TAKING_OFF:
     {
+        publishTakeoffSetpoint(_takeoff_altitude, _takeoff_yaw);
+
+        const ros::Time now = ros::Time::now();
+        const ros::Duration elapsed = now - _takeoff_start_time;
+
+        if (elapsed.toSec() < 2.0) {
+            break;
+        }
+
+        if (!isOffboard()) {
+
+            const bool never_requested = 
+                _last_offboard_request_time.isZero();
+
+            const bool retry_due = 
+                !never_requested &&
+                (now - _last_offboard_request_time).toSec()
+                    >= 1.0;
+            if (never_requested || retry_due) {
+
+                _last_offboard_request_time = now;
+
+                if (!requestOffboard()) {
+                    ROS_WARN("%s OFFBOARD request failed",
+                    _uav_name.c_str());
+                }
+            }
+            break;
+        }
         break;
     }
 
