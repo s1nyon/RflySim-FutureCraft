@@ -60,15 +60,13 @@ void MissionManager::tick()
 
     case MissionState::TAKEOFF:
     {
+        if (!_uav1.isOffboard()) {
+            break;
+        }
         const ros::Time now = ros::Time::now();
 
         const ros::Duration elapsed = 
             now - _state_enter_time;
-
-        // Phase 1: warm up the OFFBOARD setpoint stream.
-        if (elapsed.toSec() < _offboard_warmup_s) {
-            break;
-        }
 
         // Phase 3: request and confirm arming.
         if (!_uav1.isArmed()) {
