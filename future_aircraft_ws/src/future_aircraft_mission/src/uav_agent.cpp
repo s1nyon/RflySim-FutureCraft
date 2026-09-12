@@ -138,7 +138,7 @@ UavAgent::State UavAgent::state() const
     return _state;
 }
 
-bool UavAgent::startTakeoff(double altitude_m, double yaw) 
+bool UavAgent::startTakeoff(double altitude_m, double yaw, double tolerance_m) 
 {
     if (_state != State::IDLE) {
         return false;
@@ -146,6 +146,7 @@ bool UavAgent::startTakeoff(double altitude_m, double yaw)
 
     _takeoff_altitude = altitude_m;
     _takeoff_yaw = yaw;
+    _takeoff_tolerance_m = tolerance_m;
 
     transitionTo(State::TAKING_OFF);
 
@@ -219,6 +220,11 @@ void UavAgent::tick()
                     ROS_WARN("%s arming request failed", _uav_name.c_str());
                 }
             }
+            break;
+        }
+
+        if (hasFinishedTakeoff(_takeoff_tolerance_m)) {
+            transitionTo(State::HOLDING);
         }
 
         break;

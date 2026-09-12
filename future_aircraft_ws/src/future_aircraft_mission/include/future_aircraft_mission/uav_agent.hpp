@@ -57,7 +57,7 @@ public:
 
     State state() const;
 
-    bool startTakeoff(double altitude_m, double yaw);
+    bool startTakeoff(double altitude_m, double yaw, double tolerance_m);
 
     void tick();
 
@@ -77,6 +77,7 @@ private:
 
     double _takeoff_altitude;
     double _takeoff_yaw;
+    double _takeoff_tolerance_m;
 
     ros::Time _takeoff_start_time;
     ros::Time _last_offboard_request_time;

@@ -51,7 +51,7 @@ void MissionManager::tick()
             : _uav1.isReady();
 
         if (ready) {
-            if (_uav1.startTakeoff(_takeoff_altitude, _takeoff_yaw)) {
+            if (_uav1.startTakeoff(_takeoff_altitude, _takeoff_yaw, _takeoff_tolerance_m)) {
                 transitionTo(MissionState::TAKEOFF);
             }
         }
@@ -60,22 +60,15 @@ void MissionManager::tick()
 
     case MissionState::TAKEOFF:
     {
-        if (!_uav1.isArmed()) {
+        if (_uav1.state() != UavAgent::State::HOLDING) {
             break;
         }
 
-        if (_uav1.hasReachedTakeoffAltitude(
-            _takeoff_altitude,
-            _takeoff_tolerance_m)) {
-
-                if (_smoke_test) {
-                    transitionTo(MissionState::AUTO_LAND);
-                }
-                else {
-                    transitionTo(MissionState::SEND_EGO_GOAL);
-                }                
-            }
-
+        if (_smoke_test) {
+            transitionTo(MissionState::AUTO_LAND);
+        } else {
+            transitionTo(MissionState::SEND_EGO_GOAL);
+        }
         break;
     }
     
