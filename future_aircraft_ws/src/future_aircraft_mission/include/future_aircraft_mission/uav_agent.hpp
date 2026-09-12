@@ -61,6 +61,8 @@ public:
 
     void tick();
 
+    bool hasFinishedTakeoff(double tolerance_m) const;
+
 private:
     std::string _uav_name;
 

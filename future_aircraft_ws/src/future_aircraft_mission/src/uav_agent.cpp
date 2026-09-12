@@ -243,3 +243,9 @@ void UavAgent::tick()
         break;
     }
 }
+
+bool UavAgent::hasFinishedTakeoff(double tolerance_m) const 
+{
+    return isArmed() &&
+           hasReachedTakeoffAltitude(_takeoff_altitude, tolerance_m);
+}
