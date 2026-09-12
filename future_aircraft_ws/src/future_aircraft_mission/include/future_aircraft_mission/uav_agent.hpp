@@ -58,6 +58,7 @@ public:
     State state() const;
 
     bool startTakeoff(double altitude_m, double yaw, double tolerance_m);
+    bool startNavigation(const geometry_msgs::PoseStamped& goal);
 
     void tick();
 

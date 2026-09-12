@@ -157,6 +157,19 @@ bool UavAgent::startTakeoff(double altitude_m, double yaw, double tolerance_m)
     return true;
 }
 
+bool UavAgent::startNavigation(const geometry_msgs::PoseStamped& goal)
+{
+    if (_state != State::HOLDING) {
+        return false;
+    }
+
+    gotoGoal(goal);
+    transitionTo(State::NAVIGATING);
+
+    return true;
+}
+
+
 void UavAgent::transitionTo(State next_state)
 {
     _state = next_state;

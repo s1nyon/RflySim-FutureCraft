@@ -98,8 +98,10 @@ void MissionManager::tick()
             goal.pose.position.z = _goal_z;
             goal.pose.orientation.w = 1.0;
 
-            _uav1.gotoGoal(goal);
-            _ego_goal_sent = true;
+            if (_uav1.startNavigation(goal)) {
+                _ego_goal_sent = true;
+                ROS_INFO("EGO goal published");
+            }
 
             ROS_INFO("EGO goal published");
         }
