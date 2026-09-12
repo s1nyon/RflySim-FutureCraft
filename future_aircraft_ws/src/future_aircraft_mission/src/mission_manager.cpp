@@ -80,12 +80,6 @@ void MissionManager::tick()
                 break;
             }
 
-        // EGO has not taken over yet.
-        _uav1.publishTakeoffSetpoint(
-            _takeoff_altitude,
-            _takeoff_yaw
-        );
-
         if (!_ego_goal_sent) {
 
             geometry_msgs::PoseStamped goal;
@@ -102,8 +96,6 @@ void MissionManager::tick()
                 _ego_goal_sent = true;
                 ROS_INFO("EGO goal published");
             }
-
-            ROS_INFO("EGO goal published");
         }
 
         const ros::Duration elapsed =

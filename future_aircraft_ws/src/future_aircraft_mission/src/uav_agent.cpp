@@ -245,6 +245,8 @@ void UavAgent::tick()
 
     case State::HOLDING:
     {
+        publishTakeoffSetpoint(_takeoff_altitude, _takeoff_yaw);
+        
         break;
     }
 
