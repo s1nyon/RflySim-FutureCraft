@@ -61,19 +61,18 @@ public:
 
     void tick();
 
-    bool hasFinishedTakeoff(double tolerance_m) const;
 
 private:
-    std::string _uav_name;
 
+    void transitionTo(State next_state);
+    bool hasFinishedTakeoff() const;
+
+    std::string _uav_name;
     ros::NodeHandle _nh;
     ros::NodeHandle _pnh;
-
     VehicleInterface _vehicle;
     EgoInterface _ego;
     State _state;
-
-    void transitionTo(State next_state);
 
     double _takeoff_altitude;
     double _takeoff_yaw;

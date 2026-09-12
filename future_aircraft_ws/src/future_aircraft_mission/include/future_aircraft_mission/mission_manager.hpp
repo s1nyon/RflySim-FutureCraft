@@ -33,15 +33,12 @@ private:
     MissionState _mission_state;
 
     ros::Time _state_enter_time;
-    ros::Time _last_offboard_request_time;
-    ros::Time _last_arm_request_time;
     ros::Time _last_land_request_time;
     ros::Time _last_disarm_request_time;
     ros::Time _goal_reached_since;
 
     double _takeoff_altitude;
     double _takeoff_yaw;
-    double _offboard_warmup_s;
     double _service_retry_s;
     double _takeoff_tolerance_m;
     double _landing_altitude_threshold_m;

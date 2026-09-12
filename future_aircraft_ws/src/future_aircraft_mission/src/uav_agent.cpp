@@ -223,7 +223,7 @@ void UavAgent::tick()
             break;
         }
 
-        if (hasFinishedTakeoff(_takeoff_tolerance_m)) {
+        if (hasFinishedTakeoff()) {
             transitionTo(State::HOLDING);
         }
 
@@ -250,8 +250,11 @@ void UavAgent::tick()
     }
 }
 
-bool UavAgent::hasFinishedTakeoff(double tolerance_m) const 
+bool UavAgent::hasFinishedTakeoff() const
 {
     return isArmed() &&
-           hasReachedTakeoffAltitude(_takeoff_altitude, tolerance_m);
+           hasReachedTakeoffAltitude(
+               _takeoff_altitude,
+               _takeoff_tolerance_m
+           );
 }
