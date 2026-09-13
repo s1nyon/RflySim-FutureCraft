@@ -28,35 +28,12 @@ public:
         ERROR
     };
 
-    void gotoGoal(const geometry_msgs::PoseStamped& goal);
-    bool hasReachedGoal(double tolerance_m) const;
-    bool requestOffboard();
-    bool arm();
-    bool land();
-    bool disarm();
-
     bool isArmed() const;
     bool isOffboard() const;
     bool isAutoLand() const;
     bool isVehicleReady() const;
     bool isReady() const;
-
-    void publishTakeoffSetpoint(
-        double altitude_m,
-        double yaw
-    );
-
-    bool hasReachedTakeoffAltitude(
-        double altitude_m,
-        double tolerance_m
-    ) const;
-
     bool isNearGround(double threshold_m) const;
-
-    bool hasPlannerCommand() const;
-    bool isPlannerCommandFresh(double timeout_s) const;
-
-    void publishCurrentPositionHold(double yaw);
 
     State state() const;
 
@@ -79,6 +56,26 @@ public:
 
 private:
 
+    void gotoGoal(const geometry_msgs::PoseStamped& goal);
+    bool hasReachedGoal(double tolerance_m) const;
+    bool requestOffboard();
+    bool arm();
+    bool land();
+    bool disarm();
+
+    void publishTakeoffSetpoint(
+        double altitude_m,
+        double yaw
+    );
+
+    bool hasReachedTakeoffAltitude(
+        double altitude_m,
+        double tolerance_m
+    ) const;
+
+    bool hasPlannerCommand() const;
+    bool isPlannerCommandFresh(double timeout_s) const;
+    void publishCurrentPositionHold(double yaw);
     void transitionTo(State next_state);
     bool hasFinishedTakeoff() const;
 

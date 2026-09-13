@@ -31,8 +31,6 @@ private:
     UavAgent _uav2;
     MissionState _mission_state;
 
-    ros::Time _state_enter_time;
-
     double _takeoff_altitude;
     double _takeoff_yaw;
     double _service_retry_s;

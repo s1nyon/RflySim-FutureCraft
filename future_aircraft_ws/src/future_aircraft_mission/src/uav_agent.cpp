@@ -295,13 +295,21 @@ void UavAgent::tick()
 
     case State::HOLDING:
     {
-        if (isOffboard()) {
+        const bool planner_still_controlling =
+            hasPlannerCommand() &&
+            isPlannerCommandFresh(
+                _planner_command_timeout_s
+            );
+
+        if (isOffboard() &&
+            !planner_still_controlling) {
+
             _vehicle.publishPositionSetpoint(
                 _navigation_hold_position,
                 _takeoff_yaw
             );
         }
-        
+
         break;
     }
 
@@ -369,38 +377,21 @@ void UavAgent::tick()
     {
         const ros::Time now = ros::Time::now();
 
-        if (!isAutoLand()) {
+        const bool planner_still_controlling =
+            hasPlannerCommand() &&
+            isPlannerCommandFresh(
+                _planner_command_timeout_s
+            );
 
-            if (isOffboard()) {
-                _vehicle.publishPositionSetpoint(
-                    _landing_hold_position,
-                    _landing_yaw
-                );
-            }
+        if (isOffboard() &&
+            !planner_still_controlling) {
 
-            const bool never_requested =
-                _last_land_request_time.isZero();
-
-            const bool retry_due =
-                !never_requested &&
-                (now - _last_land_request_time).toSec()
-                    >= _service_retry_s;
-
-            if (never_requested || retry_due) {
-
-                _last_land_request_time = now;
-
-                if (!land()) {
-                    ROS_WARN(
-                        "%s AUTO.LAND request failed",
-                        _uav_name.c_str()
-                    );
-                }
-            }
-
-            break;
+            _vehicle.publishPositionSetpoint(
+                _landing_hold_position,
+                _landing_yaw
+            );
         }
-
+        
         if (isNearGround(
                 _landing_altitude_threshold_m)) {
 
