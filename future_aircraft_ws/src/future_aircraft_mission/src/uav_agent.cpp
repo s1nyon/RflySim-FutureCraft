@@ -173,7 +173,7 @@ bool UavAgent::startNavigation(
     _planner_command_timeout_s = planner_command_timeout_s;
 
     gotoGoal(goal);
-    transitionTo(State::NAVIGATING);
+    transitionTo(State::WAITING_FOR_PLANNER);
 
     return true;
 }
