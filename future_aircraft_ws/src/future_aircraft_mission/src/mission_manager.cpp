@@ -39,13 +39,40 @@ void MissionManager::tick()
     {
         const bool ready = 
             _smoke_test
-            ? _uav1.isVehicleReady()
+            ? (_uav1.isVehicleReady() &&
+               _uav2.isVehicleReady() &&
+               _uav1.state() == UavAgent::State::IDLE &&
+               _uav2.state() == UavAgent::State::IDLE)
             : _uav1.isReady();
 
         if (ready) {
+        
+            if (_smoke_test) {
+
+                const bool uav1_started =
+                    _uav1.startTakeoff(
+                        _takeoff_altitude,
+                        _takeoff_yaw,
+                        _takeoff_tolerance_m
+                    );
+
+                const bool uav2_started =
+                    _uav2.startTakeoff(
+                        _takeoff_altitude,
+                        _takeoff_yaw,
+                        _takeoff_tolerance_m
+                    );
+
+                if (uav1_started && uav2_started) {
+                    transitionTo(MissionState::TAKEOFF);
+                }
+                break;
+            }
+
             if (_uav1.startTakeoff(_takeoff_altitude, _takeoff_yaw, _takeoff_tolerance_m)) {
                 transitionTo(MissionState::TAKEOFF);
             }
+
         }
         break;
     }
@@ -57,12 +84,20 @@ void MissionManager::tick()
         }
 
         if (_smoke_test) {
+
+        const bool both_holding =
+            _uav1.state() == UavAgent::State::HOLDING &&
+            _uav2.state() == UavAgent::State::HOLDING;
+
+        if (both_holding) {
             transitionTo(MissionState::AUTO_LAND);
-        } else {
-            transitionTo(MissionState::SEND_EGO_GOAL);
         }
-        break;
+    } else {
+        transitionTo(MissionState::SEND_EGO_GOAL);
     }
+    break;
+}
+    
     
     case MissionState::SEND_EGO_GOAL:
     {
@@ -108,23 +143,29 @@ void MissionManager::tick()
 
     case MissionState::AUTO_LAND:
     {
-        const auto state = _uav1.state();
+        const auto state1 = _uav1.state();
+        const auto state2 = _uav2.state();
 
-        if (state == UavAgent::State::HOLDING ||
-            state == UavAgent::State::ERROR) {
-
+        if (state1 == UavAgent::State::HOLDING) {
             _uav1.startLanding(
                 _landing_altitude_threshold_m,
                 _service_retry_s,
                 _takeoff_yaw
             );
-
-            break;
         }
 
-        if (state == UavAgent::State::FINISHED) {
-            transitionTo(MissionState::FINISHED);
+        if (state2 == UavAgent::State::HOLDING) {
+            _uav2.startLanding(
+                _landing_altitude_threshold_m,
+                _service_retry_s,
+                _takeoff_yaw
+            );
         }
+
+        if (_uav1.state() == UavAgent::State::FINISHED &&
+            _uav2.state() == UavAgent::State::FINISHED) {
+                transitionTo(MissionState::FINISHED);
+            }
 
         break;
     }
