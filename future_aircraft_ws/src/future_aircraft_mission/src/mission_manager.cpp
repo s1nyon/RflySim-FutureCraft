@@ -79,24 +79,25 @@ void MissionManager::tick()
 
     case MissionState::TAKEOFF:
     {
-        if (_uav1.state() != UavAgent::State::HOLDING) {
+        if (_smoke_test) {
+
+            const bool both_holding =
+                _uav1.state() == UavAgent::State::HOLDING &&
+                _uav2.state() == UavAgent::State::HOLDING;
+
+            if (both_holding) {
+                transitionTo(MissionState::AUTO_LAND);
+            }
+
             break;
         }
 
-        if (_smoke_test) {
-
-        const bool both_holding =
-            _uav1.state() == UavAgent::State::HOLDING &&
-            _uav2.state() == UavAgent::State::HOLDING;
-
-        if (both_holding) {
-            transitionTo(MissionState::AUTO_LAND);
+        if (_uav1.state() == UavAgent::State::HOLDING) {
+            transitionTo(MissionState::SEND_EGO_GOAL);
         }
-    } else {
-        transitionTo(MissionState::SEND_EGO_GOAL);
+
+        break;
     }
-    break;
-}
     
     
     case MissionState::SEND_EGO_GOAL:
@@ -143,29 +144,58 @@ void MissionManager::tick()
 
     case MissionState::AUTO_LAND:
     {
-        const auto state1 = _uav1.state();
-        const auto state2 = _uav2.state();
+        if (_smoke_test) {
 
-        if (state1 == UavAgent::State::HOLDING) {
+            const auto state1 = _uav1.state();
+            const auto state2 = _uav2.state();
+
+            if (state1 == UavAgent::State::HOLDING ||
+                state1 == UavAgent::State::ERROR) {
+
+                _uav1.startLanding(
+                    _landing_altitude_threshold_m,
+                    _service_retry_s,
+                    _takeoff_yaw
+                );
+            }
+
+            if (state2 == UavAgent::State::HOLDING ||
+                state2 == UavAgent::State::ERROR) {
+
+                _uav2.startLanding(
+                    _landing_altitude_threshold_m,
+                    _service_retry_s,
+                    _takeoff_yaw
+                );
+            }
+
+            if (_uav1.state() == UavAgent::State::FINISHED &&
+                _uav2.state() == UavAgent::State::FINISHED) {
+
+                transitionTo(MissionState::FINISHED);
+            }
+
+            break;
+        }
+
+        // 原来的单机 EGO 路径
+        const auto state = _uav1.state();
+
+        if (state == UavAgent::State::HOLDING ||
+            state == UavAgent::State::ERROR) {
+
             _uav1.startLanding(
                 _landing_altitude_threshold_m,
                 _service_retry_s,
                 _takeoff_yaw
             );
-        } // TODO:test ..
 
-        if (state2 == UavAgent::State::HOLDING) {
-            _uav2.startLanding(
-                _landing_altitude_threshold_m,
-                _service_retry_s,
-                _takeoff_yaw
-            );
+            break;
         }
 
-        if (_uav1.state() == UavAgent::State::FINISHED &&
-            _uav2.state() == UavAgent::State::FINISHED) {
-                transitionTo(MissionState::FINISHED);
-            }
+        if (state == UavAgent::State::FINISHED) {
+            transitionTo(MissionState::FINISHED);
+        }
 
         break;
     }
