@@ -74,8 +74,7 @@ void MissionManager::tick()
         // EGO has taken over:
         // stop the direct MAVROS source before leaving this state.
         if (_ego_goal_sent &&
-            _uav1.hasPlannerCommand() &&
-            _uav1.isPlannerCommandFresh(_planner_command_timeout_s)) {
+            _uav1.state() == UavAgent::State::NAVIGATING) {
                 transitionTo(MissionState::WAIT_REACHED);
                 break;
             }
@@ -92,7 +91,7 @@ void MissionManager::tick()
             goal.pose.position.z = _goal_z;
             goal.pose.orientation.w = 1.0;
 
-            if (_uav1.startNavigation(goal)) {
+            if (_uav1.startNavigation(goal, _planner_command_timeout_s)) {
                 _ego_goal_sent = true;
                 ROS_INFO("EGO goal published");
             }

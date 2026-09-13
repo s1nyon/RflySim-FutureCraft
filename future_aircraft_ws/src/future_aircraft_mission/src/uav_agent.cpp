@@ -157,11 +157,20 @@ bool UavAgent::startTakeoff(double altitude_m, double yaw, double tolerance_m)
     return true;
 }
 
-bool UavAgent::startNavigation(const geometry_msgs::PoseStamped& goal)
+bool UavAgent::startNavigation(
+    const geometry_msgs::PoseStamped& goal,
+    double planner_command_timeout_s)    
 {
     if (_state != State::HOLDING) {
         return false;
     }
+
+    if (!_vehicle.hasOdom()) {
+        return false;
+    }
+
+    _navigation_hold_position = _vehicle.position();
+    _planner_command_timeout_s = planner_command_timeout_s;
 
     gotoGoal(goal);
     transitionTo(State::NAVIGATING);
@@ -245,8 +254,27 @@ void UavAgent::tick()
 
     case State::HOLDING:
     {
-        publishTakeoffSetpoint(_takeoff_altitude, _takeoff_yaw);
+        if (isOffboard()) {
+            publishTakeoffSetpoint(_takeoff_altitude, _takeoff_yaw);
+        }
         
+        break;
+    }
+
+    case State::WAITING_FOR_PLANNER:
+    {
+        if (hasPlannerCommand() &&
+            isPlannerCommandFresh(_planner_command_timeout_s)) {
+                transitionTo(State::NAVIGATING);
+                break;
+        }
+
+        if (isOffboard()) {
+            _vehicle.publishPositionSetpoint(
+                _navigation_hold_position,
+                _takeoff_yaw
+            );
+        }
         break;
     }
 

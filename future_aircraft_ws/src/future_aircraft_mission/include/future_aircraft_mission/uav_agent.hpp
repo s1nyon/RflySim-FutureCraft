@@ -20,6 +20,7 @@ public:
         IDLE,
         TAKING_OFF,
         HOLDING,
+        WAITING_FOR_PLANNER,
         NAVIGATING,
         LANDING,
         FINISHED
@@ -58,7 +59,10 @@ public:
     State state() const;
 
     bool startTakeoff(double altitude_m, double yaw, double tolerance_m);
-    bool startNavigation(const geometry_msgs::PoseStamped& goal);
+    bool startNavigation(
+        const geometry_msgs::PoseStamped& goal,
+        double planner_command_timeout_s
+    );
 
     void tick();
 
@@ -74,10 +78,12 @@ private:
     VehicleInterface _vehicle;
     EgoInterface _ego;
     State _state;
+    geometry_msgs::Point _navigation_hold_position;
 
     double _takeoff_altitude;
     double _takeoff_yaw;
     double _takeoff_tolerance_m;
+    double _planner_command_timeout_s;
 
     ros::Time _takeoff_start_time;
     ros::Time _last_offboard_request_time;
