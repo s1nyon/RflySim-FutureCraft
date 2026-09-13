@@ -152,7 +152,7 @@ void MissionManager::tick()
                 _service_retry_s,
                 _takeoff_yaw
             );
-        } // TODO:test
+        } // TODO:test ..
 
         if (state2 == UavAgent::State::HOLDING) {
             _uav2.startLanding(
