@@ -23,6 +23,7 @@ public:
         WAITING_FOR_PLANNER,
         NAVIGATING,
         LANDING,
+        DISARMING,
         FINISHED,
         ERROR
     };
@@ -67,6 +68,11 @@ public:
         double goal_tolerance_m,
         double goal_settle_s
     );
+    bool startLanding(
+        double near_ground_threshold_m,
+        double service_retry_s,
+        double yaw
+    );
 
     void tick();
 
@@ -83,6 +89,7 @@ private:
     EgoInterface _ego;
     State _state;
     geometry_msgs::Point _navigation_hold_position;
+    geometry_msgs::Point _landing_hold_position;
 
     double _takeoff_altitude;
     double _takeoff_yaw;
@@ -91,10 +98,15 @@ private:
     double _planner_handoff_timeout_s;
     double _goal_tolerance_m;
     double _goal_settle_s;
+    double _landing_altitude_threshold_m;
+    double _service_retry_s;
+    double _landing_yaw;
 
     ros::Time _takeoff_start_time;
     ros::Time _last_offboard_request_time;
     ros::Time _last_arm_request_time;
     ros::Time _navigation_start_time;
     ros::Time _goal_reached_since;
+    ros::Time _last_land_request_time;
+    ros::Time _last_disarm_request_time;
 };

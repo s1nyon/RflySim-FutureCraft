@@ -187,6 +187,36 @@ bool UavAgent::startNavigation(
     return true;
 }
 
+bool UavAgent::startLanding(
+    double near_ground_threshold_m,
+    double service_retry_s,
+    double yaw)
+{
+    if (_state != State::HOLDING &&
+        _state != State::ERROR) {
+        return false;
+    }
+
+    if (!_vehicle.hasOdom()) {
+        return false;
+    }
+
+    _landing_hold_position = _vehicle.position();
+
+    _landing_altitude_threshold_m =
+        near_ground_threshold_m;
+
+    _service_retry_s = service_retry_s;
+    _landing_yaw = yaw;
+
+    _last_land_request_time = ros::Time(0);
+    _last_disarm_request_time = ros::Time(0);
+
+    transitionTo(State::LANDING);
+
+    return true;
+}
+
 
 void UavAgent::transitionTo(State next_state)
 {
@@ -337,6 +367,78 @@ void UavAgent::tick()
 
     case State::LANDING:
     {
+        const ros::Time now = ros::Time::now();
+
+        if (!isAutoLand()) {
+
+            if (isOffboard()) {
+                _vehicle.publishPositionSetpoint(
+                    _landing_hold_position,
+                    _landing_yaw
+                );
+            }
+
+            const bool never_requested =
+                _last_land_request_time.isZero();
+
+            const bool retry_due =
+                !never_requested &&
+                (now - _last_land_request_time).toSec()
+                    >= _service_retry_s;
+
+            if (never_requested || retry_due) {
+
+                _last_land_request_time = now;
+
+                if (!land()) {
+                    ROS_WARN(
+                        "%s AUTO.LAND request failed",
+                        _uav_name.c_str()
+                    );
+                }
+            }
+
+            break;
+        }
+
+        if (isNearGround(
+                _landing_altitude_threshold_m)) {
+
+            transitionTo(State::DISARMING);
+        }
+
+        break;
+    }
+
+    case State::DISARMING:
+    {
+        if (!isArmed()) {
+            transitionTo(State::FINISHED);
+            break;
+        }
+
+        const ros::Time now = ros::Time::now();
+
+        const bool never_requested =
+            _last_disarm_request_time.isZero();
+
+        const bool retry_due =
+            !never_requested &&
+            (now - _last_disarm_request_time).toSec()
+                >= _service_retry_s;
+
+        if (never_requested || retry_due) {
+
+            _last_disarm_request_time = now;
+
+            if (!disarm()) {
+                ROS_WARN(
+                    "%s disarm request failed",
+                    _uav_name.c_str()
+                );
+            }
+        }
+
         break;
     }
 
@@ -346,7 +448,6 @@ void UavAgent::tick()
     }
 
     case State::ERROR:
-    {
         break;
     }
 }

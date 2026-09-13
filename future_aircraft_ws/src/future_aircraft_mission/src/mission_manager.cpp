@@ -7,8 +7,6 @@ MissionManager::MissionManager(
         _uav2(nh, pnh, "uav2"),
         _mission_state(MissionState::WAIT_READY),
         _state_enter_time(ros::Time::now()),
-        _last_land_request_time(0),
-        _last_disarm_request_time(0),
         _takeoff_altitude(1.0),
         _takeoff_yaw(0.0),
         _service_retry_s(1.0),
@@ -111,73 +109,27 @@ void MissionManager::tick()
 
     case MissionState::AUTO_LAND:
     {
-        const ros::Time now = ros::Time::now();
+        const auto state = _uav1.state();
 
-        if (!_uav1.isAutoLand()) {
+        if (state == UavAgent::State::HOLDING ||
+            state == UavAgent::State::ERROR) {
 
-            // Keep OFFBOARD alive until AUTO.LAND is confirmed.
-            if (_smoke_test || !_uav1.isPlannerCommandFresh(_planner_command_timeout_s)) {
-                _uav1.publishCurrentPositionHold(
-                    _takeoff_yaw
-                );
-            }
-
-            const bool never_requested = 
-                _last_land_request_time.isZero();
-            
-            const bool retry_due = 
-                !never_requested && 
-                (now - _last_land_request_time).toSec()
-                    >= _service_retry_s;
-
-            if (never_requested || retry_due) {
-
-                _last_land_request_time = now;
-
-                if (!_uav1.land()) {
-                    ROS_WARN("AUTO.LAND request failed");
-                }
-            }
+            _uav1.startLanding(
+                _landing_altitude_threshold_m,
+                _service_retry_s,
+                _takeoff_yaw
+            );
 
             break;
-
         }
 
-        if (_uav1.isNearGround(_landing_altitude_threshold_m)) {
-            transitionTo(MissionState::DISARM);
-        }
-
-        break;
-    }  
-
-    case MissionState::DISARM:
-    {
-        if (!_uav1.isArmed()) {
+        if (state == UavAgent::State::FINISHED) {
             transitionTo(MissionState::FINISHED);
-            break;
-        }
-        
-        const ros::Time now = ros::Time::now();
-
-        const bool never_requested = 
-            _last_disarm_request_time.isZero();
-
-        const bool retry_due = 
-            !never_requested &&
-            (now - _last_disarm_request_time).toSec()
-                >= _service_retry_s;
-        
-        if (never_requested || retry_due) {
-
-            _last_disarm_request_time = now;
-
-            if (!_uav1.disarm()) {
-                ROS_WARN("Disarm request failed");
-            }
         }
 
         break;
     }
+
 
     case MissionState::FINISHED:
         break;

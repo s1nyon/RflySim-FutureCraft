@@ -15,7 +15,6 @@ public:
         SEND_EGO_GOAL,
         WAIT_REACHED,
         AUTO_LAND,
-        DISARM,
         FINISHED
     };
 
@@ -33,8 +32,6 @@ private:
     MissionState _mission_state;
 
     ros::Time _state_enter_time;
-    ros::Time _last_land_request_time;
-    ros::Time _last_disarm_request_time;
 
     double _takeoff_altitude;
     double _takeoff_yaw;
