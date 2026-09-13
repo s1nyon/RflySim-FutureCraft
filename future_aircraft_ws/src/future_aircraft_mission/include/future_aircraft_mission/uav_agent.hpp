@@ -65,7 +65,7 @@ public:
         double planner_command_timeout_s,
         double handoff_timeout_s,
         double goal_tolerance_m,
-        double goal_settle_S
+        double goal_settle_s
     );
 
     void tick();

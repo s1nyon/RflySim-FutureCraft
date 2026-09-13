@@ -314,6 +314,11 @@ void UavAgent::tick()
             break;
         }
 
+        if (!hasReachedGoal(_goal_tolerance_m)) {
+            _goal_reached_since = ros::Time(0);
+            break;
+        }
+
         if (_goal_reached_since.isZero()) {
             _goal_reached_since = now;
             break;
@@ -336,6 +341,12 @@ void UavAgent::tick()
     }
 
     case State::FINISHED:
+    {
+        break;
+    }
+
+    case State::ERROR:
+    {
         break;
     }
 }

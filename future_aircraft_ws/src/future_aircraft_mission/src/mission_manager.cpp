@@ -69,13 +69,6 @@ void MissionManager::tick()
     
     case MissionState::SEND_EGO_GOAL:
     {
-        // TODO: test
-        // EGO has taken over:
-        // stop the direct MAVROS source before leaving this state.
-        if (_uav1.state() == UavAgent::State::NAVIGATING) {
-                transitionTo(MissionState::WAIT_REACHED);
-                break;
-            }
 
         geometry_msgs::PoseStamped goal;
 
@@ -95,18 +88,6 @@ void MissionManager::tick()
                 _goal_settle_s)) {
             
             transitionTo(MissionState::WAIT_REACHED);
-        }
-        
-
-        const ros::Duration elapsed =
-        ros::Time::now() - _state_enter_time;
-
-        if (elapsed.toSec() >= _ego_handoff_timeout_s) {
-
-            ROS_WARN("EGO handoff timeout");
-
-            transitionTo(MissionState::AUTO_LAND);
-            break;
         }
 
         break;
