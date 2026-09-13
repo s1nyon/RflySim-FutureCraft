@@ -69,6 +69,7 @@ void MissionManager::tick()
     
     case MissionState::SEND_EGO_GOAL:
     {
+        // TODO: test
         // EGO has taken over:
         // stop the direct MAVROS source before leaving this state.
         if (_uav1.state() == UavAgent::State::NAVIGATING) {
