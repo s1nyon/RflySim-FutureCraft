@@ -6,7 +6,6 @@ MissionManager::MissionManager(
       : _uav1(nh, pnh, "uav1"),
         _uav2(nh, pnh, "uav2"),
         _mission_state(MissionState::WAIT_READY),
-        _state_enter_time(ros::Time::now()),
         _takeoff_altitude(1.0),
         _takeoff_yaw(0.0),
         _service_retry_s(1.0),
@@ -142,7 +141,6 @@ void MissionManager::transitionTo(MissionState next_state)
     ROS_INFO("Mission state changed");
 
     _mission_state = next_state;
-    _state_enter_time = ros::Time::now();
 }
 
 MissionManager::MissionState MissionManager::state() const
