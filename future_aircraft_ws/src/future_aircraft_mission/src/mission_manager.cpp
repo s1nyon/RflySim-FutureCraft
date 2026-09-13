@@ -9,14 +9,12 @@ MissionManager::MissionManager(
         _state_enter_time(ros::Time::now()),
         _last_land_request_time(0),
         _last_disarm_request_time(0),
-        _goal_reached_since(0),
         _takeoff_altitude(1.0),
         _takeoff_yaw(0.0),
         _service_retry_s(1.0),
         _takeoff_tolerance_m(0.15),
         _landing_altitude_threshold_m(0.20),
         _planner_command_timeout_s(0.5),
-        _ego_goal_sent(false),
         _smoke_test(false),
         _goal_tolerance_m(0.30),
         _goal_settle_s(1.0),
@@ -73,34 +71,36 @@ void MissionManager::tick()
     {
         // EGO has taken over:
         // stop the direct MAVROS source before leaving this state.
-        if (_ego_goal_sent &&
-            _uav1.state() == UavAgent::State::NAVIGATING) {
+        if (_uav1.state() == UavAgent::State::NAVIGATING) {
                 transitionTo(MissionState::WAIT_REACHED);
                 break;
             }
 
-        if (!_ego_goal_sent) {
+        geometry_msgs::PoseStamped goal;
 
-            geometry_msgs::PoseStamped goal;
+        goal.header.stamp = ros::Time::now();
+        goal.header.frame_id = "map";
 
-            goal.header.stamp = ros::Time::now();
-            goal.header.frame_id = "map";
+        goal.pose.position.x = _goal_x;
+        goal.pose.position.y = _goal_y;
+        goal.pose.position.z = _goal_z;
+        goal.pose.orientation.w = 1.0;
 
-            goal.pose.position.x = _goal_x;
-            goal.pose.position.y = _goal_y;
-            goal.pose.position.z = _goal_z;
-            goal.pose.orientation.w = 1.0;
-
-            if (_uav1.startNavigation(goal, _planner_command_timeout_s)) {
-                _ego_goal_sent = true;
-                ROS_INFO("EGO goal published");
-            }
+        if (_uav1.startNavigation(
+                goal,
+                _planner_command_timeout_s,
+                _ego_handoff_timeout_s,
+                _goal_tolerance_m,
+                _goal_settle_s)) {
+            
+            transitionTo(MissionState::WAIT_REACHED);
         }
+        
 
         const ros::Duration elapsed =
         ros::Time::now() - _state_enter_time;
 
-        if (_ego_goal_sent && elapsed.toSec() >= _ego_handoff_timeout_s) {
+        if (elapsed.toSec() >= _ego_handoff_timeout_s) {
 
             ROS_WARN("EGO handoff timeout");
 
@@ -113,36 +113,15 @@ void MissionManager::tick()
 
     case MissionState::WAIT_REACHED:
     {   
-        const ros::Time now = ros::Time::now();
-
-        // Planner should still be actively controlling the UAV.
-        if (!_uav1.isPlannerCommandFresh(_planner_command_timeout_s)) {
-
-            ROS_WARN("Planner command lost during navigation");
-
+        if (_uav1.state() == UavAgent::State::HOLDING) {
             transitionTo(MissionState::AUTO_LAND);
             break;
         }
 
-        // Outside goal tolerance: settle timer must restart.
-        if (!_uav1.hasReachedGoal(_goal_tolerance_m)) {
-            _goal_reached_since = ros::Time(0);
-            break;
-        }
-
-        // First tick inside goal tolerance.
-        if (_goal_reached_since.isZero()) {
-
-            _goal_reached_since = now;
-            break;
-        }
-
-        // Remain inside the tolerance continuously.
-        const ros::Duration settled = 
-            now - _goal_reached_since;
-
-        if (settled.toSec() >= _goal_settle_s) {
+        if (_uav1.state() == UavAgent::State::ERROR) {
+            ROS_WARN("UAV1 navigation failed");
             transitionTo(MissionState::AUTO_LAND);
+            break;
         }
 
         break;

@@ -159,7 +159,10 @@ bool UavAgent::startTakeoff(double altitude_m, double yaw, double tolerance_m)
 
 bool UavAgent::startNavigation(
     const geometry_msgs::PoseStamped& goal,
-    double planner_command_timeout_s)    
+    double planner_command_timeout_s,
+    double handoff_timeout_s,
+    double goal_tolerance_m,
+    double goal_settle_s)    
 {
     if (_state != State::HOLDING) {
         return false;
@@ -171,6 +174,12 @@ bool UavAgent::startNavigation(
 
     _navigation_hold_position = _vehicle.position();
     _planner_command_timeout_s = planner_command_timeout_s;
+    _planner_handoff_timeout_s = handoff_timeout_s;
+    _goal_tolerance_m = goal_tolerance_m;
+    _goal_settle_s = goal_settle_s;
+
+    _navigation_start_time = ros::Time::now();
+    _goal_reached_since = ros::Time(0);
 
     gotoGoal(goal);
     transitionTo(State::WAITING_FOR_PLANNER);
@@ -246,6 +255,8 @@ void UavAgent::tick()
         }
 
         if (hasFinishedTakeoff()) {
+            
+            _navigation_hold_position = _vehicle.position();
             transitionTo(State::HOLDING);
         }
 
@@ -255,7 +266,10 @@ void UavAgent::tick()
     case State::HOLDING:
     {
         if (isOffboard()) {
-            publishTakeoffSetpoint(_takeoff_altitude, _takeoff_yaw);
+            _vehicle.publishPositionSetpoint(
+                _navigation_hold_position,
+                _takeoff_yaw
+            );
         }
         
         break;
@@ -269,6 +283,16 @@ void UavAgent::tick()
                 break;
         }
 
+        const ros::Duration elapsed = 
+            ros::Time::now() - _navigation_start_time;
+        
+        if (elapsed.toSec() >= _planner_handoff_timeout_s) {
+
+            ROS_WARN("%s EGO handoff timeout", _uav_name.c_str());
+            transitionTo(State::ERROR);
+            break;
+        }
+
         if (isOffboard()) {
             _vehicle.publishPositionSetpoint(
                 _navigation_hold_position,
@@ -280,6 +304,29 @@ void UavAgent::tick()
 
     case State::NAVIGATING:
     {
+        const ros::Time now = ros::Time::now();
+
+        if (!isPlannerCommandFresh(_planner_command_timeout_s)) {
+            ROS_WARN("%s planner command lost", _uav_name.c_str());
+
+            transitionTo(State::ERROR);
+
+            break;
+        }
+
+        if (_goal_reached_since.isZero()) {
+            _goal_reached_since = now;
+            break;
+        }
+
+        const ros::Duration settled = 
+            now - _goal_reached_since;
+
+        if (settled.toSec() >= _goal_settle_s) {
+            _navigation_hold_position = _vehicle.position();
+
+            transitionTo(State::HOLDING);
+        }
         break;
     }
 

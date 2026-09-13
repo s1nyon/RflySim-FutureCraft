@@ -23,7 +23,8 @@ public:
         WAITING_FOR_PLANNER,
         NAVIGATING,
         LANDING,
-        FINISHED
+        FINISHED,
+        ERROR
     };
 
     void gotoGoal(const geometry_msgs::PoseStamped& goal);
@@ -61,7 +62,10 @@ public:
     bool startTakeoff(double altitude_m, double yaw, double tolerance_m);
     bool startNavigation(
         const geometry_msgs::PoseStamped& goal,
-        double planner_command_timeout_s
+        double planner_command_timeout_s,
+        double handoff_timeout_s,
+        double goal_tolerance_m,
+        double goal_settle_S
     );
 
     void tick();
@@ -84,8 +88,13 @@ private:
     double _takeoff_yaw;
     double _takeoff_tolerance_m;
     double _planner_command_timeout_s;
+    double _planner_handoff_timeout_s;
+    double _goal_tolerance_m;
+    double _goal_settle_s;
 
     ros::Time _takeoff_start_time;
     ros::Time _last_offboard_request_time;
     ros::Time _last_arm_request_time;
+    ros::Time _navigation_start_time;
+    ros::Time _goal_reached_since;
 };
