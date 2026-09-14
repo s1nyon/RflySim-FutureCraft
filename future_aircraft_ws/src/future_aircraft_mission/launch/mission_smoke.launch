@@ -17,6 +17,10 @@
         <param
             name="uav1/allow_arming_service"
             value="$(arg allow_arming_service)" />
+        
+        <param
+            name="uav2/allow_arming_service"
+            value="$(arg allow_arming_service)" />
 
     </node>
 </launch>
