@@ -37,9 +37,12 @@ private:
     double _takeoff_tolerance_m;
     double _landing_altitude_threshold_m;
 
-    double _goal_x;
-    double _goal_y;
-    double _goal_z;
+    double _uav1_goal_x;
+    double _uav1_goal_y;
+    double _uav1_goal_z;
+    double _uav2_goal_x;
+    double _uav2_goal_y;
+    double _uav2_goal_z;
 
     double _planner_command_timeout_s;
 

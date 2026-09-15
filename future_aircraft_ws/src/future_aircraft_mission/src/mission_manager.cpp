@@ -23,9 +23,13 @@ MissionManager::MissionManager(
         false
     );
 
-    pnh.param<double>("goal_x", _goal_x, 1.0);
-    pnh.param<double>("goal_y", _goal_y, 0.0);
-    pnh.param<double>("goal_z", _goal_z, 1.0);
+    pnh.param<double>("_uav1_goal_x", _uav1_goal_x, 1.0);
+    pnh.param<double>("_uav1_goal_y", _uav1_goal_y, 0.0);
+    pnh.param<double>("_uav1_goal_z", _uav1_goal_z, 1.0);
+
+    pnh.param<double>("_uav2_goal_x", _uav2_goal_x, 1.0);
+    pnh.param<double>("_uav2_goal_y", _uav2_goal_y, 0.0);
+    pnh.param<double>("_uav2_goal_z", _uav2_goal_z, 1.0);
 }
 
 void MissionManager::tick()
@@ -43,7 +47,8 @@ void MissionManager::tick()
                _uav2.isVehicleReady() &&
                _uav1.state() == UavAgent::State::IDLE &&
                _uav2.state() == UavAgent::State::IDLE)
-            : _uav1.isReady();
+            : _uav1.isReady() &&
+              _uav2.isReady();
 
         if (ready) {
         
@@ -92,7 +97,8 @@ void MissionManager::tick()
             break;
         }
 
-        if (_uav1.state() == UavAgent::State::HOLDING) {
+        if (_uav1.state() == UavAgent::State::HOLDING && 
+            _uav2.state() == UavAgent::State::HOLDING) {
             transitionTo(MissionState::SEND_EGO_GOAL);
         }
 
@@ -103,22 +109,36 @@ void MissionManager::tick()
     case MissionState::SEND_EGO_GOAL:
     {
 
-        geometry_msgs::PoseStamped goal;
+        geometry_msgs::PoseStamped goal1;
+        geometry_msgs::PoseStamped goal2;
 
-        goal.header.stamp = ros::Time::now();
-        goal.header.frame_id = "map";
+        goal1.header.stamp = ros::Time::now();
+        goal1.header.frame_id = "map";
+        goal2.header.stamp = ros::Time::now();
+        goal2.header.frame_id = "map";
 
-        goal.pose.position.x = _goal_x;
-        goal.pose.position.y = _goal_y;
-        goal.pose.position.z = _goal_z;
-        goal.pose.orientation.w = 1.0;
+        goal1.pose.position.x = _uav1_goal_x;
+        goal1.pose.position.y = _uav1_goal_y;
+        goal1.pose.position.z = _uav1_goal_z;
+        goal1.pose.orientation.w = 1.0;
+
+        goal2.pose.position.x = _uav2_goal_x;
+        goal2.pose.position.y = _uav2_goal_y;
+        goal2.pose.position.z = _uav2_goal_z;
 
         if (_uav1.startNavigation(
-                goal,
+                goal1,
                 _planner_command_timeout_s,
                 _ego_handoff_timeout_s,
                 _goal_tolerance_m,
-                _goal_settle_s)) {
+                _goal_settle_s) && 
+            _uav2.startNavigation(
+                goal2,
+                _planner_command_timeout_s,
+                _ego_handoff_timeout_s,
+                _goal_tolerance_m,
+                _goal_settle_s
+            )) {
             
             transitionTo(MissionState::WAIT_REACHED);
         }
@@ -128,15 +148,16 @@ void MissionManager::tick()
 
     case MissionState::WAIT_REACHED:
     {   
-        if (_uav1.state() == UavAgent::State::HOLDING) {
+        const bool uav1_done =
+            _uav1.state() == UavAgent::State::HOLDING ||
+            _uav1.state() == UavAgent::State::ERROR;
+        
+        const bool uav2_done = 
+            _uav2.state() == UavAgent::State::HOLDING ||
+            _uav2.state() == UavAgent::State::ERROR;
+            
+        if (uav1_done && uav2_done) {
             transitionTo(MissionState::AUTO_LAND);
-            break;
-        }
-
-        if (_uav1.state() == UavAgent::State::ERROR) {
-            ROS_WARN("UAV1 navigation failed");
-            transitionTo(MissionState::AUTO_LAND);
-            break;
         }
 
         break;

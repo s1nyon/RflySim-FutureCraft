@@ -1,0 +1,168 @@
+<launch>
+
+    <!-- ========================================================= -->
+    <!-- Dual-UAV EGO mission                                     -->
+    <!--                                                         -->
+    <!-- EGO-Swarm planners are started by the existing simulation -->
+    <!-- / Stage7 infrastructure.                                 -->
+    <!--                                                         -->
+    <!-- This launch starts:                                      -->
+    <!--   1. UAV1 EgoSetpointBridge                              -->
+    <!--   2. UAV2 EgoSetpointBridge                              -->
+    <!--   3. C++ MissionManager                                  -->
+    <!-- ========================================================= -->
+
+
+    <!-- ===================== -->
+    <!-- Safety                -->
+    <!-- ===================== -->
+
+    <arg
+        name="allow_arming_service"
+        default="false" />
+
+
+    <!-- ===================== -->
+    <!-- UAV1 navigation goal  -->
+    <!-- ===================== -->
+
+    <arg
+        name="uav1_goal_x"
+        default="1.0" />
+
+    <arg
+        name="uav1_goal_y"
+        default="0.0" />
+
+    <arg
+        name="uav1_goal_z"
+        default="1.0" />
+
+
+    <!-- ===================== -->
+    <!-- UAV2 navigation goal  -->
+    <!-- ===================== -->
+
+    <arg
+        name="uav2_goal_x"
+        default="1.0" />
+
+    <arg
+        name="uav2_goal_y"
+        default="0.5" />
+
+    <arg
+        name="uav2_goal_z"
+        default="1.0" />
+
+
+    <!-- ========================================================= -->
+    <!-- UAV1                                                     -->
+    <!-- EGO PositionCommand -> MAVROS PositionTarget              -->
+    <!--                                                         -->
+    <!-- Relative topics become:                                  -->
+    <!--   planning/pos_cmd          -> /uav1/planning/pos_cmd     -->
+    <!--   planning/goal             -> /uav1/planning/goal        -->
+    <!--   mavros/setpoint_raw/local -> /uav1/mavros/...           -->
+    <!-- ========================================================= -->
+
+    <group ns="uav1">
+
+        <node
+            pkg="future_aircraft_mission"
+            type="ego_setpoint_bridge_node"
+            name="ego_setpoint_bridge"
+            output="screen" />
+
+    </group>
+
+
+    <!-- ========================================================= -->
+    <!-- UAV2                                                     -->
+    <!-- ========================================================= -->
+
+    <group ns="uav2">
+
+        <node
+            pkg="future_aircraft_mission"
+            type="ego_setpoint_bridge_node"
+            name="ego_setpoint_bridge"
+            output="screen" />
+
+    </group>
+
+
+    <!-- ========================================================= -->
+    <!-- C++ Mission Manager                                      -->
+    <!-- ========================================================= -->
+
+    <node
+        pkg="future_aircraft_mission"
+        type="future_aircraft_mission_node"
+        name="future_aircraft_mission"
+        output="screen">
+
+
+        <!-- Normal mission:
+             false = EGO mission
+             true  = basic takeoff/landing smoke test
+        -->
+        <param
+            name="smoke_test"
+            value="false" />
+
+
+        <!-- ===================== -->
+        <!-- UAV1 parameters       -->
+        <!-- ===================== -->
+
+        <param
+            name="uav1/allow_arming_service"
+            value="$(arg allow_arming_service)" />
+
+
+        <!-- ===================== -->
+        <!-- UAV2 parameters       -->
+        <!-- ===================== -->
+
+        <param
+            name="uav2/allow_arming_service"
+            value="$(arg allow_arming_service)" />
+
+
+        <!-- ===================== -->
+        <!-- UAV1 EGO goal         -->
+        <!-- ===================== -->
+
+        <param
+            name="uav1_goal_x"
+            value="$(arg uav1_goal_x)" />
+
+        <param
+            name="uav1_goal_y"
+            value="$(arg uav1_goal_y)" />
+
+        <param
+            name="uav1_goal_z"
+            value="$(arg uav1_goal_z)" />
+
+
+        <!-- ===================== -->
+        <!-- UAV2 EGO goal         -->
+        <!-- ===================== -->
+
+        <param
+            name="uav2_goal_x"
+            value="$(arg uav2_goal_x)" />
+
+        <param
+            name="uav2_goal_y"
+            value="$(arg uav2_goal_y)" />
+
+        <param
+            name="uav2_goal_z"
+            value="$(arg uav2_goal_z)" />
+
+    </node>
+
+</launch>

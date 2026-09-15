@@ -1,9 +1,13 @@
 <launch>
     <arg name="allow_arming_service" default="false" />
 
-    <arg name="goal_x" default="1.0" />
-    <arg name="goal_y" default="0.0" />
-    <arg name="goal_z" default="1.0" />
+    <arg name="_uav1_goal_x" default="1.0" />
+    <arg name="_uav1_goal_y" default="0.0" />
+    <arg name="_uav1_goal_z" default="1.0" />
+
+    <arg name="_uav2_goal_x" default="1.0" />
+    <arg name="_uav2_goal_y" default="0.0" />
+    <arg name="_uav2_goal_z" default="1.0" />
 
     <!-- EGO PositionCommand -> MAVROS setpoint -->
     <group ns="uav1">
@@ -28,8 +32,13 @@
             name="uav1/allow_arming_service"
             value="$(arg allow_arming_service)" />
 
-        <param name="goal_x" value="$(arg goal_x)" />
-        <param name="goal_y" value="$(arg goal_y)" />
-        <param name="goal_z" value="$(arg goal_z)" />
+        <param name="uav1/goal_x" value="$(arg _uav1_goal_x)" />
+        <param name="uav1/goal_y" value="$(arg _uav1_goal_y)" />
+        <param name="uav1/goal_z" value="$(arg _uav1_goal_z)" />
+
+        <param name="uav2/goal_x" value="$(arg _uav2_goal_x)" />
+        <param name="uav2/goal_y" value="$(arg _uav2_goal_y)" />
+        <param name="uav2/goal_z" value="$(arg _uav2_goal_z)" />
+
     </node>
 </launch>
