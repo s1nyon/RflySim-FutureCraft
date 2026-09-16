@@ -146,15 +146,49 @@ void MissionManager::tick()
 
     case MissionState::WAIT_REACHED:
     {
+        const bool uav1_done =
+            _uav1.state() == UavAgent::State::HOLDING ||
+            _uav1.state() == UavAgent::State::ERROR;
 
+        const bool uav2_done =
+            _uav2.state() == UavAgent::State::HOLDING ||
+            _uav2.state() == UavAgent::State::ERROR;
+
+        if (uav1_done && uav2_done) {
+            transitionTo(MissionState::AUTO_LAND);
+        }
 
         break;
     }
 
     case MissionState::AUTO_LAND:
     {
+        const auto state1 = _uav1.state();
+        const auto state2 = _uav2.state();
 
-        
+        if (state1 == UavAgent::State::HOLDING ||
+            state1 == UavAgent::State::ERROR) {
+            _uav1.startLanding(
+                _landing_altitude_threshold_m,
+                _service_retry_s,
+                _takeoff_yaw
+            );
+        }
+
+        if (state2 == UavAgent::State::HOLDING ||
+            state2 == UavAgent::State::ERROR) {
+            _uav2.startLanding(
+                _landing_altitude_threshold_m,
+                _service_retry_s,
+                _takeoff_yaw
+            );
+        }
+
+        if (_uav1.state() == UavAgent::State::FINISHED &&
+            _uav2.state() == UavAgent::State::FINISHED) {
+            transitionTo(MissionState::FINISHED);
+        }
+
         break;
     }
 
