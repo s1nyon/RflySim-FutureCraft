@@ -76,82 +76,85 @@ void MissionManager::tick()
         if (_smoke_test) {
             transitionTo(MissionState::AUTO_LAND);
         } else {
-            transitionTo(MissionState::SEND_EGO_GOAL);
+            transitionTo(MissionState::SEND_UAV1_GOAL);
         }
         break;
     }
     
     
-    case MissionState::SEND_EGO_GOAL:
+    case MissionState::SEND_UAV1_GOAL:
     {
-
         geometry_msgs::PoseStamped goal1;
-        geometry_msgs::PoseStamped goal2;
 
         goal1.header.stamp = ros::Time::now();
-        goal1.header.frame_id = "map";
-        goal2.header.stamp = ros::Time::now();
-        goal2.header.frame_id = "map";
+        goal1.header.frame_id = "world";
 
         goal1.pose.position.x = _uav1_goal_x;
         goal1.pose.position.y = _uav1_goal_y;
         goal1.pose.position.z = _uav1_goal_z;
         goal1.pose.orientation.w = 1.0;
 
-        goal2.pose.position.x = _uav2_goal_x;
-        goal2.pose.position.y = _uav2_goal_y;
-        goal2.pose.position.z = _uav2_goal_z;
-        goal2.pose.orientation.w = 1.0;
-
-        const bool uav1_started =
-            _uav1.startNavigation(goal1, _planner_command_timeout_s, _ego_handoff_timeout_s, _goal_tolerance_m, _goal_settle_s);
-
-        const bool uav2_started =
-            _uav2.startNavigation(goal2, _planner_command_timeout_s, _ego_handoff_timeout_s, _goal_tolerance_m, _goal_settle_s);
-
-        if (uav1_started && uav2_started) {
-            transitionTo(MissionState::WAIT_REACHED);
+        if (_uav1.startNavigation(
+            goal1,
+            _planner_command_timeout_s,
+            _ego_handoff_timeout_s,
+            _goal_tolerance_m,
+            _goal_settle_s)) {
+            transitionTo(MissionState::WAIT_UAV1_TRAJECTORY);
         }
-
+        
         break;
     }
 
-    case MissionState::WAIT_REACHED:
-    {   
-        const bool uav1_done =
-            _uav1.state() == UavAgent::State::HOLDING ||
-            _uav1.state() == UavAgent::State::ERROR;
-        
-        const bool uav2_done = 
-            _uav2.state() == UavAgent::State::HOLDING ||
-            _uav2.state() == UavAgent::State::ERROR;
-            
-        if (uav1_done && uav2_done) {
+    case MissionState::WAIT_UAV1_TRAJECTORY:
+    {
+        const auto state = _uav1.state();
+
+        if (state == UavAgent::State::NAVIGATING) {
+            transitionTo(MissionState::SEND_UAV2_GOAL);
+        }
+        else if (state == UavAgent::State::ERROR) {
+            ROS_ERROR("UAV1 failed before UAV2 navigation started");
             transitionTo(MissionState::AUTO_LAND);
         }
 
         break;
     }
 
+    case MissionState::SEND_UAV2_GOAL:
+    {   
+        geometry_msgs::PoseStamped goal2;
+
+        goal2.header.stamp = ros::Time::now();
+        goal2.header.frame_id = "world";
+
+        goal2.pose.position.x = _uav2_goal_x;
+        goal2.pose.position.y = _uav2_goal_y;
+        goal2.pose.position.z = _uav2_goal_z;
+        goal2.pose.orientation.w = 1.0;  
+
+        if (_uav2.startNavigation(
+            goal2,
+            _planner_command_timeout_s,
+            _ego_handoff_timeout_s,
+            _goal_tolerance_m,
+            _goal_settle_s)) {
+            transitionTo(MissionState::WAIT_REACHED);
+        }
+        break;
+    }
+
+    case MissionState::WAIT_REACHED:
+    {
+
+
+        break;
+    }
+
     case MissionState::AUTO_LAND:
     {
-        const auto state1 = _uav1.state();
-        const auto state2 = _uav2.state();
 
-        if (state1 == UavAgent::State::HOLDING ||
-            state1 == UavAgent::State::ERROR) {
-            _uav1.startLanding(_landing_altitude_threshold_m, _service_retry_s, _takeoff_yaw);
-        }
-
-        if (state2 == UavAgent::State::HOLDING ||
-            state2 == UavAgent::State::ERROR) {
-            _uav2.startLanding(_landing_altitude_threshold_m, _service_retry_s, _takeoff_yaw);
-        }
-
-        if (_uav1.state() == UavAgent::State::FINISHED &&
-            _uav2.state() == UavAgent::State::FINISHED) {
-            transitionTo(MissionState::FINISHED);
-        }
+        
         break;
     }
 

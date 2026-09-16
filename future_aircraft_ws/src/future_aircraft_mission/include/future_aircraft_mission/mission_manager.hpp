@@ -12,7 +12,9 @@ public:
     {
         WAIT_READY,
         TAKEOFF,
-        SEND_EGO_GOAL,
+        SEND_UAV1_GOAL,
+        WAIT_UAV1_TRAJECTORY,
+        SEND_UAV2_GOAL,
         WAIT_REACHED,
         AUTO_LAND,
         FINISHED
