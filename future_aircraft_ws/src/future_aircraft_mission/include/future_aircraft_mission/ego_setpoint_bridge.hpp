@@ -59,9 +59,11 @@ private:
 
     bool _has_planner_command;
     bool _has_received_goal;
+    bool _handoff_pending;
 
     int _last_seen_trajectory_id;
     int _goal_baseline_trajectory_id;
+    int _active_trajectory_id;
     bool _has_seen_trajectory_id;
 
     bool _use_shared_frame;

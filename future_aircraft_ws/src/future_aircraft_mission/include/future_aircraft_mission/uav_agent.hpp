@@ -50,6 +50,11 @@ public:
         double service_retry_s,
         double yaw
     );
+    geometry_msgs::Point position() const;
+
+    bool retargetNavigation(
+        const geometry_msgs::PoseStamped& goal
+    );
 
     void tick();
 

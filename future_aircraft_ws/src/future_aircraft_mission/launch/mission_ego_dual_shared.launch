@@ -31,12 +31,12 @@
     <!-- SharedFrameAdapter converts them into planner world.    -->
     <!-- ====================================================== -->
 
-    <arg name="uav1_goal_x" default="1.0" />
-    <arg name="uav1_goal_y" default="0.0" />
+    <arg name="uav1_goal_x" default="16.0" />
+    <arg name="uav1_goal_y" default="4.6" />
     <arg name="uav1_goal_z" default="1.0" />
 
-    <arg name="uav2_goal_x" default="1.0" />
-    <arg name="uav2_goal_y" default="0.0" />
+    <arg name="uav2_goal_x" default="16.0" />
+    <arg name="uav2_goal_y" default="5.2" />
     <arg name="uav2_goal_z" default="1.0" />
 
 

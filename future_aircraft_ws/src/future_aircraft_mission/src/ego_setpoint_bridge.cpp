@@ -25,7 +25,9 @@ EgoSetpointBridge::EgoSetpointBridge(
       _last_seen_trajectory_id(-1),
       _goal_baseline_trajectory_id(-1),
       _has_seen_trajectory_id(false),
-      _use_shared_frame(false)
+      _use_shared_frame(false),
+      _handoff_pending(false),
+      _active_trajectory_id(-1)
 {
     _pnh.param<std::string>(
         "planner_topic",
@@ -151,35 +153,90 @@ void EgoSetpointBridge::plannerCallback(
     const int trajectory_id =
         msg->trajectory_id;
 
+    const ros::Time now =
+        ros::Time::now();
+
+
     _last_seen_trajectory_id =
         trajectory_id;
 
     _has_seen_trajectory_id =
         true;
 
+
     if (!_has_received_goal) {
         return;
     }
 
-    if (_goal_baseline_trajectory_id >= 0 &&
-        trajectory_id <=
-            _goal_baseline_trajectory_id) {
 
-        return;
+    if (_handoff_pending) {
+
+        const bool still_old_generation =
+            _goal_baseline_trajectory_id >= 0 &&
+            trajectory_id <=
+                _goal_baseline_trajectory_id;
+
+
+        if (still_old_generation) {
+
+            /*
+             * Retarget case:
+             * keep following the trajectory that was already active.
+             */
+            if (_has_planner_command &&
+                trajectory_id ==
+                    _active_trajectory_id) {
+
+                _latest_target =
+                    convertCommand(*msg);
+
+                _last_planner_command_time =
+                    now;
+            }
+
+            return;
+        }
+
+
+        /*
+         * First command belonging to the newly generated trajectory.
+         */
+        _active_trajectory_id =
+            trajectory_id;
+
+        _handoff_pending =
+            false;
+    }
+    else {
+
+        if (_active_trajectory_id >= 0 &&
+            trajectory_id <
+                _active_trajectory_id) {
+
+            return;
+        }
+
+
+        _active_trajectory_id =
+            trajectory_id;
     }
 
-    ROS_INFO_ONCE(
-        "Received planner command"
-    );
 
     _latest_target =
         convertCommand(*msg);
 
+
     _last_planner_command_time =
-        ros::Time::now();
+        now;
+
 
     _has_planner_command =
         true;
+
+
+    ROS_INFO_ONCE(
+        "Received planner command"
+    );
 }
 
 
@@ -195,20 +252,38 @@ void EgoSetpointBridge::goalCallback(
         msg->pose.position.z
     );
 
+
     if (_has_seen_trajectory_id) {
+
         _goal_baseline_trajectory_id =
             _last_seen_trajectory_id;
     }
     else {
+
         _goal_baseline_trajectory_id =
             -1;
     }
 
+
     _has_received_goal =
         true;
 
-    _has_planner_command =
-        false;
+
+    _handoff_pending =
+        true;
+
+
+    /*
+     * IMPORTANT:
+     *
+     * Do NOT clear _has_planner_command here.
+     *
+     * If an old trajectory is already active, let it continue
+     * controlling the UAV until a newer trajectory_id appears.
+     *
+     * For the very first goal _has_planner_command is already false,
+     * so startup behaviour remains generation-safe.
+     */
 }
 
 

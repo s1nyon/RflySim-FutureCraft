@@ -342,34 +342,96 @@ void UavAgent::tick()
 
     case State::NAVIGATING:
     {
-        const ros::Time now = ros::Time::now();
+        const ros::Time now =
+            ros::Time::now();
 
-        if (!isPlannerCommandFresh(_planner_command_timeout_s)) {
-            ROS_WARN("%s planner command lost", _uav_name.c_str());
+
+        /*
+        * Normally the old trajectory continues producing commands
+        * until the new EGO trajectory takes over.
+        *
+        * If there is a very short gap during trajectory handoff,
+        * temporarily hold instead of immediately declaring ERROR.
+        */
+        if (!isPlannerCommandFresh(
+                _planner_command_timeout_s)) {
+
+            if (_ego.isGoalHandoffPending()) {
+
+                const ros::Duration handoff_elapsed =
+                    now -
+                    _navigation_start_time;
+
+
+                if (handoff_elapsed.toSec() <
+                    _planner_handoff_timeout_s) {
+
+                    if (isOffboard()) {
+
+                        publishCurrentPositionHold(
+                            _takeoff_yaw
+                        );
+                    }
+
+                    break;
+                }
+
+
+                ROS_WARN(
+                    "%s EGO retarget handoff timeout",
+                    _uav_name.c_str()
+                );
+            }
+            else {
+
+                ROS_WARN(
+                    "%s planner command lost",
+                    _uav_name.c_str()
+                );
+            }
+
 
             transitionTo(State::ERROR);
 
             break;
         }
 
-        if (!hasReachedGoal(_goal_tolerance_m)) {
-            _goal_reached_since = ros::Time(0);
+
+        if (!hasReachedGoal(
+                _goal_tolerance_m)) {
+
+            _goal_reached_since =
+                ros::Time(0);
+
             break;
         }
+
 
         if (_goal_reached_since.isZero()) {
-            _goal_reached_since = now;
+
+            _goal_reached_since =
+                now;
+
             break;
         }
 
-        const ros::Duration settled = 
-            now - _goal_reached_since;
 
-        if (settled.toSec() >= _goal_settle_s) {
-            _navigation_hold_position = _vehicle.position();
+        const ros::Duration settled =
+            now -
+            _goal_reached_since;
+
+
+        if (settled.toSec() >=
+            _goal_settle_s) {
+
+            _navigation_hold_position =
+                _vehicle.position();
+
 
             transitionTo(State::HOLDING);
         }
+
+
         break;
     }
 
@@ -475,4 +537,37 @@ bool UavAgent::hasFinishedTakeoff() const
                _takeoff_altitude,
                _takeoff_tolerance_m
            );
+}
+
+geometry_msgs::Point UavAgent::position() const
+{
+    return _vehicle.position();
+}
+
+
+bool UavAgent::retargetNavigation(
+    const geometry_msgs::PoseStamped& goal)
+{
+    if (_state != State::NAVIGATING) {
+        return false;
+    }
+
+
+    _navigation_start_time =
+        ros::Time::now();
+
+    _goal_reached_since =
+        ros::Time(0);
+
+
+    _ego.retargetGoal(goal);
+
+
+    ROS_INFO(
+        "%s navigation retargeted",
+        _uav_name.c_str()
+    );
+
+
+    return true;
 }

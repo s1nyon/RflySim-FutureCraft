@@ -1,45 +1,88 @@
 #pragma once
 
 #include <ros/ros.h>
+
 #include <geometry_msgs/PoseStamped.h>
-#include <quadrotor_msgs/PositionCommand.h>
 #include <geometry_msgs/Point.h>
+#include <quadrotor_msgs/PositionCommand.h>
+
 #include <string>
+
 
 class EgoInterface
 {
 public:
-    EgoInterface(ros::NodeHandle& nh, ros::NodeHandle& pnh);
+    EgoInterface(
+        ros::NodeHandle& nh,
+        ros::NodeHandle& pnh
+    );
 
-    void sendGoal(const geometry_msgs::PoseStamped& goal);
+    // 第一次开始导航。
+    void sendGoal(
+        const geometry_msgs::PoseStamped& goal
+    );
+
+    // 飞行过程中无缝换目标。
+    void retargetGoal(
+        const geometry_msgs::PoseStamped& goal
+    );
+
     bool goalReached(
         const geometry_msgs::Point& current_position,
         double tolerance_m
     ) const;
 
     bool hasGoal() const;
+
     bool hasPlannerCommand() const;
+
     bool isPlannerConnected() const;
-    bool isPlannerCommandFresh(double timeout_s) const;
+
+    bool isPlannerCommandFresh(
+        double timeout_s
+    ) const;
+
+    bool isGoalHandoffPending() const;
+
 
 private:
+    void publishGoal(
+        const geometry_msgs::PoseStamped& goal,
+        bool preserve_existing_command
+    );
+
     void plannerCommandCallback(
         const quadrotor_msgs::PositionCommand::ConstPtr& msg
     );
 
-    ros::Publisher  _goal_pub;
+
+    ros::Publisher _goal_pub;
+
     ros::Subscriber _planner_command_sub;
+
     ros::Time _last_planner_command_time;
 
+
     std::string _goal_topic;
+
     std::string _planner_command_topic;
+
 
     geometry_msgs::PoseStamped _last_goal;
 
+
     bool _has_goal;
+
     bool _has_planner_command;
 
+    bool _handoff_pending;
+
+
     int _last_seen_trajectory_id;
+
     int _goal_baseline_trajectory_id;
+
+    int _active_trajectory_id;
+
     bool _has_seen_trajectory_id;
 };
