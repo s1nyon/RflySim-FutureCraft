@@ -278,11 +278,11 @@ void MissionManager::buildCompetitionRoute()
 
     // P5: tunnel exit.
     _route.emplace_back(
-        13.0,
+        14.0,
         4.9,
         1.0,
         RoutePointType::EXIT,
-        0.8
+        0.4
     );
 }
 
@@ -471,6 +471,12 @@ bool MissionManager::advanceRoute(
 
     if (route_index >=
         _route.size()) {
+
+        return false;
+    }
+
+
+    if (uav.isNavigationHandoffPending()) {
 
         return false;
     }

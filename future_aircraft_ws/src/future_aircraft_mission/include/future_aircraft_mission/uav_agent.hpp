@@ -36,6 +36,7 @@ public:
     bool isNearGround(double threshold_m) const;
 
     State state() const;
+    bool isNavigationHandoffPending() const;
 
     bool startTakeoff(double altitude_m, double yaw, double tolerance_m);
     bool startNavigation(

@@ -138,6 +138,11 @@ UavAgent::State UavAgent::state() const
     return _state;
 }
 
+bool UavAgent::isNavigationHandoffPending() const
+{
+    return _ego.isGoalHandoffPending();
+}
+
 bool UavAgent::startTakeoff(double altitude_m, double yaw, double tolerance_m) 
 {
     if (_state != State::IDLE) {
@@ -346,6 +351,29 @@ void UavAgent::tick()
             ros::Time::now();
 
 
+        if (_ego.isGoalHandoffPending()) {
+
+            const ros::Duration handoff_elapsed =
+                now -
+                _navigation_start_time;
+
+
+            if (handoff_elapsed.toSec() >=
+                _planner_handoff_timeout_s) {
+
+                ROS_WARN(
+                    "%s EGO retarget handoff timeout",
+                    _uav_name.c_str()
+                );
+
+
+                transitionTo(State::ERROR);
+
+                break;
+            }
+        }
+
+
         /*
         * Normally the old trajectory continues producing commands
         * until the new EGO trajectory takes over.
@@ -358,29 +386,14 @@ void UavAgent::tick()
 
             if (_ego.isGoalHandoffPending()) {
 
-                const ros::Duration handoff_elapsed =
-                    now -
-                    _navigation_start_time;
+                if (isOffboard()) {
 
-
-                if (handoff_elapsed.toSec() <
-                    _planner_handoff_timeout_s) {
-
-                    if (isOffboard()) {
-
-                        publishCurrentPositionHold(
-                            _takeoff_yaw
-                        );
-                    }
-
-                    break;
+                    publishCurrentPositionHold(
+                        _takeoff_yaw
+                    );
                 }
 
-
-                ROS_WARN(
-                    "%s EGO retarget handoff timeout",
-                    _uav_name.c_str()
-                );
+                break;
             }
             else {
 
