@@ -58,7 +58,7 @@
 
             <param
                 name="goal_topic"
-                value="planning/goal" />
+                value="planning/goal_local" />
 
             <param
                 name="setpoint_topic"
@@ -108,7 +108,7 @@
 
             <param
                 name="goal_topic"
-                value="planning/goal" />
+                value="planning/goal_local" />
 
             <param
                 name="setpoint_topic"
