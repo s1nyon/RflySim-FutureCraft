@@ -1,0 +1,222 @@
+<launch>
+
+    <!-- ====================================================== -->
+    <!-- Safety                                                 -->
+    <!-- ====================================================== -->
+
+    <arg
+        name="allow_arming_service"
+        default="false" />
+
+
+    <!-- ====================================================== -->
+    <!-- Shared-frame origins                                   -->
+    <!-- ====================================================== -->
+
+    <arg name="uav1_origin_x" default="16.0" />
+    <arg name="uav1_origin_y" default="-0.7" />
+    <arg name="uav1_origin_z" default="0.0" />
+    <arg name="uav1_origin_yaw_deg" default="0.0" />
+
+    <arg name="uav2_origin_x" default="16.0" />
+    <arg name="uav2_origin_y" default="0.7" />
+    <arg name="uav2_origin_z" default="0.0" />
+    <arg name="uav2_origin_yaw_deg" default="0.0" />
+
+
+    <!-- ====================================================== -->
+    <!-- Local navigation intent                                -->
+    <!--                                                       -->
+    <!-- These are still expressed relative to each UAV spawn.  -->
+    <!-- SharedFrameAdapter converts them into planner world.    -->
+    <!-- ====================================================== -->
+
+    <arg name="uav1_goal_x" default="1.0" />
+    <arg name="uav1_goal_y" default="0.0" />
+    <arg name="uav1_goal_z" default="1.0" />
+
+    <arg name="uav2_goal_x" default="1.0" />
+    <arg name="uav2_goal_y" default="0.0" />
+    <arg name="uav2_goal_z" default="1.0" />
+
+
+    <!-- ====================================================== -->
+    <!-- UAV1 EGO world -> PX4 local bridge                     -->
+    <!-- ====================================================== -->
+
+    <group ns="uav1">
+
+        <node
+            pkg="future_aircraft_mission"
+            type="ego_setpoint_bridge_node"
+            name="ego_setpoint_bridge"
+            output="screen">
+
+            <param
+                name="planner_topic"
+                value="planning/pos_cmd" />
+
+            <param
+                name="goal_topic"
+                value="planning/goal" />
+
+            <param
+                name="setpoint_topic"
+                value="mavros/setpoint_raw/local" />
+
+
+            <param
+                name="shared_frame/enabled"
+                value="true" />
+
+            <param
+                name="shared_frame/origin_x"
+                value="$(arg uav1_origin_x)" />
+
+            <param
+                name="shared_frame/origin_y"
+                value="$(arg uav1_origin_y)" />
+
+            <param
+                name="shared_frame/origin_z"
+                value="$(arg uav1_origin_z)" />
+
+            <param
+                name="shared_frame/origin_yaw_deg"
+                value="$(arg uav1_origin_yaw_deg)" />
+
+        </node>
+
+    </group>
+
+
+    <!-- ====================================================== -->
+    <!-- UAV2                                                   -->
+    <!-- ====================================================== -->
+
+    <group ns="uav2">
+
+        <node
+            pkg="future_aircraft_mission"
+            type="ego_setpoint_bridge_node"
+            name="ego_setpoint_bridge"
+            output="screen">
+
+            <param
+                name="planner_topic"
+                value="planning/pos_cmd" />
+
+            <param
+                name="goal_topic"
+                value="planning/goal" />
+
+            <param
+                name="setpoint_topic"
+                value="mavros/setpoint_raw/local" />
+
+
+            <param
+                name="shared_frame/enabled"
+                value="true" />
+
+            <param
+                name="shared_frame/origin_x"
+                value="$(arg uav2_origin_x)" />
+
+            <param
+                name="shared_frame/origin_y"
+                value="$(arg uav2_origin_y)" />
+
+            <param
+                name="shared_frame/origin_z"
+                value="$(arg uav2_origin_z)" />
+
+            <param
+                name="shared_frame/origin_yaw_deg"
+                value="$(arg uav2_origin_yaw_deg)" />
+
+        </node>
+
+    </group>
+
+
+    <!-- ====================================================== -->
+    <!-- MissionManager                                         -->
+    <!-- ====================================================== -->
+
+    <node
+        pkg="future_aircraft_mission"
+        type="future_aircraft_mission_node"
+        name="future_aircraft_mission"
+        output="screen">
+
+        <param
+            name="smoke_test"
+            value="false" />
+
+
+        <!-- UAV1 -->
+
+        <param
+            name="uav1/allow_arming_service"
+            value="$(arg allow_arming_service)" />
+
+        <!--
+            Mission layer talks in UAV-local goal coordinates.
+            SharedFrameAdapter publishes the transformed goal
+            to /uav1/planning/goal for EGO.
+        -->
+        <param
+            name="uav1/goal_topic"
+            value="planning/goal_local" />
+
+        <param
+            name="uav1/planner_command_topic"
+            value="planning/pos_cmd" />
+
+
+        <!-- UAV2 -->
+
+        <param
+            name="uav2/allow_arming_service"
+            value="$(arg allow_arming_service)" />
+
+        <param
+            name="uav2/goal_topic"
+            value="planning/goal_local" />
+
+        <param
+            name="uav2/planner_command_topic"
+            value="planning/pos_cmd" />
+
+
+        <!-- Local goals -->
+
+        <param
+            name="uav1_goal_x"
+            value="$(arg uav1_goal_x)" />
+
+        <param
+            name="uav1_goal_y"
+            value="$(arg uav1_goal_y)" />
+
+        <param
+            name="uav1_goal_z"
+            value="$(arg uav1_goal_z)" />
+
+
+        <param
+            name="uav2_goal_x"
+            value="$(arg uav2_goal_x)" />
+
+        <param
+            name="uav2_goal_y"
+            value="$(arg uav2_goal_y)" />
+
+        <param
+            name="uav2_goal_z"
+            value="$(arg uav2_goal_z)" />
+
+    </node>
+
+</launch>

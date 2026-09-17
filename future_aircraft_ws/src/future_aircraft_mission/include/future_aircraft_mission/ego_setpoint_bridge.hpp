@@ -1,37 +1,51 @@
-#pragma once 
+#pragma once
 
 #include <ros/ros.h>
+
 #include <quadrotor_msgs/PositionCommand.h>
 #include <mavros_msgs/PositionTarget.h>
 #include <geometry_msgs/PoseStamped.h>
+
 #include <string>
+
+#include "future_aircraft_mission/planar_frame_transform.hpp"
 
 class EgoSetpointBridge
 {
 public:
-    EgoSetpointBridge(ros::NodeHandle& nh, ros::NodeHandle& pnh);
+    EgoSetpointBridge(
+        ros::NodeHandle& nh,
+        ros::NodeHandle& pnh
+    );
 
 private:
+    void plannerCallback(
+        const quadrotor_msgs::PositionCommand::ConstPtr& msg
+    );
 
-    // EGO command callback
-    void plannerCallback(const quadrotor_msgs::PositionCommand::ConstPtr& msg);
+    void publishTimerCallback(
+        const ros::TimerEvent& event
+    );
 
-    // Publush MAVROS setpoint with fixed frequency
-    void publishTimerCallback(const ros::TimerEvent& event);
+    mavros_msgs::PositionTarget convertCommand(
+        const quadrotor_msgs::PositionCommand& command
+    );
 
-    // PublishCommand -> PositionTarget
-    mavros_msgs::PositionTarget convertCommand(const quadrotor_msgs::PositionCommand& command);
-                                               
-    // bridge -> goal
-    void goalCallback(const geometry_msgs::PoseStamped::ConstPtr& msg);
+    void goalCallback(
+        const geometry_msgs::PoseStamped::ConstPtr& msg
+    );
+
 private:
     ros::NodeHandle _nh;
     ros::NodeHandle _pnh;
 
     ros::Subscriber _planner_sub;
     ros::Subscriber _goal_sub;
+
     ros::Publisher _setpoint_pub;
+
     ros::Timer _publish_timer;
+
     ros::Time _last_planner_command_time;
 
     mavros_msgs::PositionTarget _latest_target;
@@ -40,7 +54,7 @@ private:
     std::string _setpoint_topic;
     std::string _goal_topic;
 
-    double _rate_hz; 
+    double _rate_hz;
     double _command_timeout;
 
     bool _has_planner_command;
@@ -49,4 +63,8 @@ private:
     int _last_seen_trajectory_id;
     int _goal_baseline_trajectory_id;
     bool _has_seen_trajectory_id;
+
+    bool _use_shared_frame;
+
+    PlanarFrameTransform _frame_transform;
 };

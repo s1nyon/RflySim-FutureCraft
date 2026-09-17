@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.0.2)
+
 project(future_aircraft_mission)
+
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
@@ -7,32 +9,110 @@ find_package(catkin REQUIRED COMPONENTS
   mavros_msgs
   geometry_msgs
   nav_msgs
+  sensor_msgs
+  tf2
+  tf2_geometry_msgs
 )
+
 
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES future_aircraft_mission
-  CATKIN_DEPENDS roscpp quadrotor_msgs mavros_msgs geometry_msgs nav_msgs
+
+  CATKIN_DEPENDS
+    roscpp
+    quadrotor_msgs
+    mavros_msgs
+    geometry_msgs
+    nav_msgs
+    sensor_msgs
+    tf2
+    tf2_geometry_msgs
 )
 
-include_directories(include ${catkin_INCLUDE_DIRS})
+
+include_directories(
+  include
+  ${catkin_INCLUDE_DIRS}
+)
+
 
 add_library(
-  future_aircraft_mission 
+  future_aircraft_mission
+
   src/ego_setpoint_bridge.cpp
+  src/shared_frame_adapter.cpp
   src/vehicle_interface.cpp
   src/ego_interface.cpp
   src/uav_agent.cpp
   src/mission_manager.cpp
 )
 
-add_executable(ego_setpoint_bridge_node src/ego_setpoint_bridge_node.cpp)
-add_executable(future_aircraft_mission_node src/mission_node.cpp)
 
-add_dependencies(future_aircraft_mission ${catkin_EXPORTED_TARGETS})
-add_dependencies(ego_setpoint_bridge_node ${catkin_EXPORTED_TARGETS})
-add_dependencies(future_aircraft_mission_node ${catkin_EXPORTED_TARGETS})
+add_executable(
+  ego_setpoint_bridge_node
+  src/ego_setpoint_bridge_node.cpp
+)
 
-target_link_libraries(future_aircraft_mission ${catkin_LIBRARIES})
-target_link_libraries(ego_setpoint_bridge_node future_aircraft_mission ${catkin_LIBRARIES})
-target_link_libraries(future_aircraft_mission_node future_aircraft_mission ${catkin_LIBRARIES})
+
+add_executable(
+  shared_frame_adapter_node
+  src/shared_frame_adapter_node.cpp
+)
+
+
+add_executable(
+  future_aircraft_mission_node
+  src/mission_node.cpp
+)
+
+
+add_dependencies(
+  future_aircraft_mission
+  ${catkin_EXPORTED_TARGETS}
+)
+
+
+add_dependencies(
+  ego_setpoint_bridge_node
+  ${catkin_EXPORTED_TARGETS}
+)
+
+
+add_dependencies(
+  shared_frame_adapter_node
+  ${catkin_EXPORTED_TARGETS}
+)
+
+
+add_dependencies(
+  future_aircraft_mission_node
+  ${catkin_EXPORTED_TARGETS}
+)
+
+
+target_link_libraries(
+  future_aircraft_mission
+  ${catkin_LIBRARIES}
+)
+
+
+target_link_libraries(
+  ego_setpoint_bridge_node
+  future_aircraft_mission
+  ${catkin_LIBRARIES}
+)
+
+
+target_link_libraries(
+  shared_frame_adapter_node
+  future_aircraft_mission
+  ${catkin_LIBRARIES}
+)
+
+
+target_link_libraries(
+  future_aircraft_mission_node
+  future_aircraft_mission
+  ${catkin_LIBRARIES}
+)

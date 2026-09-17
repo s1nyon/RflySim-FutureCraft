@@ -87,7 +87,7 @@ void MissionManager::tick()
         geometry_msgs::PoseStamped goal1;
 
         goal1.header.stamp = ros::Time::now();
-        goal1.header.frame_id = "world";
+        goal1.header.frame_id = "uav_local";
 
         goal1.pose.position.x = _uav1_goal_x;
         goal1.pose.position.y = _uav1_goal_y;
@@ -126,7 +126,7 @@ void MissionManager::tick()
         geometry_msgs::PoseStamped goal2;
 
         goal2.header.stamp = ros::Time::now();
-        goal2.header.frame_id = "world";
+        goal2.header.frame_id = "uav_local";
 
         goal2.pose.position.x = _uav2_goal_x;
         goal2.pose.position.y = _uav2_goal_y;

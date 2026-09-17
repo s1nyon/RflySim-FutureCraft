@@ -1,0 +1,221 @@
+<launch>
+
+    <!-- ====================================================== -->
+    <!-- Shared planning frame                                  -->
+    <!--                                                       -->
+    <!-- Current Competition Course V2 defaults:                -->
+    <!-- UAV1 spawn = (16.0, -0.7, 0.0), yaw = 0 deg ENU       -->
+    <!-- UAV2 spawn = (16.0,  0.7, 0.0), yaw = 0 deg ENU       -->
+    <!-- ====================================================== -->
+
+
+    <arg name="uav1_origin_x" default="16.0" />
+    <arg name="uav1_origin_y" default="-0.7" />
+    <arg name="uav1_origin_z" default="0.0" />
+    <arg name="uav1_origin_yaw_deg" default="0.0" />
+
+    <arg name="uav2_origin_x" default="16.0" />
+    <arg name="uav2_origin_y" default="0.7" />
+    <arg name="uav2_origin_z" default="0.0" />
+    <arg name="uav2_origin_yaw_deg" default="0.0" />
+
+
+    <arg name="map_size_x" default="40.0" />
+    <arg name="map_size_y" default="20.0" />
+    <arg name="map_size_z" default="2.0" />
+
+    <arg name="max_vel" default="0.45" />
+    <arg name="max_acc" default="0.55" />
+
+    <arg name="planning_horizon" default="2.5" />
+
+
+    <!-- ====================================================== -->
+    <!-- UAV1 local -> shared world adapter                     -->
+    <!-- ====================================================== -->
+
+    <group ns="uav1">
+
+        <node
+            pkg="future_aircraft_mission"
+            type="shared_frame_adapter_node"
+            name="shared_frame_adapter"
+            output="screen">
+
+            <param
+                name="local_odom_topic"
+                value="mavros/odometry/out" />
+
+            <param
+                name="local_cloud_topic"
+                value="slam/cloud_registered" />
+
+            <param
+                name="local_goal_topic"
+                value="planning/goal_local" />
+
+            <param
+                name="world_odom_topic"
+                value="planning/odom_world" />
+
+            <param
+                name="world_cloud_topic"
+                value="planning/cloud_world" />
+
+            <param
+                name="world_goal_topic"
+                value="planning/goal" />
+
+            <param
+                name="world_frame"
+                value="world" />
+
+            <param
+                name="origin_x"
+                value="$(arg uav1_origin_x)" />
+
+            <param
+                name="origin_y"
+                value="$(arg uav1_origin_y)" />
+
+            <param
+                name="origin_z"
+                value="$(arg uav1_origin_z)" />
+
+            <param
+                name="origin_yaw_deg"
+                value="$(arg uav1_origin_yaw_deg)" />
+
+        </node>
+
+    </group>
+
+
+    <!-- ====================================================== -->
+    <!-- UAV2 local -> shared world adapter                     -->
+    <!-- ====================================================== -->
+
+    <group ns="uav2">
+
+        <node
+            pkg="future_aircraft_mission"
+            type="shared_frame_adapter_node"
+            name="shared_frame_adapter"
+            output="screen">
+
+            <param
+                name="local_odom_topic"
+                value="mavros/odometry/out" />
+
+            <param
+                name="local_cloud_topic"
+                value="slam/cloud_registered" />
+
+            <param
+                name="local_goal_topic"
+                value="planning/goal_local" />
+
+            <param
+                name="world_odom_topic"
+                value="planning/odom_world" />
+
+            <param
+                name="world_cloud_topic"
+                value="planning/cloud_world" />
+
+            <param
+                name="world_goal_topic"
+                value="planning/goal" />
+
+            <param
+                name="world_frame"
+                value="world" />
+
+            <param
+                name="origin_x"
+                value="$(arg uav2_origin_x)" />
+
+            <param
+                name="origin_y"
+                value="$(arg uav2_origin_y)" />
+
+            <param
+                name="origin_z"
+                value="$(arg uav2_origin_z)" />
+
+            <param
+                name="origin_yaw_deg"
+                value="$(arg uav2_origin_yaw_deg)" />
+
+        </node>
+
+    </group>
+
+
+    <!-- ====================================================== -->
+    <!-- Original EGO-Swarm                                     -->
+    <!--                                                       -->
+    <!-- No source modification.                                -->
+    <!-- Only feed it data expressed in the same world frame.   -->
+    <!-- ====================================================== -->
+
+    <include
+        file="$(find multi_uav_mission)/launch/rflysim_ego_swarm_dual.launch">
+
+        <arg
+            name="uav1_odom_topic"
+            value="/uav1/planning/odom_world" />
+
+        <arg
+            name="uav1_cloud_topic"
+            value="/uav1/planning/cloud_world" />
+
+        <arg
+            name="uav1_goal_topic"
+            value="/uav1/planning/goal" />
+
+
+        <arg
+            name="uav2_odom_topic"
+            value="/uav2/planning/odom_world" />
+
+        <arg
+            name="uav2_cloud_topic"
+            value="/uav2/planning/cloud_world" />
+
+        <arg
+            name="uav2_goal_topic"
+            value="/uav2/planning/goal" />
+
+
+        <arg
+            name="map_size_x"
+            value="$(arg map_size_x)" />
+
+        <arg
+            name="map_size_y"
+            value="$(arg map_size_y)" />
+
+        <arg
+            name="map_size_z"
+            value="$(arg map_size_z)" />
+
+        <arg
+            name="max_vel"
+            value="$(arg max_vel)" />
+
+        <arg
+            name="max_acc"
+            value="$(arg max_acc)" />
+
+        <arg
+            name="planning_horizon"
+            value="$(arg planning_horizon)" />
+
+        <arg
+            name="flight_type"
+            value="1" />
+
+    </include>
+
+</launch>
