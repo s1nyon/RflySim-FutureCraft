@@ -10,38 +10,67 @@
 
 
     <!-- ====================================================== -->
-    <!-- Shared-frame origins                                   -->
-    <!-- ====================================================== -->
-
-    <arg name="uav1_origin_x" default="0.0" />
-    <arg name="uav1_origin_y" default="-0.7" />
-    <arg name="uav1_origin_z" default="0.0" />
-    <arg name="uav1_origin_yaw_deg" default="0.0" />
-
-    <arg name="uav2_origin_x" default="0.0" />
-    <arg name="uav2_origin_y" default="0.7" />
-    <arg name="uav2_origin_z" default="0.0" />
-    <arg name="uav2_origin_yaw_deg" default="0.0" />
-
-
-    <!-- ====================================================== -->
-    <!-- Local navigation intent                                -->
+    <!-- Shared planning-frame origins                          -->
     <!--                                                       -->
-    <!-- These are still expressed relative to each UAV spawn.  -->
-    <!-- SharedFrameAdapter converts them into planner world.    -->
+    <!-- planning_world origin:                                 -->
+    <!-- Competition Course ENU (16.0, 0.0, 0.0)               -->
+    <!--                                                       -->
+    <!-- Therefore these values are each UAV local origin       -->
+    <!-- expressed in planning_world.                           -->
     <!-- ====================================================== -->
 
-    <arg name="uav1_goal_x" default="16.0" />
-    <arg name="uav1_goal_y" default="4.6" />
-    <arg name="uav1_goal_z" default="1.0" />
+    <arg
+        name="uav1_origin_x"
+        default="0.0" />
 
-    <arg name="uav2_goal_x" default="16.0" />
-    <arg name="uav2_goal_y" default="5.2" />
-    <arg name="uav2_goal_z" default="1.0" />
+    <arg
+        name="uav1_origin_y"
+        default="-0.7" />
+
+    <arg
+        name="uav1_origin_z"
+        default="0.0" />
+
+    <arg
+        name="uav1_origin_yaw_deg"
+        default="0.0" />
+
+
+    <arg
+        name="uav2_origin_x"
+        default="0.0" />
+
+    <arg
+        name="uav2_origin_y"
+        default="0.7" />
+
+    <arg
+        name="uav2_origin_z"
+        default="0.0" />
+
+    <arg
+        name="uav2_origin_yaw_deg"
+        default="0.0" />
 
 
     <!-- ====================================================== -->
-    <!-- UAV1 EGO world -> PX4 local bridge                     -->
+    <!-- Tunnel-entry sequencing                                -->
+    <!--                                                       -->
+    <!-- Release UAV2 after UAV1 has travelled this far in      -->
+    <!-- planning_world +X.                                     -->
+    <!--                                                       -->
+    <!-- Section A begins near x = 2.5 in planning_world.       -->
+    <!-- x = 4.0 therefore means UAV1 is already inside.        -->
+    <!-- ====================================================== -->
+
+    <arg
+        name="entry_release_x"
+        default="4.0" />
+
+
+    <!-- ====================================================== -->
+    <!-- UAV1                                                   -->
+    <!-- EGO planning_world -> PX4 local setpoint               -->
     <!-- ====================================================== -->
 
     <group ns="uav1">
@@ -52,19 +81,34 @@
             name="ego_setpoint_bridge"
             output="screen">
 
+            <!--
+                EGO traj_server output.
+                PositionCommand is expressed in planning_world.
+            -->
             <param
                 name="planner_topic"
                 value="planning/pos_cmd" />
 
+
+            <!--
+                Listen to the upstream UAV-local mission goal.
+
+                The bridge uses this only as the trajectory-generation
+                handoff barrier. SharedFrameAdapter separately converts
+                the same goal into planning_world for EGO.
+            -->
             <param
                 name="goal_topic"
                 value="planning/goal_local" />
 
+
+            <!-- PX4 / MAVROS local setpoint -->
             <param
                 name="setpoint_topic"
                 value="mavros/setpoint_raw/local" />
 
 
+            <!-- Shared-world -> UAV1-local inverse transform -->
             <param
                 name="shared_frame/enabled"
                 value="true" />
@@ -115,6 +159,7 @@
                 value="mavros/setpoint_raw/local" />
 
 
+            <!-- Shared-world -> UAV2-local inverse transform -->
             <param
                 name="shared_frame/enabled"
                 value="true" />
@@ -142,6 +187,17 @@
 
     <!-- ====================================================== -->
     <!-- MissionManager                                         -->
+    <!--                                                       -->
+    <!-- Responsibilities:                                      -->
+    <!--   takeoff                                              -->
+    <!--   UAV1-first tunnel entry                              -->
+    <!--   sparse RoutePoint progression                        -->
+    <!--   fly-through retarget                                 -->
+    <!--   final landing-area navigation                        -->
+    <!--   AUTO.LAND                                            -->
+    <!--                                                       -->
+    <!-- EGO-Swarm still owns local trajectory planning and     -->
+    <!-- inter-UAV collision avoidance.                         -->
     <!-- ====================================================== -->
 
     <node
@@ -150,21 +206,27 @@
         name="future_aircraft_mission"
         output="screen">
 
+
+        <!-- ================================================== -->
+        <!-- Mission mode                                       -->
+        <!-- ================================================== -->
+
         <param
             name="smoke_test"
             value="false" />
 
 
-        <!-- UAV1 -->
+        <!-- ================================================== -->
+        <!-- UAV1 VehicleInterface / EgoInterface                -->
+        <!-- ================================================== -->
 
         <param
             name="uav1/allow_arming_service"
             value="$(arg allow_arming_service)" />
 
         <!--
-            Mission layer talks in UAV-local goal coordinates.
-            SharedFrameAdapter publishes the transformed goal
-            to /uav1/planning/goal for EGO.
+            MissionManager publishes UAV-local navigation goals.
+            SharedFrameAdapter converts them into planning_world.
         -->
         <param
             name="uav1/goal_topic"
@@ -175,7 +237,9 @@
             value="planning/pos_cmd" />
 
 
-        <!-- UAV2 -->
+        <!-- ================================================== -->
+        <!-- UAV2 VehicleInterface / EgoInterface                -->
+        <!-- ================================================== -->
 
         <param
             name="uav2/allow_arming_service"
@@ -190,32 +254,54 @@
             value="planning/pos_cmd" />
 
 
-        <!-- Local goals -->
+        <!-- ================================================== -->
+        <!-- Mission shared-frame contract                      -->
+        <!--                                                       -->
+        <!-- Must remain identical to the transforms used by    -->
+        <!-- SharedFrameAdapter and EgoSetpointBridge.           -->
+        <!-- ================================================== -->
 
         <param
-            name="uav1_goal_x"
-            value="$(arg uav1_goal_x)" />
+            name="uav1_origin_x"
+            value="$(arg uav1_origin_x)" />
 
         <param
-            name="uav1_goal_y"
-            value="$(arg uav1_goal_y)" />
+            name="uav1_origin_y"
+            value="$(arg uav1_origin_y)" />
 
         <param
-            name="uav1_goal_z"
-            value="$(arg uav1_goal_z)" />
+            name="uav1_origin_z"
+            value="$(arg uav1_origin_z)" />
+
+        <param
+            name="uav1_origin_yaw_deg"
+            value="$(arg uav1_origin_yaw_deg)" />
 
 
         <param
-            name="uav2_goal_x"
-            value="$(arg uav2_goal_x)" />
+            name="uav2_origin_x"
+            value="$(arg uav2_origin_x)" />
 
         <param
-            name="uav2_goal_y"
-            value="$(arg uav2_goal_y)" />
+            name="uav2_origin_y"
+            value="$(arg uav2_origin_y)" />
 
         <param
-            name="uav2_goal_z"
-            value="$(arg uav2_goal_z)" />
+            name="uav2_origin_z"
+            value="$(arg uav2_origin_z)" />
+
+        <param
+            name="uav2_origin_yaw_deg"
+            value="$(arg uav2_origin_yaw_deg)" />
+
+
+        <!-- ================================================== -->
+        <!-- Tunnel entry                                       -->
+        <!-- ================================================== -->
+
+        <param
+            name="entry_release_x"
+            value="$(arg entry_release_x)" />
 
     </node>
 
