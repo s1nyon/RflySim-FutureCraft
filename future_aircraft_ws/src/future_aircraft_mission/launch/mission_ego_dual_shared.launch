@@ -13,12 +13,12 @@
     <!-- Shared-frame origins                                   -->
     <!-- ====================================================== -->
 
-    <arg name="uav1_origin_x" default="16.0" />
+    <arg name="uav1_origin_x" default="0.0" />
     <arg name="uav1_origin_y" default="-0.7" />
     <arg name="uav1_origin_z" default="0.0" />
     <arg name="uav1_origin_yaw_deg" default="0.0" />
 
-    <arg name="uav2_origin_x" default="16.0" />
+    <arg name="uav2_origin_x" default="0.0" />
     <arg name="uav2_origin_y" default="0.7" />
     <arg name="uav2_origin_z" default="0.0" />
     <arg name="uav2_origin_yaw_deg" default="0.0" />

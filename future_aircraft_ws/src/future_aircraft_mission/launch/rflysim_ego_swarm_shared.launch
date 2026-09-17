@@ -9,12 +9,20 @@
     <!-- ====================================================== -->
 
 
-    <arg name="uav1_origin_x" default="16.0" />
+    <!--
+        EGO shared planning world is centered at
+        Competition Course ENU (16.0, 0.0, 0.0).
+
+        Therefore each value below is the UAV local-origin
+        pose expressed in planning_world, NOT absolute course ENU.
+    -->
+
+    <arg name="uav1_origin_x" default="0.0" />
     <arg name="uav1_origin_y" default="-0.7" />
     <arg name="uav1_origin_z" default="0.0" />
     <arg name="uav1_origin_yaw_deg" default="0.0" />
 
-    <arg name="uav2_origin_x" default="16.0" />
+    <arg name="uav2_origin_x" default="0.0" />
     <arg name="uav2_origin_y" default="0.7" />
     <arg name="uav2_origin_z" default="0.0" />
     <arg name="uav2_origin_yaw_deg" default="0.0" />
